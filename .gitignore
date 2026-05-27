@@ -1,0 +1,6 @@
+.project/_sandbox/
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db

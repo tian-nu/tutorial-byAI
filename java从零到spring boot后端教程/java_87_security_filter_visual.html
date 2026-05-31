@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spring Security 过滤器链可视化</title>
+<!-- 本可视化对应教程：87-SpringSecurity入门.md 步骤 87.3 -->
+<!-- 数据来源：87-SpringSecurity入门.md -->
+<style>
+:root {
+    --bg: #ffffff; --text: #1a1a2e; --card-bg: #f8f9fa; --border: #dee2e6;
+    --accent: #6db33f; --accent2: #007bff; --phase-active: #fff3cd;
+    --phase-done: #d4edda; --phase-pending: #f8f9fa; --line: #adb5bd;
+    --shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #1e1e2e; --text: #cdd6f4; --card-bg: #313244; --border: #45475a;
+        --accent: #a6e3a1; --accent2: #89b4fa; --phase-active: #3b3b1f;
+        --phase-done: #1f3b2e; --phase-pending: #313244; --line: #585b70;
+    }
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans SC", sans-serif;
+    background: var(--bg); color: var(--text); padding: 20px; transition: background 0.3s, color 0.3s;
+}
+.container { max-width: 950px; margin: 0 auto; }
+h1 { text-align: center; font-size: 1.6em; margin-bottom: 8px; color: var(--accent); }
+.subtitle { text-align: center; font-size: 0.9em; color: var(--line); margin-bottom: 20px; }
+.controls { display: flex; gap: 10px; justify-content: center; margin-bottom: 24px; flex-wrap: wrap; }
+.controls button {
+    padding: 10px 20px; border: 1px solid var(--accent2); background: var(--card-bg);
+    color: var(--accent2); border-radius: 6px; cursor: pointer; font-size: 0.95em; transition: all 0.2s;
+}
+.controls button:hover { background: var(--accent2); color: #fff; }
+.controls button:disabled { opacity: 0.4; cursor: not-allowed; }
+.controls button.primary { background: var(--accent2); color: #fff; }
+.controls button.primary:hover { opacity: 0.85; }
+.controls button.theme-btn { border-color: var(--line); color: var(--text); }
+
+.chain-container { position: relative; display: flex; flex-direction: column; align-items: center; gap: 0; margin-bottom: 30px; }
+.request-box {
+    background: var(--accent2); color: #fff; padding: 10px 24px; border-radius: 20px;
+    font-weight: bold; font-size: 0.95em; margin-bottom: 6px; text-align: center;
+}
+.arrow { color: var(--line); font-size: 1.4em; margin: 4px 0; user-select: none; }
+
+.filter {
+    width: 100%; max-width: 650px; display: flex; align-items: center;
+    padding: 14px 18px; border-radius: 8px; border: 2px solid var(--border);
+    background: var(--phase-pending); box-shadow: var(--shadow);
+    transition: all 0.4s ease; opacity: 0.5; gap: 14px; cursor: pointer;
+}
+.filter .num {
+    width: 32px; height: 32px; border-radius: 50%; background: var(--line); color: #fff;
+    display: flex; align-items: center; justify-content: center; font-weight: bold;
+    font-size: 0.85em; flex-shrink: 0; transition: all 0.4s;
+}
+.filter .info { flex: 1; }
+.filter .info .name { font-weight: 600; font-size: 0.95em; margin-bottom: 3px; }
+.filter .info .desc { font-size: 0.8em; color: var(--line); }
+.filter .info .detail { display: none; font-size: 0.82em; margin-top: 6px; color: var(--text); padding: 8px; background: var(--card-bg); border-radius: 4px; }
+
+.filter.active { opacity: 1; background: var(--phase-active); border-color: #ffc107; transform: scale(1.03); }
+.filter.active .num { background: #ffc107; color: #333; }
+.filter.done { opacity: 0.85; background: var(--phase-done); border-color: #28a745; }
+.filter.done .num { background: #28a745; }
+.filter.active .info .detail { display: block; }
+
+.result-box {
+    background: var(--accent); color: #fff; padding: 10px 24px; border-radius: 20px;
+    font-weight: bold; font-size: 0.95em; margin-top: 6px; text-align: center;
+}
+
+.legend { display: flex; gap: 20px; justify-content: center; font-size: 0.85em; margin-bottom: 16px; color: var(--line); }
+.legend span { display: flex; align-items: center; gap: 6px; }
+.legend .dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+.legend .dot.pending { background: var(--phase-pending); border: 2px solid var(--border); }
+.legend .dot.active { background: #ffc107; }
+.legend .dot.done { background: #28a745; }
+
+.step-info { text-align: center; margin-top: 8px; font-size: 0.9em; color: var(--accent2); min-height: 22px; }
+.footer { text-align: center; margin-top: 30px; font-size: 0.78em; color: var(--line); }
+.footer a { color: var(--accent2); }
+</style>
+</head>
+<body>
+<div class="container">
+<h1>Spring Security 过滤器链</h1>
+<p class="subtitle">HTTP 请求依次穿过 7 个过滤器，每个负责不同的安全检查</p>
+
+<div class="controls">
+    <button class="primary" onclick="nextStep()" id="btnNext">▶ 下一步</button>
+    <button onclick="resetAll()" id="btnReset">↺ 重置</button>
+    <button onclick="autoPlay()" id="btnAuto">⏩ 自动播放</button>
+    <button class="theme-btn" onclick="toggleTheme()">☀/🌙 主题</button>
+</div>
+<div class="legend">
+    <span><span class="dot pending"></span> 待执行</span>
+    <span><span class="dot active"></span> 正在执行</span>
+    <span><span class="dot done"></span> 已通过</span>
+</div>
+<div class="step-info" id="stepInfo">点击"下一步"开始播放</div>
+
+<div class="chain-container">
+    <div class="request-box">↑ HTTP 请求进入</div>
+    <div class="arrow">│</div>
+
+    <div class="filter" id="f0">
+        <div class="num">1</div>
+        <div class="info">
+            <div class="name">SecurityContextPersistenceFilter</div>
+            <div class="desc">恢复上一次请求的 SecurityContext（从 HttpSession 读取）</div>
+            <div class="detail">请求到达时，尝试从 Session 中恢复已认证用户信息存入 SecurityContextHolder。请求结束后，清空 SecurityContextHolder 防止内存泄漏。</div>
+        </div>
+    </div>
+    <div class="arrow">│</div>
+
+    <div class="filter" id="f1">
+        <div class="num">2</div>
+        <div class="info">
+            <div class="name">HeaderWriterFilter</div>
+            <div class="desc">添加安全响应头（X-Frame-Options、X-XSS-Protection 等）</div>
+            <div class="detail">自动在响应中添加安全头部：X-Frame-Options: DENY（防点击劫持）、X-Content-Type-Options: nosniff（防 MIME 嗅探）、X-XSS-Protection: 1; mode=block。</div>
+        </div>
+    </div>
+    <div class="arrow">│</div>
+
+    <div class="filter" id="f2">
+        <div class="num">3</div>
+        <div class="info">
+            <div class="name">CsrfFilter</div>
+            <div class="desc">检查 CSRF Token（POST/PUT/DELETE 必须携带有效 token）</div>
+            <div class="detail">跨站请求伪造防护。检查非 GET 请求是否携带合法的 _csrf token。匹配失败抛 AccessDeniedException。前后端分离项目通常关闭。</div>
+        </div>
+    </div>
+    <div class="arrow">│</div>
+
+    <div class="filter" id="f3">
+        <div class="num">4</div>
+        <div class="info">
+            <div class="name">LogoutFilter</div>
+            <div class="desc">拦截 /logout 请求，清除认证信息并重定向</div>
+            <div class="detail">匹配 /logout → 调用 LogoutHandler 链（清除 SecurityContext、使 Session 失效、清除 RememberMe）→ 重定向到登录页。</div>
+        </div>
+    </div>
+    <div class="arrow">│</div>
+
+    <div class="filter" id="f4">
+        <div class="num">5</div>
+        <div class="info">
+            <div class="name">UsernamePasswordAuthenticationFilter ⭐</div>
+            <div class="desc">核心登录过滤器 — 处理 POST /login 表单提交</div>
+            <div class="detail">这是最核心的认证过滤器。从请求中提取 username 和 password → 封装成 UsernamePasswordAuthenticationToken → 交给 AuthenticationManager 认证 → 成功后存入 SecurityContextHolder。</div>
+        </div>
+    </div>
+    <div class="arrow">│</div>
+
+    <div class="filter" id="f5">
+        <div class="num">6</div>
+        <div class="info">
+            <div class="name">ExceptionTranslationFilter</div>
+            <div class="desc">捕获下游抛出的安全异常，翻译为 HTTP 响应</div>
+            <div class="detail">捕获 AuthenticationException → 触发 AuthenticationEntryPoint（未登录 → 302 到登录页 / 401）。捕获 AccessDeniedException → 触发 AccessDeniedHandler（权限不足 → 403）。</div>
+        </div>
+    </div>
+    <div class="arrow">│</div>
+
+    <div class="filter" id="f6">
+        <div class="num">7</div>
+        <div class="info">
+            <div class="name">FilterSecurityInterceptor ⭐</div>
+            <div class="desc">最终守门员 — 检查当前请求是否有权访问目标资源</div>
+            <div class="detail">根据配置的权限规则（authorizeHttpRequests）和当前用户的角色/权限，决定是否放行。这是过滤器链的最后一环，通过后请求到达 Controller。</div>
+        </div>
+    </div>
+    <div class="arrow">│</div>
+    <div class="result-box">↓ 到达 Controller（你的业务代码）</div>
+</div>
+
+<p class="footer">
+    本可视化对应 <a href="87-SpringSecurity入门.md">87-SpringSecurity入门.md</a> 步骤 87.3 |
+    基于 87-SpringSecurity入门.md
+</p>
+</div>
+
+<script>
+let currentStep = 0;
+const totalFilters = 7;
+const filterIds = ['f0','f1','f2','f3','f4','f5','f6'];
+const stepMessages = [
+    '第 1 步：SecurityContextPersistenceFilter — 从 Session 恢复用户上下文',
+    '第 2 步：HeaderWriterFilter — 写入安全响应头',
+    '第 3 步：CsrfFilter — 校验 CSRF Token',
+    '第 4 步：LogoutFilter — 检查是否为登出请求',
+    '第 5 步：UsernamePasswordAuthenticationFilter — 处理登录表单（核心）',
+    '第 6 步：ExceptionTranslationFilter — 翻译安全异常',
+    '第 7 步：FilterSecurityInterceptor — 最终权限检查（守门员）',
+    '全部通过！请求到达 Controller，开始处理业务逻辑 ✓'
+];
+
+function updateDisplay() {
+    for (let i = 0; i < totalFilters; i++) {
+        const el = document.getElementById(filterIds[i]);
+        el.classList.remove('active', 'done');
+        if (i < currentStep - 1) el.classList.add('done');
+        if (i === currentStep - 1 && currentStep > 0 && currentStep <= totalFilters) el.classList.add('active');
+    }
+    document.getElementById('stepInfo').textContent = stepMessages[currentStep];
+    if (currentStep === totalFilters) {
+        document.getElementById('f6').classList.remove('active');
+        document.getElementById('f6').classList.add('done');
+    }
+}
+
+function nextStep() {
+    if (currentStep < totalFilters) {
+        currentStep++;
+        updateDisplay();
+    }
+}
+
+function autoPlay() {
+    currentStep = 0;
+    updateDisplay();
+    let i = 0;
+    const interval = setInterval(() => {
+        if (i < totalFilters) {
+            currentStep++;
+            updateDisplay();
+            i++;
+        } else {
+            clearInterval(interval);
+        }
+    }, 1200);
+}
+
+function resetAll() {
+    currentStep = 0;
+    updateDisplay();
+}
+
+function toggleTheme() {
+    const html = document.documentElement;
+    if (html.style.colorScheme === 'dark') {
+        html.style.colorScheme = 'light';
+    } else {
+        html.style.colorScheme = 'dark';
+    }
+}
+
+updateDisplay();
+</script>
+</body>
+</html>

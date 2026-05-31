@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fork → Pull Request 全流程可视化</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #ffffff; --text: #333333; --border: #d0d0d0;
+  --node-bg: #f0f4f8; --node-border: #c0c8d0;
+  --active-bg: #dbeafe; --active-border: #3b82f6;
+  --done-bg: #dcfce7; --done-border: #22c55e;
+  --arrow: #888888; --btn-bg: #3b82f6; --btn-text: #ffffff;
+  --btn-hover: #2563eb; --desc-bg: #f8fafc;
+  --repo-up: #fef3c7; --repo-fk: #dbeafe; --repo-lo: #dcfce7;
+  --label-text: #555555;
+}
+[data-theme="dark"] {
+  --bg: #1a1a2e; --text: #e0e0e0; --border: #3a3a4a;
+  --node-bg: #2a2a3a; --node-border: #4a4a5a;
+  --active-bg: #1e3a5f; --active-border: #60a5fa;
+  --done-bg: #14532d; --done-border: #4ade80;
+  --arrow: #666666; --btn-bg: #3b82f6; --btn-text: #ffffff;
+  --btn-hover: #60a5fa; --desc-bg: #222233;
+  --repo-up: #3d2e0a; --repo-fk: #1a2744; --repo-lo: #0f331a;
+  --label-text: #aaaaaa;
+}
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg); color: var(--text); min-height: 100vh;
+  display: flex; flex-direction: column;
+}
+header {
+  text-align: center; padding: 20px 16px 8px; border-bottom: 1px solid var(--border);
+}
+header h1 { font-size: 1.4rem; font-weight: 700; margin-bottom: 4px; }
+header p { font-size: 0.85rem; color: var(--label-text); }
+main {
+  flex: 1; display: flex; flex-direction: column; align-items: center; padding: 18px 16px;
+}
+.controls {
+  display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; justify-content: center; align-items: center;
+}
+.controls button {
+  padding: 7px 16px; border: none; border-radius: 6px; cursor: pointer;
+  font-size: 0.85rem; font-weight: 600; transition: background 0.2s, opacity 0.2s;
+}
+.controls button:disabled { opacity: 0.35; cursor: not-allowed; }
+.btn-prev { background: var(--border); color: var(--text); }
+.btn-next { background: var(--btn-bg); color: var(--btn-text); }
+.btn-next:hover:not(:disabled) { background: var(--btn-hover); }
+.btn-prev:hover:not(:disabled) { opacity: 0.8; }
+.btn-reset { background: transparent; border: 1px solid var(--border); color: var(--text); }
+.btn-reset:hover { background: var(--node-bg); }
+.btn-theme { background: transparent; border: 1px solid var(--border); color: var(--text); font-size: 0.8rem; }
+.btn-theme:hover { background: var(--node-bg); }
+.step-indicator { font-size: 0.85rem; font-weight: 600; margin-bottom: 10px; color: var(--label-text); }
+.canvas-wrap {
+  position: relative; width: 100%; max-width: 850px; border: 1px solid var(--border);
+  border-radius: 10px; background: var(--desc-bg); overflow: hidden; margin-bottom: 12px;
+}
+svg { display: block; width: 100%; }
+.desc-box {
+  width: 100%; max-width: 850px; padding: 14px 18px; border-radius: 8px;
+  background: var(--desc-bg); border: 1px solid var(--border);
+  min-height: 52px; line-height: 1.55; font-size: 0.85rem;
+}
+.desc-box b { color: var(--active-border); }
+.step-num {
+  display: inline-block; background: var(--btn-bg); color: var(--btn-text);
+  padding: 2px 10px; border-radius: 12px; font-size: 0.78rem; font-weight: 600; margin-right: 7px;
+}
+footer {
+  text-align: center; padding: 10px 16px; font-size: 0.72rem;
+  color: var(--label-text); border-top: 1px solid var(--border);
+}
+footer a { color: var(--btn-bg); text-decoration: none; }
+footer a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Fork → Pull Request 全流程可视化</h1>
+  <p>逐步展示从 Fork 开源仓库到代码被原仓库合并的全过程（共 7 步）</p>
+</header>
+<main>
+  <div class="controls">
+    <button class="btn-theme" onclick="toggleTheme()" title="切换暗色/亮色">🌓 主题</button>
+    <button class="btn-reset" onclick="resetAll()">↺ 重置</button>
+    <button class="btn-prev" id="btnPrev" onclick="stepBack()" disabled>◀ 上一步</button>
+    <button class="btn-next" id="btnNext" onclick="stepForward()">▶ 下一步</button>
+  </div>
+  <div class="step-indicator">当前步骤：<span id="stepLabel" style="color:var(--text)">0 / 7 — 点击"下一步"开始</span></div>
+  <div class="canvas-wrap"><svg id="s" viewBox="0 0 850 380"></svg></div>
+  <div class="desc-box" id="descBox"><span class="step-num">准备</span> 点击"下一步"按钮开始，观察图中每一步的变化。</div>
+</main>
+<footer>
+  本可视化对应 <a href="06-Fork参与开源.md">Git到GitHub教程 · 步骤6：Fork参与开源</a> &nbsp;|&nbsp;
+  基于 git_to_github_detailed_outline.md v1.1 &nbsp;|&nbsp;
+  数据来源：教程步骤6 Fork 工作流
+</footer>
+<script>
+(function(){
+var step=0, total=7;
+var steps=[
+  {label:"准备",desc:"原仓库 <b>tian-nu/test</b> 在 GitHub 上。你只能看，不能修改。",
+   hl:[],cmd:""},
+  {label:"① Fork",desc:"在 GitHub 网页上点击 <b>Fork</b> 按钮。原仓库被完整复制到你账户下，创建了 <b>你的用户名/test</b>。",
+   hl:["rf","af"],cmd:"在 tian-nu/test 页面右上角点击 Fork 按钮"},
+  {label:"② Clone",desc:"执行 <b>git clone</b> 把你的 Fork 下载到本地电脑。现在你有了本地副本。",
+   hl:["rf","rl","ac"],cmd:"git clone git@github.com:&lt;你的用户名&gt;/test.git"},
+  {label:"③ 修改",desc:"在本地修改代码、<b>git add</b>、<b>git commit</b>。本地仓库有了新提交，但 Fork 和原仓库还不知道。",
+   hl:["rl","ct"],cmd:"编辑代码 → git add . → git commit -m \"feat: 我的贡献\""},
+  {label:"④ Push",desc:"执行 <b>git push origin main</b> 把本地提交推送到你的 Fork 仓库。",
+   hl:["rl","rf","ap"],cmd:"git push origin main"},
+  {label:"⑤ Pull Request",desc:"从你的 Fork 向原仓库发起 <b>Pull Request</b>。原仓库维护者收到通知，开始审核你的代码。",
+   hl:["rf","ru","apr","prc"],cmd:"在 Fork 页面点击 Contribute → Open pull request"},
+  {label:"⑥ Review → Merge",desc:"维护者审核通过，点击 <b>Merge pull request</b>。你的代码正式合并进原仓库！🎉",
+   hl:["ru","mg"],cmd:"原仓库维护者点击 Merge pull request"}
+];
+
+var themeMap={light:"🌙 暗色",dark:"☀️ 亮色"};
+function detectTheme(){
+  return window.matchMedia&&window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';
+}
+function applyTheme(t){
+  document.documentElement.setAttribute('data-theme',t);
+  var b=document.querySelector('.btn-theme');
+  if(b)b.textContent=themeMap[t];
+  draw();
+}
+function toggleTheme(){
+  var c=document.documentElement.getAttribute('data-theme');
+  applyTheme(c==='dark'?'light':'dark');
+}
+var initT=detectTheme();applyTheme(initT);
+window.matchMedia('(prefers-color-scheme:dark)').addEventListener('change',function(e){
+  applyTheme(e.matches?'dark':'light');
+});
+
+function draw(){
+  var svg=document.getElementById('s');
+  var cs=getComputedStyle(document.documentElement);
+  var tc=cs.getPropertyValue('--text').trim();
+  var ac=cs.getPropertyValue('--arrow').trim();
+  var nb=cs.getPropertyValue('--node-bg').trim();
+  var nbr=cs.getPropertyValue('--node-border').trim();
+  var ab=cs.getPropertyValue('--active-bg').trim();
+  var abr=cs.getPropertyValue('--active-border').trim();
+  var db=cs.getPropertyValue('--done-bg').trim();
+  var dbr=cs.getPropertyValue('--done-border').trim();
+  var ru=cs.getPropertyValue('--repo-up').trim();
+  var rf=cs.getPropertyValue('--repo-fk').trim();
+  var rl=cs.getPropertyValue('--repo-lo').trim();
+  var lt=cs.getPropertyValue('--label-text').trim();
+
+  var ux=165, uy=85, fx=165, fy=255, lx=520, ly=255;
+  var uw=175, uh=62, fw=175, fh=62, lw=165, lh=56;
+  var hl=step>0?steps[step].hl:[];
+
+  function ns(id){
+    if(step===0)return {fill:nb,stroke:nbr,sw:2};
+    return hl.indexOf(id)>=0?{fill:ab,stroke:abr,sw:3}:{fill:nb,stroke:nbr,sw:2};
+  }
+  function acol(arrowId){
+    if(step>0&&hl.indexOf(arrowId)>=0)return abr;
+    return ac;
+  }
+
+  var nsu=ns("ru"),nsf=ns("rf"),nsl=ns("rl");
+  var a_u_f=acol("af"),a_f_l=acol("ac"),a_l_f=acol("ap"),a_f_u=acol("apr");
+
+  var h='<defs><marker id="ah" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="'+ac+'"/></marker></defs>';
+
+  function re(x,y,w,hh,fi,st,sw,rx){
+    rx=rx||8;
+    return '<rect x="'+x+'" y="'+y+'" width="'+w+'" height="'+hh+'" rx="'+rx+'" fill="'+fi+'" stroke="'+st+'" stroke-width="'+sw+'"/>';
+  }
+  function te(x,y,ct,sz,cl,an,bd){
+    an=an||'middle';cl=cl||tc;sz=sz||12;
+    return '<text x="'+x+'" y="'+y+'" text-anchor="'+an+'" fill="'+cl+'" font-size="'+sz+'" '+(bd?'font-weight="700"':'')+' font-family="sans-serif">'+ct+'</text>';
+  }
+  function ar(x1,y1,x2,y2,cl){
+    var my=(y1+y2)/2;
+    return '<path d="M'+x1+','+y1+' L'+x1+','+my+' L'+x2+','+my+' L'+x2+','+y2+'" fill="none" stroke="'+cl+'" stroke-width="2" marker-end="url(#ah)"/>';
+  }
+
+  h+=te(60,155,"GitHub 服务器",11,lt,'start');
+  h+=te(440,225,"你的电脑",11,lt,'start');
+
+  h+=re(ux-uw/2,uy-uh/2,uw,uh,ru,nsu.stroke,nsu.sw);
+  h+=te(ux,uy-12,"tian-nu / test",13,tc,'middle',true);
+  h+=te(ux,uy+10,"原仓库 (upstream)",10.5,lt);
+  h+=te(ux,uy+24,"只读",10,"#ef4444");
+
+  var fsShow=step>=1;
+  h+=re(fx-fw/2,fy-fh/2,fw,fh,rf,nsf.stroke,nsf.sw);
+  h+=te(fx,fy-12,"你的用户名 / test",13,tc,'middle',true);
+  h+=te(fx,fy+10,"你的 Fork (origin)",10.5,lt);
+  if(fsShow)h+=te(fx,fy+24,"可读写 ✓",10,"#22c55e");
+
+  var lsShow=step>=2;
+  h+=re(lx-lw/2,ly-lh/2,lw,lh,rl,nsl.stroke,nsl.sw);
+  h+=te(lx,ly-10,"本地仓库",13,tc,'middle',true);
+  h+=te(lx,ly+8,"my-forked-project/",10.5,lt);
+  if(lsShow)h+=te(lx,ly+22,"工作区 ✓",10,"#22c55e");
+
+  h+=ar(ux,uy+uh/2,fx,fy-fh/2,a_u_f);
+  h+=te(ux-50,(uy+uh/2+fy-fh/2)/2,"Fork",10.5,lt,'end');
+
+  if(step>=2){
+    var ay1=fy-fh/2, ay2=ly-lh/2, mx2=(fx+lx)/2;
+    h+='<path d="M'+fx+','+ay1+' L'+mx2+','+ay1+' L'+mx2+','+ay2+' L'+lx+','+ay2+'" fill="none" stroke="'+a_f_l+'" stroke-width="2" marker-end="url(#ah)"/>';
+    h+=te(mx2+18,ay1+5,"Clone",10.5,lt,'start');
+  }
+  if(step>=4){
+    h+=ar(lx,ly+lh/2,fx,fy+fh/2,a_l_f);
+    h+=te(lx+60,(ly+lh/2+fy+fh/2)/2,"Push",10.5,lt,'start');
+  }
+  if(step>=5){
+    h+='<path d="M'+(fx-fw/2)+','+fy+' L'+(fx-fw/2-55)+','+fy+' L'+(fx-fw/2-55)+','+uy+' L'+(ux-uw/2)+','+uy+'" fill="none" stroke="'+a_f_u+'" stroke-width="2.5" marker-end="url(#ah)" stroke-dasharray="7,4"/>';
+    h+=te(fx-fw/2-75,uy+20,"Pull",10.5,lt,'start');
+    h+=te(fx-fw/2-75,uy+34,"Request",10.5,lt,'start');
+  }
+  if(step>=5){
+    var cx5=fx-fw/2-55;
+    h+='<circle cx="'+cx5+'" cy="'+fy+'" r="16" fill="'+ab+'" stroke="'+abr+'" stroke-width="2"/>';
+    h+=te(cx5,fy+5,"PR",11,tc,'middle',true);
+  }
+  if(step>=6){
+    var cx6=ux+uw/2+28;
+    h+='<circle cx="'+cx6+'" cy="'+uy+'" r="18" fill="'+db+'" stroke="'+dbr+'" stroke-width="2.5"/>';
+    h+='<text x="'+cx6+'" y="'+(uy+6)+'" text-anchor="middle" fill="'+tc+'" font-size="20" font-weight="700">✓</text>';
+    h+=te(cx6,uy+30,"Merged!",9.5,dbr,'middle',true);
+  }
+  if(step>=3&&step<6){
+    h+=te(lx+lw/2+16,ly-12,"+ commit",10,abr,'start',true);
+  }
+  if(step===1){
+    h+=re(fx-42,fy-fh/2-30,84,22,ab,abr,2,4);
+    h+=te(fx,fy-fh/2-13,"点击 Fork",9.5,tc);
+  }
+  if(step===6){
+    h+=te(ux+uw/2+28,uy+46,"你的代码合入原仓库！",10,dbr,'middle',true);
+  }
+  svg.innerHTML=h;
+}
+
+function updateDesc(){
+  var box=document.getElementById('descBox');
+  var sd=steps[step];
+  box.innerHTML='<span class="step-num">'+sd.label+'</span> '+sd.desc;
+  document.getElementById('stepLabel').textContent=step+' / '+total+' — '+sd.label;
+  document.getElementById('btnPrev').disabled=(step===0);
+  document.getElementById('btnNext').disabled=(step===total);
+  document.getElementById('btnNext').textContent=step===total?'✓ 完成':'▶ 下一步';
+}
+function stepForward(){if(step<total){step++;draw();updateDesc();}}
+function stepBack(){if(step>0){step--;draw();updateDesc();}}
+function resetAll(){step=0;draw();updateDesc();}
+draw();updateDesc();
+window.toggleTheme=toggleTheme;
+window.stepForward=stepForward;
+window.stepBack=stepBack;
+window.resetAll=resetAll;
+})();
+</script>
+</body>
+</html>

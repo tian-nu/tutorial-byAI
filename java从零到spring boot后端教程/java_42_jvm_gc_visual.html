@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JVM 内存模型与 GC 过程可视化</title>
+<!-- 自包含单文件，纯前端实现，可离线运行 -->
+<!-- 基于 42-JVM内存模型与GC.md -->
+<style>
+:root { --bg: #f5f5f5; --card-bg: #fff; --text: #333; --text-secondary: #666; --border: #ddd; --primary: #4a90d9; --eden: #c8e6c9; --s0: #fff9c4; --s1: #fff9c4; --old: #ffccbc; --meta: #e1bee7; --survivor: #ffe082; --accent: #e74c3c; --btn-bg: #4a90d9; --btn-text: #fff; --shadow: 0 2px 8px rgba(0,0,0,0.1); }
+[data-theme="dark"] { --bg: #1a1a2e; --card-bg: #16213e; --text: #e0e0e0; --text-secondary: #aaa; --border: #333; --primary: #64b5f6; --eden: #2e7d32; --s0: #f9a825; --s1: #f9a825; --old: #d84315; --meta: #7b1fa2; --survivor: #fdd835; --accent: #ef5350; --btn-bg: #64b5f6; --btn-text: #1a1a2e; --shadow: 0 2px 8px rgba(0,0,0,0.4); }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; transition: background 0.3s, color 0.3s; }
+.container { max-width: 1100px; margin: 0 auto; padding: 20px; }
+.header { text-align: center; margin-bottom: 30px; }
+.header h1 { font-size: 1.8em; color: var(--primary); margin-bottom: 8px; }
+.header p { color: var(--text-secondary); font-size: 0.95em; }
+.controls { display: flex; justify-content: center; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; }
+.controls button { padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; font-size: 0.95em; font-weight: 500; transition: all 0.2s; background: var(--btn-bg); color: var(--btn-text); }
+.controls button:hover { opacity: 0.85; transform: translateY(-1px); }
+.controls button:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+.controls button.active { background: var(--accent); }
+.step-indicator { text-align: center; margin-bottom: 16px; font-size: 0.9em; color: var(--text-secondary); }
+.step-indicator span { font-weight: 700; color: var(--primary); }
+.heap-container { display: flex; flex-direction: column; gap: 16px; margin-bottom: 24px; }
+.heap-row { display: flex; gap: 12px; }
+.heap-block { background: var(--card-bg); border-radius: 10px; padding: 16px; box-shadow: var(--shadow); transition: all 0.4s; }
+.heap-block.highlight { box-shadow: 0 0 0 3px var(--primary); transform: scale(1.02); }
+.heap-block h3 { font-size: 0.95em; margin-bottom: 10px; text-align: center; }
+.young-gen { display: flex; gap: 10px; flex: 1; }
+.eden { background: var(--eden); flex: 4; border-radius: 8px; padding: 12px; min-height: 80px; position: relative; }
+.survivor { flex: 1; border-radius: 8px; padding: 12px; min-height: 80px; position: relative; }
+.s0 { background: var(--s0); }
+.s1 { background: var(--s1); }
+.old-gen { background: var(--old); flex: 1; border-radius: 8px; padding: 12px; min-height: 60px; position: relative; }
+.meta-area { background: var(--meta); border-radius: 8px; padding: 12px; min-height: 40px; position: relative; }
+.block-label { font-size: 0.8em; font-weight: 600; text-align: center; margin-bottom: 6px; }
+.obj-dot { display: inline-block; width: 18px; height: 18px; border-radius: 50%; margin: 2px; font-size: 0.6em; line-height: 18px; text-align: center; color: #fff; font-weight: 700; transition: all 0.5s; }
+.obj-dot.new { background: #4caf50; }
+.obj-dot.mid { background: #ff9800; }
+.obj-dot.old { background: #f44336; }
+.obj-dot.dead { background: #9e9e9e; opacity: 0.3; }
+.obj-dot.gone { opacity: 0; transform: scale(0); }
+.description { background: var(--card-bg); border-radius: 10px; padding: 20px; box-shadow: var(--shadow); margin-bottom: 20px; }
+.description h3 { color: var(--primary); margin-bottom: 8px; }
+.description p { color: var(--text-secondary); font-size: 0.95em; }
+.legend { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; margin-bottom: 16px; font-size: 0.85em; }
+.legend-item { display: flex; align-items: center; gap: 6px; }
+.legend-dot { width: 14px; height: 14px; border-radius: 50%; }
+.footer { text-align: center; margin-top: 30px; padding-top: 16px; border-top: 1px solid var(--border); color: var(--text-secondary); font-size: 0.85em; }
+.footer a { color: var(--primary); }
+.theme-toggle { position: absolute; top: 16px; right: 20px; background: var(--card-bg); border: 1px solid var(--border); border-radius: 20px; padding: 6px 14px; cursor: pointer; font-size: 0.85em; color: var(--text); }
+</style>
+</head>
+<body>
+<button class="theme-toggle" onclick="toggleTheme()">🌓 切换主题</button>
+<div class="container">
+<div class="header">
+<h1>JVM 内存模型与 GC 过程</h1>
+<p>本可视化对应 <a href="42-JVM内存模型与GC.md">第42章 JVM内存模型与GC</a> 步骤 42.1-42.3</p>
+<p style="font-size:0.8em;color:var(--text-secondary)">基于 42-JVM内存模型与GC.md — 堆结构、Minor GC、对象晋升、Full GC</p>
+</div>
+
+<div class="step-indicator">
+当前步骤：<span id="stepNum">1</span> / 7 — <span id="stepName">初始状态：空堆</span>
+</div>
+
+<div class="controls">
+<button onclick="goToStep(0)" id="btn0">⏮ 重置</button>
+<button onclick="prevStep()" id="btnPrev">◀ 上一步</button>
+<button onclick="nextStep()" id="btnNext">下一步 ▶</button>
+<button onclick="autoPlay()" id="btnAuto">▶ 自动播放</button>
+</div>
+
+<div class="legend">
+<div class="legend-item"><span class="legend-dot" style="background:#4caf50"></span> 新对象（年龄0）</div>
+<div class="legend-item"><span class="legend-dot" style="background:#ff9800"></span> 存活对象（年龄1-14）</div>
+<div class="legend-item"><span class="legend-dot" style="background:#f44336"></span> 老年代对象（年龄≥15）</div>
+<div class="legend-item"><span class="legend-dot" style="background:#9e9e9e;opacity:0.5"></span> 垃圾对象（将被回收）</div>
+</div>
+
+<div class="heap-container">
+<div class="heap-row">
+<div class="heap-block" style="flex:1">
+<h3>新生代 (Young Generation)</h3>
+<div class="young-gen">
+<div class="eden" id="eden">
+<div class="block-label">Eden 区 (80%)</div>
+<div id="edenObjs"></div>
+</div>
+<div class="survivor s0" id="s0">
+<div class="block-label">S0 (From)</div>
+<div id="s0Objs"></div>
+</div>
+<div class="survivor s1" id="s1">
+<div class="block-label">S1 (To)</div>
+<div id="s1Objs"></div>
+</div>
+</div>
+</div>
+<div class="heap-block" style="flex:1">
+<h3>老年代 (Old Generation)</h3>
+<div class="old-gen" id="old">
+<div class="block-label">老年代 (Tenured)</div>
+<div id="oldObjs"></div>
+</div>
+</div>
+</div>
+<div class="heap-row">
+<div class="heap-block" style="flex:1">
+<h3>方法区 / 元空间 (Metaspace)</h3>
+<div class="meta-area" id="meta">
+<div class="block-label">类信息、常量、静态变量</div>
+</div>
+</div>
+</div>
+</div>
+
+<div class="description" id="description">
+<h3>初始状态</h3>
+<p>JVM 刚启动，堆内存尚未分配对象。Eden、S0、S1、老年代均为空。方法区（Metaspace）存放已加载的类信息。</p>
+</div>
+
+<div class="footer">
+<p>鼠标悬停在对象上可查看年龄信息 · 点击播放按钮观察 GC 过程</p>
+<p>数据来源：<a href="42-JVM内存模型与GC.md">42-JVM内存模型与GC.md</a></p>
+</div>
+</div>
+
+<script>
+let currentStep = 0;
+let autoTimer = null;
+
+const steps = [
+    {
+        name: "初始状态：空堆",
+        eden: [], s0: [], s1: [], old: [],
+        desc: "JVM 刚启动，堆内存尚未分配对象。Eden、S0、S1、老年代均为空。",
+        highlight: null
+    },
+    {
+        name: "分配对象：Eden 区填充",
+        eden: [
+            {id:'A',age:0,color:'new'},{id:'B',age:0,color:'new'},{id:'C',age:0,color:'new'},
+            {id:'D',age:0,color:'new'},{id:'E',age:0,color:'new'},{id:'F',age:0,color:'new'},
+            {id:'G',age:0,color:'new'},{id:'H',age:0,color:'new'},{id:'I',age:0,color:'new'},
+            {id:'J',age:0,color:'new'},{id:'K',age:0,color:'new'},{id:'L',age:0,color:'new'}
+        ],
+        s0: [], s1: [], old: [],
+        desc: "新创建的对象优先在 Eden 区分配。Eden 区已存放 12 个对象（A-L），Survivor 区和老年代仍为空。",
+        highlight: 'eden'
+    },
+    {
+        name: "Eden 满 → 触发 Minor GC",
+        eden: [
+            {id:'A',age:0,color:'dead'},{id:'B',age:0,color:'dead'},{id:'C',age:0,color:'dead'},
+            {id:'D',age:0,color:'dead'},{id:'E',age:0,color:'dead'},{id:'F',age:0,color:'dead'},
+            {id:'G',age:0,color:'dead'},{id:'H',age:0,color:'dead'},{id:'I',age:0,color:'new'},
+            {id:'J',age:0,color:'new'},{id:'K',age:0,color:'new'},{id:'L',age:0,color:'new'}
+        ],
+        s0: [], s1: [], old: [],
+        desc: "Eden 区满，触发 Minor GC。灰色标记对象（A-H）为垃圾，即将被回收；绿色标记（I-L）为存活对象，将被复制到 Survivor 区。",
+        highlight: 'eden'
+    },
+    {
+        name: "Minor GC 后：存活对象进入 S0",
+        eden: [],
+        s0: [{id:'I',age:1,color:'new'},{id:'J',age:1,color:'new'},{id:'K',age:1,color:'new'},{id:'L',age:1,color:'new'}],
+        s1: [], old: [],
+        desc: "Minor GC 完成：Eden 被清空，4 个存活对象（I-L）被复制到 S0，年龄 +1。注意：标记-复制算法中，S0 和 S1 始终有一个为空！",
+        highlight: 's0'
+    },
+    {
+        name: "多轮 Minor GC：对象晋升",
+        eden: [
+            {id:'M',age:0,color:'new'},{id:'N',age:0,color:'new'},{id:'O',age:0,color:'new'}
+        ],
+        s0: [
+            {id:'I',age:3,color:'mid'},{id:'J',age:3,color:'mid'},{id:'K',age:3,color:'mid'}
+        ],
+        s1: [{id:'L',age:3,color:'mid'},{id:'P',age:1,color:'new'}],
+        old: [{id:'Q',age:16,color:'old'},{id:'R',age:16,color:'old'}],
+        desc: "经过多轮 Minor GC：对象 I、J、K、L 年龄增长（橙色）。对象 Q、R 年龄达到 15（默认阈值），晋升到老年代（红色）。S0 和 S1 角色轮换。",
+        highlight: 'old'
+    },
+    {
+        name: "老年代满 → 触发 Full GC",
+        eden: [{id:'M',age:0,color:'new'},{id:'N',age:0,color:'new'}],
+        s0: [{id:'I',age:4,color:'mid'},{id:'J',age:4,color:'mid'}],
+        s1: [{id:'K',age:4,color:'mid'}],
+        old: [
+            {id:'Q',age:16,color:'old'},{id:'R',age:16,color:'old'},
+            {id:'S',age:16,color:'dead'},{id:'T',age:16,color:'dead'}
+        ],
+        desc: "老年代空间不足，触发 Full GC（Stop The World）。老年代中灰色标记（S、T）为垃圾对象，将被回收。Full GC 会暂停所有用户线程，停顿时间较长。",
+        highlight: 'old'
+    },
+    {
+        name: "Full GC 后：堆空间恢复",
+        eden: [{id:'M',age:0,color:'new'},{id:'N',age:0,color:'new'}],
+        s0: [{id:'I',age:4,color:'mid'},{id:'J',age:4,color:'mid'}],
+        s1: [{id:'K',age:4,color:'mid'}],
+        old: [{id:'Q',age:16,color:'old'},{id:'R',age:16,color:'old'}],
+        desc: "Full GC 完成：垃圾对象 S、T 被回收，老年代空间释放。GC 的三个阶段：标记存活对象 → 清除垃圾（或整理碎片）→ 更新引用。",
+        highlight: null
+    }
+];
+
+function renderStep() {
+    const step = steps[currentStep];
+    document.getElementById('stepNum').textContent = currentStep + 1;
+    document.getElementById('stepName').textContent = step.name;
+
+    renderObjects('edenObjs', step.eden);
+    renderObjects('s0Objs', step.s0);
+    renderObjects('s1Objs', step.s1);
+    renderObjects('oldObjs', step.old);
+
+    document.querySelectorAll('.heap-block').forEach(b => b.classList.remove('highlight'));
+    document.querySelectorAll('.eden, .s0, .s1, .old-gen').forEach(b => b.classList.remove('highlight'));
+    if (step.highlight) {
+        const el = document.getElementById(step.highlight);
+        if (el) el.classList.add('highlight');
+    }
+
+    document.getElementById('description').innerHTML = '<h3>' + step.name + '</h3><p>' + step.desc + '</p>';
+
+    document.getElementById('btnPrev').disabled = currentStep === 0;
+    document.getElementById('btnNext').disabled = currentStep === steps.length - 1;
+
+    steps.forEach((_, i) => {
+        const btn = document.getElementById('btn' + i);
+        if (btn) btn.classList.toggle('active', i === currentStep);
+    });
+}
+
+function renderObjects(containerId, objects) {
+    const container = document.getElementById(containerId);
+    container.innerHTML = objects.map(o =>
+        '<span class="obj-dot ' + o.color + '" title="对象 ' + o.id + ' (年龄: ' + o.age + ')">' + o.id + '</span>'
+    ).join('');
+}
+
+function goToStep(n) {
+    if (autoTimer) { clearInterval(autoTimer); autoTimer = null; document.getElementById('btnAuto').textContent = '▶ 自动播放'; }
+    currentStep = Math.max(0, Math.min(steps.length - 1, n));
+    renderStep();
+}
+
+function nextStep() {
+    if (currentStep < steps.length - 1) goToStep(currentStep + 1);
+}
+
+function prevStep() {
+    if (currentStep > 0) goToStep(currentStep - 1);
+}
+
+function autoPlay() {
+    if (autoTimer) {
+        clearInterval(autoTimer);
+        autoTimer = null;
+        document.getElementById('btnAuto').textContent = '▶ 自动播放';
+        return;
+    }
+    document.getElementById('btnAuto').textContent = '⏸ 停止';
+    autoTimer = setInterval(() => {
+        if (currentStep < steps.length - 1) {
+            goToStep(currentStep + 1);
+        } else {
+            clearInterval(autoTimer);
+            autoTimer = null;
+            document.getElementById('btnAuto').textContent = '▶ 自动播放';
+        }
+    }, 2500);
+}
+
+function toggleTheme() {
+    const html = document.documentElement;
+    html.setAttribute('data-theme', html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+}
+
+renderStep();
+</script>
+</body>
+</html>

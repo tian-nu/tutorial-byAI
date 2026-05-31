@@ -128,6 +128,82 @@ type Stringer interface {
 
 ---
 
+> ❌ **常见错误 1：混淆"接口变量本身是 nil"和"接口变量持有 nil 值"**
+> 
+> ```go
+> type MyError struct{}
+> 
+> func (e *MyError) Error() string { return "出错了" }
+> 
+> func getError() error {
+>     var e *MyError   // e 是 nil
+>     return e         // ❌ 返回的 error 接口不是 nil！
+> }
+> 
+> func main() {
+>     err := getError()
+>     if err != nil {
+>         fmt.Println("有错误")   // 会输出这个！因为 err != nil
+>     }
+> }
+> ```
+> 
+> 接口值由两部分组成：**动态类型** + **动态值**。只有当两者都是 nil 时，接口才等于 nil。这里返回的接口值里类型是 `*MyError`（不是 nil），所以 `err != nil` 为 true。
+> 
+> ✅ **正确做法**：
+> ```go
+> func getError() error {
+>     return nil   // ✅ 直接返回 nil，类型和值都是 nil
+> }
+> ```
+
+> ❌ **常见错误 2：值接收者方法集 vs 指针接收者方法集——没有实现接口**
+> 
+> ```go
+> type Speaker interface {
+>     Speak() string
+> }
+> 
+> type Dog struct{}
+> 
+> func (d *Dog) Speak() string {   // 指针接收者
+>     return "汪汪"
+> }
+> 
+> func main() {
+>     var s Speaker = Dog{}   // ❌ 编译错误！Dog does not implement Speaker
+> }
+> ```
+> 
+> `Dog` 类型的**值**只拥有值接收者的方法集；`*Dog` 类型的**指针**才拥有指针接收者（和值接收者）的全部方法集。这里 `Speak` 定义在 `*Dog` 上，所以 `Dog{}`（值）没有 `Speak` 方法。
+> 
+> ✅ **正确做法**：
+> ```go
+> var s Speaker = &Dog{}   // ✅ 用指针
+> ```
+> 反过来是安全的——定义在值接收者上的方法，指针类型也能用。
+
+> ❌ **常见错误 3：空接口类型断言失败 → panic**
+> 
+> ```go
+> var x interface{} = "hello"
+> n := x.(int)   // ❌ panic: interface conversion: interface {} is string, not int
+> ```
+> 
+> `interface{}`（或 `any`）可以存任何值，但取出来时类型必须对。不带 `ok` 的单返回值断言如果类型不匹配，直接 panic。
+> 
+> ✅ **正确做法**：
+> ```go
+> var x interface{} = "hello"
+> if n, ok := x.(int); ok {
+>     fmt.Println("是 int:", n)
+> } else {
+>     fmt.Println("不是 int")   // ✅ 安全地处理
+> }
+> ```
+
+---
+
 ## 31.3 接口值：动态类型 + 动态值
 
 接口类型的变量有两层：

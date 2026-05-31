@@ -1,0 +1,533 @@
+# 步骤6 · Fork：复印别人的书，自己随便写
+
+> 你在图书馆看到一本书，写得特别好。你借回来看，但不能在上面写字——因为书是图书馆的。这时候你怎么办？你去复印机那里，把整本书**复印一份**带回家。复印件是你的，你可以在上面划线、写字、撕掉几页——原件在图书馆毫发无损。Fork 就是这个"复印"动作。在 GitHub 上，你可以把任何人的公开仓库"复印"一份到你自己的账户下，然后随便改。
+
+---
+
+## 6.1 Fork 和 Clone：复印 vs 借书
+
+### Clone 你已经会了——但 Clone 有局限
+
+在前面的步骤里，你学会了 `git clone`——把远程仓库下载到你电脑上。Clone 有一个前提：**你必须有那个仓库的写入权限**。
+
+- 你自己创建的仓库 → 你有写入权限 → Clone 下来后可以 push 回去
+- 别人创建的仓库 → 你没有写入权限 → Clone 下来只能看，不能 push 回去
+
+那如果你发现别人的项目有问题，想帮忙修怎么办？你没有那个仓库的写入权限，不能直接 push 修改。
+
+**Fork 就是为这个场景设计的。**
+
+### Fork 的比喻：图书馆复印一本书
+
+| 动作 | 比喻 | 权限 |
+|------|------|------|
+| **Clone** | 从图书馆**借**一本书出来看 | 书还是图书馆的。你可以在纸上做笔记，但不能往原书上写。还书的时候笔记你得自己留着 |
+| **Fork** | 用复印机把整本书**复印**一份 | 复印件归你。你可以在上面随便写、随便画、随便撕。原件在图书馆毫发无损 |
+
+在 GitHub 上 Fork 就是：你去到别人仓库的页面，点一个按钮"复印这份代码到我账户下"。GitHub 会把那个仓库的完整内容复制一份到你名下。从这一刻起，这份副本就是你的了——你可以改、可以删、可以 push。原仓库完全不受影响。
+
+> **此术语需进附录：Fork**——在 GitHub 网页上把别人仓库完整复制到自己账户下的操作。副本独立于原仓库，你对副本有完全控制权。来自英语"fork"（叉子），表示"分叉"出去一条路。
+
+### Fork 和 Clone 的详细对比
+
+| 比较项 | Fork | Clone |
+|--------|------|-------|
+| **在哪里操作** | 在浏览器上，GitHub 网页里 | 在你的电脑终端里 |
+| **产生什么** | 在你 GitHub 账户下创建一个新仓库（服务器端） | 在你电脑上创建一个文件夹（本地） |
+| **对原仓库的影响** | 零影响，原仓库完全不知道你 Fork 了 | 零影响，本地修改不会推回原仓库 |
+| **需要什么权限** | 不需要。任何人都可以 Fork 公开仓库 | 下载不需要权限，但 push 回去需要写权限 |
+| **常见顺序** | 先 Fork（在网页上），再 Clone（在终端里） | Fork 之后必须 Clone 到自己电脑才能改代码 |
+
+---
+
+## 6.2 Fork 实操：一步一步跟着做
+
+### 第1步：打开你要 Fork 的仓库
+
+打开你的浏览器（就是你上网用的那个程序）。
+
+在浏览器最顶上的地址栏（那个白色长条）里输入：
+
+```
+https://github.com/tian-nu/test
+```
+
+然后按键盘上的 **Enter 键**。你会看到 `tian-nu/test` 这个仓库的首页。这个页面你应该很熟悉了。
+
+### 第2步：找到 Fork 按钮
+
+你把视线移到页面的**右上角区域**。在页面最顶上，你应该能看到你的 GitHub 用户头像（一个圆形的小图片）。
+
+在头像的**左边**，有一排按钮。从左到右依次排列着：
+
+```
+Watch 按钮（灰色，带一个眼睛图标）  Fork 按钮（灰色，带一个叉子图标，旁边有数字）  Star 按钮（灰色，带一个星星图标，旁边有数字）
+```
+
+你要找的是中间的 **Fork** 按钮。它是一个灰色的长方形按钮，左边有一个像叉子一样的图标🍴，按钮上写着白色的字 "Fork"，旁边还有一个数字——这个数字表示"有多少人已经 Fork 了这个仓库"。
+
+把鼠标移动到这个 Fork 按钮上，**按一下鼠标左键**。
+
+### 第3步：设置 Fork 选项
+
+点击之后，浏览器里的页面变了。你现在看到的是一个"创建 Fork"的确认页面。这个页面有几个区域：
+
+**页面顶部的大标题：**
+`Create a new fork`（意思是"创建一个新的 Fork"）
+
+**下方的信息区域：**
+
+- **Owner**（所属人）：一个下拉选择框，里面应该已经默认选择了**你的 GitHub 用户名**。如果你加入了什么组织，这里可能有多个选项——选你自己的用户名就行。
+
+- **Repository name**（仓库名）：一个白色输入框，里面默认填了 `test`。**不要改它**，保持 `test` 就行。
+
+- **Description**（描述）：一个白色输入框，里面可能已经写了 "this is a test repo"。说明这是原仓库的描述被复制过来了。
+
+- 下面有一个复选框，写着 **"Copy the main branch only"**（只复制 main 分支）。看它前面有没有打勾：
+  - 如果打勾了 → **保持打勾，不要动它**
+  - 如果没打勾 → 用鼠标点一下那个小方框，让它打上勾
+
+**不需要做任何其他修改。** 直接看页面底部。
+
+### 第4步：点击"Create fork"
+
+在页面底部，有一个**绿色的长方形大按钮**，上面写着白色的字 **"Create fork"**。
+
+把鼠标移过去，**按一下鼠标左键**。
+
+### 第5步：等待 Fork 完成
+
+点了之后，页面会先显示一些加载动画（可能有一个转圈的动画），持续几秒钟。什么都不要按，等着就行。
+
+几秒钟之后，页面会自动跳转到一个新的地址：
+
+```
+https://github.com/<你的用户名>/test
+```
+
+（`<你的用户名>` 就是你 GitHub 帐号的名字）
+
+**如何确认 Fork 成功了？**
+
+看页面左上角。在你的仓库名字上方，显示的是：
+
+```
+你的用户名 / test
+```
+
+在这行字的正下方，有一行**灰色的小字**：
+
+```
+forked from tian-nu/test
+```
+
+看到 "forked from tian-nu/test" 这行灰色小字，就说明 Fork 成功了！你已经把 `tian-nu/test` 复印了一份到你自己的账户下。
+
+> 现在 GitHub 上有**两个** `test` 仓库了：
+> - `tian-nu/test` —— 原仓库（你不能往里面推代码）
+> - `你的用户名/test` —— 你的 Fork（你可以随便改）
+
+### 第6步：把 Fork 的仓库 Clone 到你电脑上
+
+现在这份"复印件"还在 GitHub 网站上。要改代码，你还得把它下载到你电脑上。
+
+打开你的**终端**（就是那个黑底白字的窗口——如果你忘了怎么做，回去看本教程的第1步）。
+
+依次输入以下命令（每输一行按一次 Enter）：
+
+```bash
+cd ~/Desktop
+```
+
+这行命令的意思是"进入桌面文件夹"。`~` 代表你的用户主目录，`Desktop` 是桌面。
+
+```bash
+git clone git@github.com:<你的用户名>/test.git my-forked-project
+```
+
+**注意：** 把 `<你的用户名>` 替换成你实际的 GitHub 用户名。比如如果你的用户名是 `zhangsan`，那这行就是：
+
+```bash
+git clone git@github.com:zhangsan/test.git my-forked-project
+```
+
+`my-forked-project` 是本地文件夹的名字——你可以改成任何你喜欢的名字。
+
+按 Enter 执行后，终端会刷出一堆文字。最后看到类似这样的输出就说明下载成功了：
+
+```
+Receiving objects: 100% (x/x), done.
+```
+
+然后进入这个文件夹：
+
+```bash
+cd my-forked-project
+```
+
+### 第7步：验证 Clone 成功了
+
+输入以下命令然后按 Enter：
+
+```bash
+git remote -v
+```
+
+这行命令的意思是"显示这个本地仓库连接的远程地址"。
+
+你应该看到类似这样的输出：
+
+```
+origin  git@github.com:<你的用户名>/test.git (fetch)
+origin  git@github.com:<你的用户名>/test.git (push)
+```
+
+注意：`origin` 指向的是**你的 Fork**（有你用户名的那个地址），而不是原仓库 `tian-nu/test`。这一点很重要——后面你需要手动把原仓库的地址也加进来。
+
+### ❌ Fork 操作最常见的三个错误
+
+**错误 1：Clone 了原仓库的地址**
+
+```
+❌ git clone git@github.com:tian-nu/test.git
+```
+
+这样 Clone 下来的仓库，`origin` 指向的是 `tian-nu/test`（原仓库）。你 push 的时候会看到这种错误：
+
+```
+ERROR: Permission to tian-nu/test.git denied to <你的用户名>
+```
+
+因为你对原仓库没有写入权限！
+
+```
+✅ git clone git@github.com:<你的用户名>/test.git
+```
+
+Fork 之后，始终 Clone 你 Fork 的地址（包含你用户名的那个）。
+
+**错误 2：Fork 按钮找不到**
+
+如果打开 `tian-nu/test` 页面后在右上角没看到 Fork 按钮——**先确认你已经登录了 GitHub**。看页面最右上角有没有你的头像。如果没有，说明你没登录，先点 "Sign in" 登录。
+
+**错误 3：Fork 按钮是灰的、点不了**
+
+这可能是因为这个仓库你已经 Fork 过一次了。试试在浏览器地址栏输入 `https://github.com/<你的用户名>/test`——如果页面能打开，说明你之前已经 Fork 过了。
+
+---
+
+## 6.3 在 Fork 上修改并推送
+
+现在你本地有一个 `my-forked-project` 文件夹，里面是 Fork 下来的代码。你对它有完全的控制权——可以改、可以提交、可以推送。
+
+### 做一次完整的修改-提交-推送
+
+在终端里（确保你还在 `my-forked-project` 目录里），依次输入以下命令：
+
+**① 修改 README.md 文件：**
+
+```bash
+echo "# 我的测试项目" >> README.md
+```
+
+这行命令的意思是：在 README.md 文件的末尾追加一行文字"# 我的测试项目"。`>>` 表示"追加到文件末尾"。
+
+**② 把这次修改加入暂存区：**
+
+```bash
+git add README.md
+```
+
+**③ 提交到本地仓库：**
+
+```bash
+git commit -m "docs: 更新README.md，添加项目标题"
+```
+
+**④ 推送到你的 Fork：**
+
+```bash
+git push origin main
+```
+
+注意这里的 `origin` 指向的是**你的 Fork**（不是原仓库）。所以这行命令把代码推到了你有写入权限的仓库，不会报权限错误。
+
+### 验证推送成功
+
+打开浏览器，在地址栏输入：
+
+```
+https://github.com/<你的用户名>/test
+```
+
+按 Enter。页面加载后，找到文件列表里的 `README.md` 文件。点击它。你应该能看到文件内容里多了一行 "# 我的测试项目"。
+
+---
+
+## 6.4 向原仓库发起 Pull Request
+
+现在你的 Fork 仓库里有了修改，但原仓库（`tian-nu/test`）**完全不知道**你做了什么。要把你的修改贡献给原仓库，你需要发起一个 **Pull Request（PR）**。
+
+> **此术语需进附录：upstream（上游）**——指 Fork 的原仓库。如果你 Fork 了 `tian-nu/test`，那 `tian-nu/test` 就是你的 upstream（上游）。数据从上游流向下游（你的 Fork），贡献从下游反馈回上游。
+
+> **此术语需进附录：downstream（下游）**——与 upstream 相对，指 Fork 出来的仓库。你 Fork 的仓库就是原仓库的下游。
+
+### 方法一：GitHub 提示条（最简单）
+
+在你 push 代码之后，**立刻**打开你的 Fork 仓库页面（`https://github.com/<你的用户名>/test`）。
+
+在页面的上半部分（仓库名字下面），GitHub 会显示一个**浅黄色/浅蓝色的提示条**。条上的文字大概是：
+
+```
+main had recent pushes 12 minutes ago
+```
+
+这个提示条的右边，有一个**绿色的长方形按钮**，上面写着 **"Contribute"**（贡献）。
+
+**操作步骤：**
+
+1. 把鼠标移到那个绿色的 **"Contribute"** 按钮上，按一下鼠标左键
+2. 会弹出一个小菜单。菜单里有一个选项叫 **"Open pull request"**——把鼠标移过去，按一下
+3. 页面跳转到一个"比较改动"的页面。GitHub 自动帮你对比了：原仓库 main 分支和你 Fork 的 main 分支之间的差异
+4. 在这个页面的上半部分，有几行灰色小字确认对比关系：
+   - **base repository: `tian-nu/test`** ← 修改要合并到哪？原仓库
+   - **base: `main`** ← 合并到哪个分支？main 分支
+   - **head repository: `<你的用户名>/test`** ← 修改来自哪？你的 Fork
+   - **compare: `main`** ← 比较的是哪个分支？main 分支
+   - 中间有一个绿色的大对勾 ✓，旁边写着 **"Able to merge"**——意思是这两个分支可以自动合并，没有冲突
+5. 往下滚动页面（用鼠标滚轮），你会看到一个绿色的长方形大按钮 **"Create pull request"**。点它
+6. 页面再次变化。现在你看到的是 PR 编辑页面：
+   - 页面顶部有一个**白色长条输入框**，里面可能已经自动填了一个标题（比如你的提交信息）
+   - 下面是一个**大的白色矩形区域**，用来写描述
+7. 在描述框里写上你所做的修改说明。例如：
+
+   ```
+   我在 README.md 里添加了项目标题，让项目概述更清晰。
+   ```
+
+8. 页面底部有一个绿色的 **"Create pull request"** 按钮。把鼠标移过去，按一下
+
+-----现在 PR 已经发送给了原仓库 `tian-nu/test`。原仓库的维护者会收到通知，他们可以看你的代码、留言讨论、要求修改。如果一切没问题，他们会点击合并按钮，把你的代码合进原仓库。
+
+### 方法二：手动发起（如果提示条没出现）
+
+有时候你 push 之后，那个黄色提示条没有出现。没关系，手动也能发：
+
+1. 在你的 Fork 仓库页面（`https://github.com/<你的用户名>/test`），顶部有一排标签
+2. 点击 **"Pull requests"** 标签（在 "Issues" 右边）
+3. 页面跳到 Pull requests 列表。右上角有一个绿色的 **"New pull request"** 按钮——点它
+4. 进入"比较改动"页面。如果你只看到一个分支，点页面中间的蓝色链接 **"compare across forks"**（跨 Fork 比较）
+5. 确认：
+   - base repository 选 `tian-nu/test`，base 选 `main`
+   - head repository 选你的 Fork（有你用户名的那个），compare 选 `main`
+6. 然后往下滚动，点绿色的 **"Create pull request"** → 填写标题和描述 → 再点一次绿色的 **"Create pull request"**
+
+### 如果 PR 被要求修改怎么办？
+
+不用重新创建一个新的 PR。你只需要：
+
+1. 在你电脑上继续修改代码
+2. 再次 `git add` → `git commit` → `git push origin main`
+3. 刷新 PR 页面——你会发现 PR 自动更新了，包含了你的新提交
+
+### 🤔 想多一点：为什么叫 Pull Request 而不是 Push Request？
+
+明明是"我改了代码，想送到原仓库"，为什么叫"Pull（拉取）Request"而不是"Push（推送）Request"？
+
+因为命名的视角是**从原仓库一方**出发的。你在说的是："请**拉取**（pull）我仓库里的这些修改。"
+
+就像一个厨师端着一道新菜走到餐厅经理面前，说的是"请尝尝这道菜"——而不是"我把菜给你推进去"。
+
+**PR 的主动权永远在接收方（原仓库）。** 你能做的是"请求"对方拉取你的修改。对方可以选择接受，也可以拒绝。这种设计是开源社区健康运作的基本约定。
+
+---
+
+## 6.5 保持 Fork 与原仓库同步（非常重要！）
+
+### 为什么需要同步？
+
+你 Fork 了一个仓库之后，原仓库并没有"冻结"——原仓库的作者可能又提交了新的代码。这会导致：
+
+- 你的 Fork 里的代码越来越旧
+- 以后你再向原仓库发起 PR 时，可能会因为代码差异太大而产生冲突
+
+所以你需要定期把原仓库的新代码"拉"到你的 Fork 里来。
+
+### 第一步：添加 upstream 远程地址
+
+你的本地仓库现在只知道一个远程地址：`origin`（指向你的 Fork）。你需要添加第二个：`upstream`（指向原仓库）。
+
+**获取原仓库的 SSH 地址：**
+
+1. 打开浏览器，访问 `https://github.com/tian-nu/test`
+2. 在页面上找到绿色的 **"<> Code"** 按钮（在文件列表上方，大约页面中间偏右的位置）
+3. 把鼠标移到这个绿色按钮上，按一下鼠标左键
+4. 会弹出一个小窗口。窗口顶部有三个标签：**HTTPS**、**SSH**、**GitHub CLI**
+5. 点击 **"SSH"** 标签
+6. 下面会出现一个白色的地址框，里面写着 `git@github.com:tian-nu/test.git`
+7. 点击地址框右边的"复制"按钮（两个叠在一起的小方块图标）。按钮旁边会出现一个提示 "Copied!"——说明地址已经复制到你的剪贴板了
+
+**在终端里添加 upstream：**
+
+回到终端，输入：
+
+```bash
+git remote add upstream git@github.com:tian-nu/test.git
+```
+
+按 Enter。这行命令的意思是"给我本地的这个仓库添加一个新的远程地址，起名叫 upstream，指向原仓库"。
+
+**验证两个远程地址都在：**
+
+```bash
+git remote -v
+```
+
+你应该看到**四行**输出：
+
+```
+origin    git@github.com:<你的用户名>/test.git (fetch)
+origin    git@github.com:<你的用户名>/test.git (push)
+upstream  git@github.com:tian-nu/test.git (fetch)
+upstream  git@github.com:tian-nu/test.git (push)
+```
+
+看到四行就对了！带 `origin` 的是你的 Fork，带 `upstream` 的是原仓库。
+
+### 第二步：执行同步——三步走
+
+以下三条命令，**每次想同步时都要按顺序执行**。每一条我都解释它做了什么——理解了再执行。
+
+**第1步：下载上游最新内容（不修改你的文件）**
+
+```bash
+git fetch upstream
+```
+
+`fetch` 的意思是"只下载，不合并"。它从原仓库下载了所有分支和标签的最新信息，但**完全不修改你当前工作区的任何文件**。它只是让 Git 在后台知道了"上游现在有什么新东西"。
+
+你可以在 `fetch` 之后用 `git log upstream/main` 看看上游多了哪些提交，再决定要不要合并。`fetch` 永远安全，不会弄坏你的代码。
+
+**第2步：切换到 main 分支，合并上游的更新**
+
+```bash
+git checkout main
+git merge upstream/main
+```
+
+第一行 `git checkout main`：确保你当前在 main 分支上（不是其他分支）。因为 `merge` 总是合并到"你当前所在的分支"。
+
+第二行 `git merge upstream/main`：把上游 main 分支的新内容合并到你本地的 main 分支。
+
+如果有冲突（你和上游同时改了同一个地方），Git 会停下来告诉你。解决冲突的方法和你前面步骤4里学的一样。
+
+**第3步：把合并后的结果推送到你的 Fork**
+
+```bash
+git push origin main
+```
+
+把合并后的本地 main 分支推送到你的 Fork（origin）。这一步做完之后，你 GitHub 上的 Fork 仓库就和原仓库同步了。
+
+### 完整三行命令（可复制版本）
+
+```bash
+git fetch upstream
+git checkout main
+git merge upstream/main
+git push origin main
+```
+
+执行之前确保你本地工作区是干净的（没有还没提交的修改）。用 `git status` 检查。
+
+### ❌ 同步时的常见错误
+
+**错误1：把 upstream 地址写成了自己 Fork 的地址**
+
+```
+❌ git remote add upstream git@github.com:<你的用户名>/test.git
+```
+
+这会让 `origin` 和 `upstream` 指向同一个仓库，同步就失去了意义。
+
+```
+✅ git remote add upstream git@github.com:tian-nu/test.git
+```
+
+记住口诀：**origin = 你的 Fork，upstream = 原仓库。**
+
+**错误2：没有先切换到 main 分支就合并**
+
+```
+❌ git fetch upstream
+   git merge upstream/main   ← 你当前在 feature 分支上！
+```
+
+`git merge` 总是合并到**当前分支**。如果你在 `feature` 分支上执行了这个命令，上游的 main 分支内容会合并到你的 feature 分支——这通常不是你想要的。
+
+```
+✅ git checkout main        ← 先切换到 main
+   git merge upstream/main  ← 然后再合并
+```
+
+**错误3：合并后忘记 push 到 origin**
+
+你在本地执行了 `git merge upstream/main`，本地 main 更新了。但是如果你不执行 `git push origin main`，GitHub 上你的 Fork 还是旧的。很多人同步完之后去浏览器里看 Fork 页面，发现代码没变——就是因为忘了这最后一步 push。
+
+---
+
+## 6.6 完整 Fork 工作流总览
+
+```
+原仓库 (upstream)                          你的 Fork (origin)
+tian-nu/test                               你的用户名/test
+    │                                            │
+    │─── ① Fork（在GitHub网页上点Fork按钮） ───→  │
+    │                                            │
+    │                            ② git clone（下载到你电脑）
+    │                                            │
+    │                        ③ 改代码 + git commit
+    │                                            │
+    │                        ④ git push origin main（推送到你的Fork）
+    │                                            │
+    │←── ⑤ Pull Request（从你的Fork向原仓库发起）─│
+    │                                            │
+    │─ ⑥ 原仓库维护者审核 → Merge（合并）         │
+    │                                            │
+    │─ ⑦ 原仓库有新代码了 ← 你执行 git fetch upstream → git merge → git push
+```
+
+**记住这个核心流程：Fork → Clone → 修改 → Push → 发PR → 同步。**
+
+> 📊 可视化演示见 [pr_fork_visual.html](pr_fork_visual.html)
+
+---
+
+## 本章小结
+
+| 知识点 | 一句话要点 |
+|--------|-----------|
+| Fork 是什么 | 在 GitHub 网页上把别人的仓库"复印"一份到你自己的账户下 |
+| Fork 比喻 | 图书馆复印一本书——复印件归你，随便写；原件毫发无损 |
+| Clone 比喻 | 图书馆借一本书——只能看，不能往原书上写 |
+| Fork vs Clone | Fork 在网页上操作（创建服务器端副本），Clone 在终端里操作（下载到本地） |
+| Fork 按钮在哪里 | 仓库页面右上角，头像左边，灰色按钮，带叉子图标 🍴，旁边有数字 |
+| Create fork 页面 | Owner（选自己）、Repository name（不改）、勾选"Copy the main branch only" |
+| Fork 成功的标志 | 页面左上角仓库名下面出现灰色小字 "forked from tian-nu/test" |
+| Fork 之后必须做什么 | Clone 自己的 Fork 地址（`git@github.com:<用户名>/test.git`），不是原仓库地址 |
+| PR 发起入口 | Push 后顶部黄色提示条 → 绿色"Contribute"按钮 → "Open pull request" |
+| PR 发起方式二 | Pull requests 标签 → 绿色"New pull request" → "compare across forks" |
+| PR 视角 | 请求原仓库"拉取"你的修改，主动权永远在接收方 |
+| upstream 是什么 | Fork 的原仓库。你的就是 downstream（下游） |
+| 添加 upstream | `git remote add upstream git@github.com:tian-nu/test.git` |
+| 三步同步法 | `git fetch upstream` → `git checkout main` → `git merge upstream/main` → `git push origin main` |
+| fetch 安全吗 | 安全。只下载不合并，不修改你的文件 |
+| 常见错误1 | Clone 了原仓库地址而不是 Fork 地址 → push 报权限错误 |
+| 常见错误2 | 同步前没切回 main 分支 → 合并到错误的分支 |
+| 常见错误3 | 合并后忘了 push 到 origin → Fork 网页上还是旧的 |
+
+> 🚀 下一步：你已经知道怎么参与别人的开源项目了。但一个成熟的项目不只是有代码——每次有人提交代码，最好能自动跑测试、检查代码质量。谁来干这些重复的体力活？就是 **GitHub Actions**——第7步要讲的内容。
+
+---
+
+[← 上一章：步骤5 · Issue与项目管理](05-Issue与项目管理.md) | [下一章：步骤7 · GitHub Actions入门 →](07-GitHub_Actions入门.md)

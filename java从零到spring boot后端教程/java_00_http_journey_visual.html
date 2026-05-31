@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HTTP请求完整旅程 - 可视化演示</title>
+<!-- CDN: 无外部依赖，纯自包含。若需离线运行直接打开即可 -->
+<style>
+:root {
+  --bg: #ffffff; --text: #1a1a2e; --card: #f0f0f5;
+  --border: #d0d0e0; --highlight: #4a90d9; --highlight2: #e8505b;
+  --node-bg: #e8f0fe; --arrow: #888;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1a1a2e; --text: #e0e0e0; --card: #252540;
+    --border: #3a3a55; --highlight: #5b9bd5; --highlight2: #f06070;
+    --node-bg: #2a2a45; --arrow: #aaa;
+  }
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--bg); color: var(--text); padding: 20px;
+  transition: background 0.3s, color 0.3s;
+}
+h1 { text-align: center; font-size: 1.3em; margin-bottom: 4px; }
+.subtitle { text-align: center; font-size: 0.85em; color: var(--arrow); margin-bottom: 16px; }
+.controls { text-align: center; margin-bottom: 16px; }
+.controls button {
+  padding: 8px 20px; margin: 0 4px; border: 1px solid var(--border);
+  background: var(--card); color: var(--text); border-radius: 6px;
+  cursor: pointer; font-size: 0.9em; transition: all 0.2s;
+}
+.controls button:hover { background: var(--highlight); color: #fff; border-color: var(--highlight); }
+.controls button.active { background: var(--highlight); color: #fff; border-color: var(--highlight); }
+.steps { max-width: 900px; margin: 0 auto; }
+.step {
+  display: flex; align-items: center; margin: 10px 0; padding: 12px 16px;
+  background: var(--card); border-radius: 8px; border-left: 4px solid var(--border);
+  transition: all 0.4s; opacity: 0.35;
+}
+.step.active { opacity: 1; border-left-color: var(--highlight); background: var(--node-bg); }
+.step-num {
+  width: 36px; height: 36px; border-radius: 50%; background: var(--border);
+  color: var(--text); display: flex; align-items: center; justify-content: center;
+  font-weight: bold; font-size: 0.85em; margin-right: 14px; flex-shrink: 0;
+  transition: all 0.4s;
+}
+.step.active .step-num { background: var(--highlight); color: #fff; }
+.step-content { flex: 1; }
+.step-title { font-weight: bold; font-size: 0.95em; }
+.step-desc { font-size: 0.82em; color: var(--arrow); margin-top: 2px; }
+.step-tech { font-size: 0.75em; color: var(--highlight2); margin-top: 2px; font-family: monospace; }
+.arrow-down {
+  text-align: center; font-size: 1.5em; color: var(--arrow); margin: 0; height: 28px;
+  line-height: 28px; transition: color 0.4s;
+}
+.arrow-down.lit { color: var(--highlight); }
+.footer { text-align: center; margin-top: 20px; font-size: 0.75em; color: var(--arrow); }
+.footer a { color: var(--highlight); text-decoration: none; }
+.step-summary {
+  display: none; text-align: center; margin-top: 16px; padding: 14px;
+  background: var(--highlight); color: #fff; border-radius: 8px;
+  font-weight: bold;
+}
+.step-summary.show { display: block; }
+</style>
+</head>
+<body>
+
+<h1>HTTP请求的完整旅程</h1>
+<p class="subtitle">从浏览器输入URL到页面渲染，经历的13个步骤</p>
+
+<div class="controls">
+  <button onclick="resetAll()">⟳ 重置</button>
+  <button onclick="nextStep()" id="btnNext">▶ 下一步</button>
+  <button onclick="autoPlay()" id="btnAuto">⏩ 自动播放</button>
+</div>
+
+<div class="steps" id="stepsContainer"></div>
+<div class="step-summary" id="summary"></div>
+
+<p class="footer">
+  本可视化对应 <a href="00-什么是后端工程师.md">第00章 · 什么是后端工程师</a> 步骤00.2<br>
+  基于 detailed_design.md v2.1
+</p>
+
+<script>
+const steps = [
+  { title: '浏览器输入URL', desc: '用户在地址栏输入 https://example.com/api/users，按下回车', tech: '浏览器' },
+  { title: 'DNS解析', desc: '浏览器询问DNS：example.com的IP是多少？DNS返回 12.34.56.78', tech: 'DNS → IP地址' },
+  { title: 'TCP连接建立', desc: '浏览器与服务器 12.34.56.78 进行三次握手，建立可靠的TCP连接', tech: 'TCP 三次握手' },
+  { title: 'TLS握手', desc: '因为URL是HTTPS，浏览器与服务器进行TLS加密握手，交换密钥', tech: 'TLS/HTTPS' },
+  { title: '发送HTTP请求', desc: 'GET /api/users HTTP/1.1 → Host: example.com → Accept: application/json', tech: 'HTTP请求' },
+  { title: 'Nginx反向代理', desc: 'Nginx接收请求，根据配置转发给后端的Spring Boot应用（如 localhost:8080）', tech: 'Nginx' },
+  { title: 'Spring Boot Controller', desc: '@GetMapping("/api/users") 匹配请求，调用 userService.findAll()', tech: 'Spring Boot' },
+  { title: 'Service层处理', desc: '业务逻辑层：权限校验、数据过滤、分页计算...', tech: 'Java Service' },
+  { title: 'Repository查询数据库', desc: 'JPA/Hibernate 生成SQL：SELECT * FROM users，通过TCP连接发送到MySQL', tech: 'JPA → MySQL' },
+  { title: '数据库返回结果', desc: 'MySQL执行SQL，将查询结果返回给Java应用', tech: 'MySQL' },
+  { title: '序列化为JSON', desc: 'Jackson将List<User>序列化为JSON：[{"id":1,"name":"张三"},...]', tech: 'Jackson → JSON' },
+  { title: 'HTTP响应返回', desc: '200 OK → Content-Type: application/json → body: [JSON数据]', tech: 'HTTP响应' },
+  { title: '浏览器渲染', desc: 'JavaScript接收JSON数据，更新DOM，用户看到用户列表页面', tech: '浏览器渲染' }
+];
+
+const container = document.getElementById('stepsContainer');
+let currentStep = 0;
+
+function render() {
+  container.innerHTML = '';
+  steps.forEach((s, i) => {
+    const active = i <= currentStep;
+    const div = document.createElement('div');
+    div.className = 'step' + (active ? ' active' : '');
+    div.innerHTML = `<span class="step-num">${i + 1}</span>
+      <div class="step-content">
+        <div class="step-title">${s.title}</div>
+        <div class="step-desc">${s.desc}</div>
+        <div class="step-tech">${s.tech}</div>
+      </div>`;
+    container.appendChild(div);
+
+    if (i < steps.length - 1) {
+      const arrow = document.createElement('div');
+      arrow.className = 'arrow-down' + (i < currentStep ? ' lit' : '');
+      arrow.textContent = '↓';
+      container.appendChild(arrow);
+    }
+  });
+  updateSummary();
+}
+
+function updateSummary() {
+  const s = document.getElementById('summary');
+  if (currentStep >= steps.length - 1) {
+    s.className = 'step-summary show';
+    s.textContent = '全部13步完成！整个过程在正常网络条件下仅需几十~几百毫秒。';
+  } else {
+    s.className = 'step-summary';
+  }
+}
+
+function nextStep() {
+  if (currentStep < steps.length - 1) { currentStep++; render(); }
+}
+
+function prevStep() {
+  if (currentStep > 0) { currentStep--; render(); }
+}
+
+function resetAll() { currentStep = -1; render(); }
+
+let autoTimer = null;
+function autoPlay() {
+  if (autoTimer) { clearInterval(autoTimer); autoTimer = null;
+    document.getElementById('btnAuto').textContent = '⏩ 自动播放'; return; }
+  document.getElementById('btnAuto').textContent = '⏸ 暂停';
+  if (currentStep >= steps.length - 1) { currentStep = -1; render(); }
+  autoTimer = setInterval(() => {
+    if (currentStep < steps.length - 1) { nextStep(); }
+    else { clearInterval(autoTimer); autoTimer = null;
+      document.getElementById('btnAuto').textContent = '⏩ 自动播放'; }
+  }, 1200);
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight') nextStep();
+  if (e.key === 'ArrowLeft') prevStep();
+  if (e.key === 'r' || e.key === 'R') resetAll();
+});
+
+render();
+</script>
+</body>
+</html>

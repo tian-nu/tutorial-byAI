@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spring Boot 启动流程可视化</title>
+<!-- D3.js v7 CDN -->
+<!-- 备用离线：下载 d3.min.js 与本文件同目录即可 -->
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+:root {
+    --bg: #ffffff;
+    --text: #1a1a2e;
+    --card-bg: #f8f9fa;
+    --border: #dee2e6;
+    --accent: #6db33f;
+    --accent2: #007bff;
+    --phase-active: #fff3cd;
+    --phase-done: #d4edda;
+    --phase-pending: #f8f9fa;
+    --line: #adb5bd;
+    --shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #1e1e2e;
+        --text: #cdd6f4;
+        --card-bg: #313244;
+        --border: #45475a;
+        --accent: #a6e3a1;
+        --accent2: #89b4fa;
+        --phase-active: #3b3b1f;
+        --phase-done: #1f3b2e;
+        --phase-pending: #313244;
+        --line: #585b70;
+        --shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans SC", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 20px;
+    transition: background 0.3s, color 0.3s;
+}
+.container { max-width: 1000px; margin: 0 auto; }
+h1 { text-align: center; font-size: 1.6em; margin-bottom: 8px; color: var(--accent); }
+.subtitle { text-align: center; font-size: 0.9em; color: var(--line); margin-bottom: 20px; }
+.controls { display: flex; gap: 10px; justify-content: center; margin-bottom: 24px; flex-wrap: wrap; }
+.controls button {
+    padding: 10px 20px;
+    border: 1px solid var(--accent2);
+    background: var(--card-bg);
+    color: var(--accent2);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.95em;
+    transition: all 0.2s;
+}
+.controls button:hover { background: var(--accent2); color: #fff; }
+.controls button:disabled { opacity: 0.4; cursor: not-allowed; }
+.controls button.primary { background: var(--accent2); color: #fff; }
+.controls button.primary:hover { background: #0056b3; }
+.controls button.theme-btn { border-color: var(--line); color: var(--text); }
+.phase-container { display: flex; flex-direction: column; gap: 8px; }
+.phase {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 14px 16px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--phase-pending);
+    cursor: pointer;
+    transition: all 0.35s ease;
+    box-shadow: var(--shadow);
+    opacity: 0.5;
+}
+.phase.active { opacity: 1; background: var(--phase-active); border-color: #ffc107; transform: scale(1.02); }
+.phase.done { opacity: 0.85; background: var(--phase-done); border-color: #28a745; }
+.phase-num {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 0.95em;
+    flex-shrink: 0;
+    background: var(--line); color: #fff;
+    transition: all 0.35s;
+}
+.phase.active .phase-num { background: #ffc107; color: #000; }
+.phase.done .phase-num { background: #28a745; }
+.phase-content { flex: 1; }
+.phase-title { font-weight: 700; font-size: 1.02em; margin-bottom: 2px; }
+.phase-desc { font-size: 0.88em; color: var(--line); line-height: 1.5; }
+.phase-detail {
+    font-size: 0.85em; color: var(--text); margin-top: 4px;
+    display: none;
+    padding: 8px 12px; background: var(--card-bg); border-radius: 6px;
+    border-left: 3px solid var(--accent2);
+}
+.phase.active .phase-detail, .phase.done .phase-detail { display: block; }
+.arrow-row { display: flex; justify-content: center; padding: 2px 0 2px 50px; }
+.arrow { color: var(--line); font-size: 1.2em; }
+.step-counter { text-align: center; font-size: 0.9em; color: var(--line); margin-bottom: 16px; }
+.footer-note { text-align: center; font-size: 0.82em; color: var(--line); margin-top: 30px; padding-top: 16px; border-top: 1px solid var(--border); }
+.footer-note a { color: var(--accent2); }
+.legend { display: flex; gap: 20px; justify-content: center; margin-bottom: 16px; font-size: 0.85em; }
+.legend span { display: flex; align-items: center; gap: 6px; }
+.legend-dot { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+</style>
+</head>
+<body>
+<div class="container">
+    <h1>Spring Boot 启动流程：SpringApplication.run()</h1>
+    <p class="subtitle">
+        动画演示 Spring Boot 从 <code>main</code> 方法到"应用就绪"的 8 个阶段
+    </p>
+
+    <div class="legend">
+        <span><span class="legend-dot" style="background:#ffc107"></span> 进行中</span>
+        <span><span class="legend-dot" style="background:#28a745"></span> 已完成</span>
+        <span><span class="legend-dot" style="background:var(--line)"></span> 等待中</span>
+    </div>
+
+    <div class="step-counter" id="stepCounter">阶段 0 / 8</div>
+
+    <div class="controls">
+        <button class="primary" onclick="startAuto()" id="btnPlay">▶ 自动播放</button>
+        <button onclick="stepNext()" id="btnNext">⏭ 下一步</button>
+        <button onclick="resetAll()">↺ 重置</button>
+        <button class="theme-btn" onclick="toggleTheme()" id="btnTheme">🌓 暗色模式</button>
+    </div>
+
+    <div class="phase-container" id="phaseContainer"></div>
+
+    <p class="footer-note">
+        本可视化对应 <a href="72-SpringBoot入门.md">72-SpringBoot入门.md</a> 步骤 72.7 启动流程深度解析<br>
+        数据来源：基于 Spring Boot 3.2.x 源码行为
+    </p>
+</div>
+
+<script>
+const phases = [
+    {
+        title: "阶段 1：创建 SpringApplication 实例",
+        desc: "new SpringApplication(DemoApplication.class)",
+        detail: "设置 primarySources = DemoApplication.class；初步推断应用类型（SERVLET / REACTIVE / NONE）"
+    },
+    {
+        title: "阶段 2：推断应用类型",
+        desc: "WebApplicationType.deduceFromClasspath()",
+        detail: "检查 classpath 是否有 DispatcherServlet → 判定为 SERVLET（Web 应用）；有 DispatcherHandler 无 DispatcherServlet → REACTIVE；都没有 → NONE（纯命令行）"
+    },
+    {
+        title: "阶段 3：加载 ApplicationContextInitializer",
+        desc: "从 spring.factories / AutoConfiguration.imports 读取",
+        detail: "读取 META-INF 下注册的初始化器。它们是 Spring Boot 自动配置的"先遣队"，在实际创建 ApplicationContext 之前执行"
+    },
+    {
+        title: "阶段 4：加载 ApplicationListener",
+        desc: "同样从 spring.factories 读取监听器列表",
+        detail: "加载所有 EventListener。这些监听器在整个启动过程中监听各类事件（准备环境、刷新上下文、启动失败等），实现观察者模式"
+    },
+    {
+        title: "阶段 5：推断主类",
+        desc: "通过调用栈确定 main 方法所在的类",
+        detail: "Spring Boot 通过 StackTraceElement 找到包含 main 方法的类 = DemoApplication.class。这个主类也是 @SpringBootApplication 所在的配置源"
+    },
+    {
+        title: "阶段 6：准备 Environment",
+        desc: "创建并配置 ConfigurableEnvironment",
+        detail: "加载 application.properties/yml → 解析占位符 → 确定激活的 Profile → 注册到 Environment 对象中。所有 @Value 和 @ConfigurationProperties 所需的属性都从这里读取"
+    },
+    {
+        title: "阶段 7：创建并刷新 ApplicationContext",
+        desc: "最核心步骤：12 个子步骤，包括自动配置、Bean 实例化、启动 Tomcat",
+        detail: "子步骤：prepareRefresh → BeanFactory 准备 → 执行 BeanFactoryPostProcessor（触发自动配置）→ 注册 BeanPostProcessor → 国际化 → 事件广播器 → onRefresh（启动内嵌 Tomcat）→ 注册监听器 → 实例化所有单例 Bean → finishRefresh。这是整个启动过程的核心"
+    },
+    {
+        title: "阶段 8：调用 Runner + 应用就绪 ✓",
+        desc: "执行 ApplicationRunner/CommandLineRunner → 发布 StartedEvent",
+        detail: "按 @Order 顺序调用所有 Runner → 发布 ApplicationStartedEvent → 输出 Started in X seconds → 应用进入可用状态，接受 HTTP 请求"
+    }
+];
+
+let currentStep = 0;
+let autoTimer = null;
+
+function render() {
+    const container = document.getElementById('phaseContainer');
+    container.innerHTML = '';
+    phases.forEach((p, i) => {
+        const phaseDiv = document.createElement('div');
+        phaseDiv.className = 'phase';
+        if (i < currentStep) phaseDiv.classList.add('done');
+        if (i === currentStep && currentStep > 0) phaseDiv.classList.add('active');
+        phaseDiv.onclick = () => jumpTo(i + 1);
+
+        phaseDiv.innerHTML = `
+            <div class="phase-num">${i + 1}</div>
+            <div class="phase-content">
+                <div class="phase-title">${p.title}</div>
+                <div class="phase-desc">${p.desc}</div>
+                <div class="phase-detail">${p.detail}</div>
+            </div>
+        `;
+        container.appendChild(phaseDiv);
+
+        if (i < phases.length - 1) {
+            const arrowRow = document.createElement('div');
+            arrowRow.className = 'arrow-row';
+            arrowRow.innerHTML = '<span class="arrow">▼</span>';
+            container.appendChild(arrowRow);
+        }
+    });
+    document.getElementById('stepCounter').textContent =
+        `阶段 ${currentStep} / ${phases.length}`;
+
+    document.getElementById('btnNext').disabled = currentStep >= phases.length;
+    document.getElementById('btnPlay').disabled = currentStep >= phases.length;
+}
+
+function stepNext() {
+    if (currentStep < phases.length) {
+        currentStep++;
+        render();
+        if (currentStep >= phases.length) stopAuto();
+    }
+}
+
+function jumpTo(n) {
+    currentStep = Math.min(n, phases.length);
+    render();
+}
+
+function startAuto() {
+    stopAuto();
+    if (currentStep >= phases.length) currentStep = 0;
+    autoTimer = setInterval(() => {
+        if (currentStep < phases.length) {
+            currentStep++;
+            render();
+        } else {
+            stopAuto();
+        }
+    }, 1800);
+    document.getElementById('btnPlay').textContent = '⏸ 停止';
+}
+
+function stopAuto() {
+    if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+    document.getElementById('btnPlay').textContent = '▶ 自动播放';
+}
+
+function resetAll() {
+    stopAuto();
+    currentStep = 0;
+    render();
+}
+
+let darkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
+function toggleTheme() {
+    darkMode = !darkMode;
+    document.documentElement.style.setProperty('--bg', darkMode ? '#1e1e2e' : '#ffffff');
+    document.documentElement.style.setProperty('--text', darkMode ? '#cdd6f4' : '#1a1a2e');
+    document.documentElement.style.setProperty('--card-bg', darkMode ? '#313244' : '#f8f9fa');
+    document.documentElement.style.setProperty('--border', darkMode ? '#45475a' : '#dee2e6');
+    document.documentElement.style.setProperty('--accent', darkMode ? '#a6e3a1' : '#6db33f');
+    document.documentElement.style.setProperty('--accent2', darkMode ? '#89b4fa' : '#007bff');
+    document.documentElement.style.setProperty('--phase-active', darkMode ? '#3b3b1f' : '#fff3cd');
+    document.documentElement.style.setProperty('--phase-done', darkMode ? '#1f3b2e' : '#d4edda');
+    document.documentElement.style.setProperty('--phase-pending', darkMode ? '#313244' : '#f8f9fa');
+    document.documentElement.style.setProperty('--line', darkMode ? '#585b70' : '#adb5bd');
+    document.documentElement.style.setProperty('--shadow', darkMode ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.08)');
+    document.getElementById('btnTheme').textContent = darkMode ? '☀️ 亮色模式' : '🌓 暗色模式';
+}
+
+toggleTheme();
+render();
+</script>
+</body>
+</html>

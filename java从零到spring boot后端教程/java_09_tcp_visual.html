@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TCP三次握手与四次挥手 - 可视化演示</title>
+<!-- CDN: 无外部依赖，纯自包含。若需离线运行直接打开即可 -->
+<style>
+:root {
+  --bg: #ffffff; --text: #1a1a2e; --card: #f0f0f5;
+  --border: #d0d0e0; --highlight: #4a90d9; --highlight2: #e8505b;
+  --node-bg: #e8f0fe; --arrow: #888; --client: #5b9bd5; --server: #f06070;
+  --pkt-syn: #5b9bd5; --pkt-ack: #4caf84; --pkt-fin: #e8505b; --pkt-data: #ff9800;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1a1a2e; --text: #e0e0e0; --card: #252540;
+    --border: #3a3a55; --highlight: #5b9bd5; --highlight2: #f06070;
+    --node-bg: #2a2a45; --arrow: #aaa; --client: #5b9bd5; --server: #f06070;
+    --pkt-syn: #5b9bd5; --pkt-ack: #4caf84; --pkt-fin: #f06070; --pkt-data: #cc8800;
+  }
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--bg); color: var(--text); padding: 20px;
+  transition: background 0.3s, color 0.3s;
+}
+h1 { text-align: center; font-size: 1.3em; margin-bottom: 4px; }
+.subtitle { text-align: center; font-size: 0.85em; color: var(--arrow); margin-bottom: 16px; }
+.controls { text-align: center; margin-bottom: 10px; }
+.controls button {
+  padding: 8px 20px; margin: 4px; border: 1px solid var(--border);
+  background: var(--card); color: var(--text); border-radius: 6px;
+  cursor: pointer; font-size: 0.9em; transition: all 0.2s;
+}
+.controls button:hover { background: var(--highlight); color: #fff; border-color: var(--highlight); }
+.controls button.active { background: var(--highlight); color: #fff; }
+.section-title {
+  text-align: center; font-weight: bold; font-size: 1em; color: var(--highlight);
+  margin: 16px 0 8px; padding: 6px; background: var(--node-bg); border-radius: 6px;
+}
+.diagram { max-width: 750px; margin: 0 auto; position: relative; }
+.clientserver {
+  display: flex; justify-content: space-between; margin-bottom: 6px; font-weight: bold;
+  font-size: 0.9em;
+}
+.client-label { color: var(--client); }
+.server-label { color: var(--server); }
+.state-box {
+  display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 0.78em;
+  color: var(--arrow);
+}
+.diagram-line { position: relative; min-height: 340px; }
+.packet {
+  display: flex; align-items: center; margin: 6px 0; padding: 8px 10px;
+  border-radius: 6px; font-size: 0.82em; transition: all 0.4s;
+  opacity: 0; transform: translateY(6px);
+}
+.packet.visible { opacity: 1; transform: translateY(0); }
+.packet.to-server { justify-content: flex-end; }
+.packet.to-client { justify-content: flex-start; }
+.packet-tag {
+  padding: 4px 10px; border-radius: 12px; color: #fff; font-weight: bold;
+  font-size: 0.8em; min-width: 70px; text-align: center;
+}
+.packet.to-server .packet-tag { margin-left: 8px; }
+.packet.to-client .packet-tag { margin-right: 8px; }
+.syn { background: var(--pkt-syn); }
+.ack { background: var(--pkt-ack); }
+.fin { background: var(--pkt-fin); }
+.data { background: var(--pkt-data); }
+.packet-desc { font-size: 0.78em; color: var(--arrow); max-width: 260px; }
+.packet.to-server .packet-desc { text-align: right; }
+.packet.to-client .packet-desc { text-align: left; }
+.divider {
+  text-align: center; font-weight: bold; color: var(--highlight2); margin: 10px 0;
+  font-size: 0.85em;
+}
+.legend { text-align: center; font-size: 0.75em; color: var(--arrow); margin-top: 16px; }
+.legend span { display: inline-block; margin: 0 8px; }
+.legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+  margin-right: 4px; vertical-align: middle; }
+.footer { text-align: center; margin-top: 16px; font-size: 0.75em; color: var(--arrow); }
+.footer a { color: var(--highlight); text-decoration: none; }
+.connected { text-align: center; margin: 8px 0; font-weight: bold; color: var(--pkt-ack);
+  display: none; font-size: 0.9em; }
+.closed { text-align: center; margin: 8px 0; font-weight: bold; color: var(--pkt-fin);
+  display: none; font-size: 0.9em; }
+</style>
+</head>
+<body>
+
+<h1>TCP：三次握手与四次挥手</h1>
+<p class="subtitle">面向连接的可靠传输协议 — 建立与断开连接的全过程</p>
+
+<div class="controls">
+  <button onclick="resetAll()">⟳ 重置</button>
+  <button onclick="nextStep()" id="btnNext">▶ 下一步</button>
+  <button onclick="autoPlay()" id="btnAuto">⏩ 自动播放</button>
+</div>
+
+<div class="diagram">
+
+  <div class="section-title">第一阶段：三次握手（建立连接）</div>
+  <div class="clientserver">
+    <span class="client-label">🧑 客户端</span>
+    <span class="server-label">🖥 服务端</span>
+  </div>
+  <div class="state-box">
+    <span id="clientState">CLOSED</span>
+    <span id="serverState">LISTEN</span>
+  </div>
+
+  <div class="diagram-line" id="container3"></div>
+  <div class="connected" id="connectedMsg">✅ TCP连接已建立！可以开始传输数据</div>
+
+  <div class="section-title">第二阶段：数据传输（TCP可靠传输）</div>
+  <div class="diagram-line" id="containerData"></div>
+
+  <div class="section-title">第三阶段：四次挥手（断开连接）</div>
+  <div class="diagram-line" id="container4"></div>
+  <div class="closed" id="closedMsg">⛔ TCP连接已关闭</div>
+
+  <div class="legend">
+    <span><span class="dot" style="background:var(--pkt-syn)"></span>SYN</span>
+    <span><span class="dot" style="background:var(--pkt-ack)"></span>ACK</span>
+    <span><span class="dot" style="background:var(--pkt-data)"></span>DATA</span>
+    <span><span class="dot" style="background:var(--pkt-fin)"></span>FIN</span>
+  </div>
+</div>
+
+<p class="footer">
+  本可视化对应 <a href="09-TCP协议.md">第09章 · TCP协议</a> 步骤09.2-09.3<br>
+  基于 detailed_design.md v2.1
+</p>
+
+<script>
+const handshake = [
+  { dir: 'to-server', type: 'syn', tag: 'SYN', desc: '在吗？我想跟你说话。seq=x' },
+  { dir: 'to-client', type: 'ack', tag: 'SYN+ACK', desc: '在的，你说吧。seq=y, ack=x+1' },
+  { dir: 'to-server', type: 'ack', tag: 'ACK', desc: '好，那我开始说了。ack=y+1' },
+];
+const dataTransfer = [
+  { dir: 'to-server', type: 'data', tag: 'DATA', desc: 'GET /api/users HTTP/1.1' },
+  { dir: 'to-client', type: 'data', tag: 'DATA', desc: '200 OK + JSON数据' },
+  { dir: 'to-server', type: 'ack', tag: 'ACK', desc: '收到数据，确认' },
+  { dir: 'to-client', type: 'ack', tag: 'ACK', desc: '确认收到请求' },
+];
+const wave = [
+  { dir: 'to-server', type: 'fin', tag: 'FIN', desc: '我说完了（主动关闭）' },
+  { dir: 'to-client', type: 'ack', tag: 'ACK', desc: '好的，知道了' },
+  { dir: 'to-client', type: 'fin', tag: 'FIN', desc: '我也说完了（被动关闭）' },
+  { dir: 'to-server', type: 'ack', tag: 'ACK', desc: '好的，拜拜' },
+];
+
+const allSteps = [
+  ...handshake.map(s => ({ ...s, phase: 'handshake' })),
+  ...dataTransfer.map(s => ({ ...s, phase: 'data' })),
+  ...wave.map(s => ({ ...s, phase: 'wave' })),
+];
+
+let currentStep = -1;
+
+function renderPhase(containerId, stepsList, phase) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = '';
+  stepsList.forEach((s, i) => {
+    const globalIdx = allSteps.findIndex(x => x.phase === phase && x.tag === s.tag &&
+      x.desc === s.desc && x.dir === s.dir);
+    const visible = globalIdx >= 0 && globalIdx <= currentStep;
+    const div = document.createElement('div');
+    div.className = 'packet ' + s.dir + ' ' + (visible ? 'visible' : '');
+    div.innerHTML = `<span class="packet-desc">${s.desc}</span>
+      <span class="packet-tag ${s.type}">${s.tag}</span>`;
+    container.appendChild(div);
+  });
+}
+
+function renderAll() {
+  renderPhase('container3', handshake, 'handshake');
+  renderPhase('containerData', dataTransfer, 'data');
+  renderPhase('container4', wave, 'wave');
+
+  const hsDone = currentStep >= 2;
+  const dataDone = currentStep >= 6;
+  const waveDone = currentStep >= 10;
+
+  document.getElementById('connectedMsg').style.display = hsDone ? 'block' : 'none';
+  document.getElementById('closedMsg').style.display = waveDone ? 'block' : 'none';
+
+  const states = [
+    ['CLOSED', 'LISTEN'],
+    ['SYN_SENT', 'LISTEN'],
+    ['SYN_SENT', 'SYN_RCVD'],
+    ['ESTABLISHED', 'ESTABLISHED'],
+    ['ESTABLISHED', 'ESTABLISHED'],
+    ['ESTABLISHED', 'ESTABLISHED'],
+    ['ESTABLISHED', 'ESTABLISHED'],
+    ['ESTABLISHED', 'ESTABLISHED'],
+    ['FIN_WAIT_1', 'ESTABLISHED'],
+    ['FIN_WAIT_1', 'CLOSE_WAIT'],
+    ['FIN_WAIT_2', 'LAST_ACK'],
+    ['TIME_WAIT', 'CLOSED'],
+  ];
+  const s = states[Math.max(0, Math.min(currentStep, states.length - 1))];
+  document.getElementById('clientState').textContent = currentStep >= 0 ? s[0] : 'CLOSED';
+  document.getElementById('serverState').textContent = currentStep >= 0 ? s[1] : 'LISTEN';
+}
+
+function nextStep() {
+  if (currentStep < allSteps.length - 1) { currentStep++; renderAll(); }
+}
+
+function resetAll() { currentStep = -1; renderAll(); }
+
+let autoTimer = null;
+function autoPlay() {
+  if (autoTimer) { clearInterval(autoTimer); autoTimer = null;
+    document.getElementById('btnAuto').textContent = '⏩ 自动播放'; return; }
+  document.getElementById('btnAuto').textContent = '⏸ 暂停';
+  if (currentStep >= allSteps.length - 1) { currentStep = -1; renderAll(); }
+  autoTimer = setInterval(() => {
+    if (currentStep < allSteps.length - 1) { nextStep(); }
+    else { clearInterval(autoTimer); autoTimer = null;
+      document.getElementById('btnAuto').textContent = '⏩ 自动播放'; }
+  }, 1500);
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight') nextStep();
+  if (e.key === 'r' || e.key === 'R') resetAll();
+});
+
+renderAll();
+</script>
+</body>
+</html>

@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>消息队列三大能力可视化 — 解耦·削峰·异步</title>
+<!-- 本可视化对应教程：94-消息队列基础.md -->
+<!-- 数据来源：94-消息队列基础.md -->
+<style>
+:root {
+    --bg: #ffffff; --text: #1a1a2e; --card-bg: #f8f9fa; --border: #dee2e6;
+    --accent: #e67e22; --accent2: #007bff; --accent3: #27ae60;
+    --node-bg: #fff; --line: #adb5bd; --shadow: 0 2px 8px rgba(0,0,0,0.08);
+    --mq-color: #e74c3c; --producer-color: #3498db; --consumer-color: #2ecc71;
+    --fail-color: #e74c3c;
+}
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #1e1e2e; --text: #cdd6f4; --card-bg: #313244; --border: #45475a;
+        --accent: #fab387; --accent2: #89b4fa; --accent3: #a6e3a1;
+        --node-bg: #313244; --line: #585b70; --mq-color: #f38ba8;
+        --producer-color: #89b4fa; --consumer-color: #a6e3a1;
+    }
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans SC", sans-serif;
+    background: var(--bg); color: var(--text); padding: 20px; transition: background 0.3s, color 0.3s;
+}
+.container { max-width: 1100px; margin: 0 auto; }
+h1 { text-align: center; font-size: 1.6em; margin-bottom: 8px; color: var(--accent); }
+.subtitle { text-align: center; font-size: 0.9em; color: var(--line); margin-bottom: 20px; }
+
+.tab-bar { display: flex; gap: 6px; justify-content: center; margin-bottom: 18px; flex-wrap: wrap; }
+.tab-bar button {
+    padding: 10px 18px; border: 1px solid var(--accent); background: var(--card-bg);
+    color: var(--text); border-radius: 20px; cursor: pointer; font-size: 0.9em; transition: all 0.2s;
+}
+.tab-bar button.active { background: var(--accent); color: #fff; font-weight: 600; }
+
+.controls { display: flex; gap: 10px; justify-content: center; margin-bottom: 20px; flex-wrap: wrap; }
+.controls button {
+    padding: 8px 16px; border: 1px solid var(--accent2); background: var(--card-bg);
+    color: var(--accent2); border-radius: 6px; cursor: pointer; font-size: 0.9em; transition: all 0.2s;
+}
+.controls button:hover { background: var(--accent2); color: #fff; }
+.controls button.theme-btn { border-color: var(--line); color: var(--text); }
+
+.scene-container { min-height: 350px; position: relative; }
+.scene { display: none; }
+.scene.active { display: block; }
+
+.diagram { display: flex; align-items: center; justify-content: center; gap: 18px; flex-wrap: wrap; padding: 20px 0; min-height: 180px; }
+.node {
+    padding: 14px 18px; border-radius: 10px; background: var(--node-bg); border: 2px solid var(--border);
+    font-weight: 600; font-size: 0.9em; text-align: center; min-width: 100px;
+    box-shadow: var(--shadow); transition: all 0.5s ease;
+}
+.node.p { border-color: var(--producer-color); }
+.node.c { border-color: var(--consumer-color); }
+.node.mq { border-color: var(--mq-color); background: #fdf2f2; }
+.node.db { border-color: var(--accent2); }
+.node.highlight { transform: scale(1.08); box-shadow: 0 4px 16px rgba(0,0,0,0.2); }
+.node.fail { border-color: var(--fail-color); background: #fde8e8; }
+.arrow-label { display: flex; flex-direction: column; align-items: center; }
+.arrow-label .arrow { font-size: 1.8em; color: var(--line); }
+.arrow-label .label { font-size: 0.75em; color: var(--line); margin-top: 2px; }
+.chain-break { color: var(--fail-color); font-size: 1.5em; font-weight: bold; }
+
+.description {
+    background: var(--card-bg); border-radius: 8px; padding: 16px 20px;
+    margin-top: 16px; font-size: 0.9em; line-height: 1.7; border-left: 4px solid var(--accent);
+    transition: all 0.4s;
+}
+.description .highlight-text { color: var(--mq-color); font-weight: 600; }
+
+.step-info { text-align: center; margin-bottom: 8px; font-size: 0.9em; color: var(--accent2); min-height: 22px; }
+
+.footer { text-align: center; margin-top: 30px; font-size: 0.78em; color: var(--line); }
+.footer a { color: var(--accent2); }
+
+.flow-arrow { display: flex; align-items: center; gap: 4px; color: var(--line); }
+.mq-center { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.mq-center .fan-out { display: flex; flex-direction: column; align-items: center; gap: 6px; margin-top: 8px; }
+.peak-chart { display: flex; align-items: flex-end; gap: 2px; height: 80px; margin-top: 10px; }
+.peak-chart .bar { width: 8px; background: var(--producer-color); border-radius: 2px 2px 0 0; }
+.peak-chart .bar.after { background: var(--consumer-color); }
+</style>
+</head>
+<body>
+<div class="container">
+<h1>消息队列三大核心能力</h1>
+<p class="subtitle">解耦 · 削峰 · 异步 — 点击标签页切换场景，点击"播放"看动画</p>
+
+<div class="tab-bar">
+    <button onclick="showTab('decouple')" id="tabDecouple">🔗 解耦</button>
+    <button onclick="showTab('peak')" id="tabPeak">⛰️ 削峰</button>
+    <button onclick="showTab('async')" id="tabAsync">⏳ 异步</button>
+</div>
+
+<div class="controls">
+    <button onclick="playScene()" id="btnPlay">▶ 播放</button>
+    <button onclick="resetScene()" id="btnReset">↺ 重置</button>
+    <button class="theme-btn" onclick="toggleTheme()">☀/🌙 主题</button>
+</div>
+<div class="step-info" id="stepInfo">选择场景后点击播放</div>
+
+<div class="scene-container">
+
+<!-- ============ Scene 1: Decoupling ============ -->
+<div class="scene active" id="sceneDecouple">
+<div class="diagram" id="diagramDecouple">
+    <div class="node p" id="dProducer">用户注册</div>
+    <div class="arrow-label"><span class="arrow">→</span><span class="label">直接调用</span></div>
+    <div class="node db" id="dDb">数据库</div>
+    <div class="arrow-label"><span class="arrow">→</span><span class="label">同步等</span></div>
+    <div class="node c" id="dSms">短信服务</div>
+    <div class="arrow-label"><span class="arrow">→</span><span class="label">同步等</span></div>
+    <div class="node c" id="dEmail">邮件服务</div>
+    <div class="arrow-label"><span class="arrow">→</span><span class="label">同步等</span></div>
+    <div class="node c" id="dCoupon">优惠券服务</div>
+</div>
+<div class="description" id="descDecouple">
+    <strong>❌ 没有消息队列：</strong>注册流程串联所有下游。短信服务挂了 → <span class="highlight-text">整个注册失败</span>。<br>
+    每个下游都在阻塞上游，任何一个故障都会导致雪崩。
+</div>
+</div>
+
+<!-- ============ Scene 2: Peak Shaving ============ -->
+<div class="scene" id="scenePeak">
+<div class="diagram" style="flex-direction: column; align-items: center;" id="diagramPeak">
+    <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap; justify-content:center;">
+        <div class="node p" id="pUser">100万 QPS<br>秒杀请求</div>
+        <div class="arrow-label"><span class="arrow">→</span><span class="label">全部涌入</span></div>
+        <div class="node mq" id="pMq" style="min-width:180px;">消息队列<br><span style="font-size:0.75em;">水库蓄水</span></div>
+        <div class="arrow-label"><span class="arrow">→</span><span class="label">匀速消费</span></div>
+        <div class="node c" id="pOrder">订单服务<br>5000 QPS</div>
+    </div>
+    <div style="display:flex; gap:30px; margin-top:14px; flex-wrap:wrap; justify-content:center;">
+        <div style="text-align:center;">
+            <div style="font-size:0.8em; color:var(--line); margin-bottom:4px;">秒杀请求流量（峰值）</div>
+            <div class="peak-chart" id="chartBefore"></div>
+        </div>
+        <div style="text-align:center;">
+            <div style="font-size:0.8em; color:var(--line); margin-bottom:4px;">订单服务处理（匀速）</div>
+            <div class="peak-chart" id="chartAfter"></div>
+        </div>
+    </div>
+</div>
+<div class="description" id="descPeak">
+    <strong>❌ 没有消息队列：</strong>100万 QPS 直接打到订单服务 → <span class="highlight-text">数据库连接池耗尽，系统雪崩</span>。<br>
+    <strong>✅ 有消息队列：</strong>所有请求先进队列，订单服务按 5000 QPS 匀速消费，数据库安全。
+</div>
+</div>
+
+<!-- ============ Scene 3: Async ============ -->
+<div class="scene" id="sceneAsync">
+<div class="diagram" id="diagramAsync">
+    <div class="node p" id="aClient">用户<br>（浏览器）</div>
+    <div class="arrow-label"><span class="arrow">→</span><span class="label">POST</span></div>
+    <div class="node p" id="aServer">后端 API</div>
+    <div class="arrow-label"><span class="arrow">→</span><span class="label">发消息</span></div>
+    <div class="node mq" id="aMq">消息队列</div>
+    <div class="arrow-label" id="aArrowBack"><span class="arrow" style="opacity:0.3;">←</span><span class="label" style="opacity:0.3;">立刻返回</span></div>
+    <div class="arrow-label" id="aArrowFwd"><span class="arrow" style="opacity:0.3;">→</span><span class="label" style="opacity:0.3;">异步处理</span></div>
+    <div class="node c" id="aWorker">后台 Worker<br><span style="font-size:0.75em;">30秒任务</span></div>
+</div>
+<div class="description" id="descAsync">
+    <strong>❌ 同步处理：</strong>用户提交报表生成请求 → 等待 30 秒 → 页面转圈 → <span class="highlight-text">体验极差</span>。<br>
+    <strong>✅ 异步处理：</strong>请求发到 MQ → 立刻返回"任务已提交" → 后台慢慢处理 → 完成后通知用户。
+</div>
+</div>
+</div>
+
+<p class="footer">
+    本可视化对应 <a href="94-消息队列基础.md">94-消息队列基础.md</a> |
+    基于 94-消息队列基础.md
+</p>
+</div>
+
+<script>
+let currentTab = 'decouple';
+let currentStep = 0;
+let autoTimer = null;
+const totalSteps = { decouple: 4, peak: 3, async: 3 };
+
+function showTab(name) {
+    if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+    currentTab = name;
+    document.querySelectorAll('.scene').forEach(s => s.classList.remove('active'));
+    document.getElementById('scene' + capitalize(name)).classList.add('active');
+    document.querySelectorAll('.tab-bar button').forEach(b => b.classList.remove('active'));
+    document.getElementById('tab' + capitalize(name)).classList.add('active');
+    resetScene();
+}
+
+function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+function playScene() {
+    resetScene();
+    currentStep = 0;
+    if (autoTimer) clearInterval(autoTimer);
+    stepScene();
+    autoTimer = setInterval(() => {
+        currentStep++;
+        if (currentStep > totalSteps[currentTab]) {
+            clearInterval(autoTimer);
+            autoTimer = null;
+            return;
+        }
+        stepScene();
+    }, 1500);
+}
+
+function resetScene() {
+    if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+    currentStep = 0;
+    document.querySelectorAll('.node').forEach(n => {
+        n.classList.remove('highlight', 'fail');
+    });
+    document.getElementById('stepInfo').textContent = '选择场景后点击播放';
+
+    if (currentTab === 'decouple') {
+        document.getElementById('descDecouple').innerHTML =
+            '<strong>❌ 没有消息队列：</strong>注册流程串联所有下游。短信服务挂了 → <span class="highlight-text">整个注册失败</span>。<br>每个下游都在阻塞上游，任何一个故障都会导致雪崩。';
+        document.getElementById('dProducer').style.opacity = '1';
+        document.getElementById('dDb').style.opacity = '1';
+        document.getElementById('dSms').style.opacity = '1';
+        document.getElementById('dEmail').style.opacity = '1';
+        document.getElementById('dCoupon').style.opacity = '1';
+    } else if (currentTab === 'peak') {
+        document.getElementById('descPeak').innerHTML =
+            '<strong>❌ 没有消息队列：</strong>100万 QPS 直接打到订单服务 → <span class="highlight-text">数据库连接池耗尽，系统雪崩</span>。<br><strong>✅ 有消息队列：</strong>所有请求先进队列，订单服务按 5000 QPS 匀速消费，数据库安全。';
+        document.getElementById('pUser').style.opacity = '1';
+        document.getElementById('pMq').style.opacity = '1';
+        document.getElementById('pOrder').style.opacity = '1';
+        drawPeakChart('chartBefore', true);
+        drawPeakChart('chartAfter', false);
+    } else if (currentTab === 'async') {
+        document.getElementById('descAsync').innerHTML =
+            '<strong>❌ 同步处理：</strong>用户提交报表生成请求 → 等待 30 秒 → 页面转圈 → <span class="highlight-text">体验极差</span>。<br><strong>✅ 异步处理：</strong>请求发到 MQ → 立刻返回"任务已提交" → 后台慢慢处理 → 完成后通知用户。';
+        document.getElementById('aArrowBack').querySelector('.arrow').style.opacity = '0.3';
+        document.getElementById('aArrowBack').querySelector('.label').style.opacity = '0.3';
+        document.getElementById('aArrowFwd').querySelector('.arrow').style.opacity = '0.3';
+        document.getElementById('aArrowFwd').querySelector('.label').style.opacity = '0.3';
+    }
+}
+
+function stepScene() {
+    document.getElementById('stepInfo').textContent = `正在演示：${currentTab === 'decouple' ? '解耦' : currentTab === 'peak' ? '削峰' : '异步'} — 步骤 ${currentStep}/${totalSteps[currentTab]}`;
+
+    if (currentTab === 'decouple') stepDecouple();
+    else if (currentTab === 'peak') stepPeak();
+    else if (currentTab === 'async') stepAsync();
+}
+
+function stepDecouple() {
+    if (currentStep === 1) {
+        document.getElementById('descDecouple').innerHTML = '短信服务 <span class="highlight-text">宕机了</span>！由于是同步串联，注册请求在等待短信服务响应时超时 → <strong>整个注册流程失败</strong>。';
+        document.getElementById('dSms').classList.add('fail');
+        document.getElementById('dEmail').style.opacity = '0.4';
+        document.getElementById('dCoupon').style.opacity = '0.4';
+    } else if (currentStep === 2) {
+        document.getElementById('descDecouple').innerHTML = '<strong>✅ 引入消息队列后：</strong>注册 → 写数据库 → 发一条消息到 MQ → 立即返回"注册成功"。<br>短信、邮件、优惠券各自独立从 MQ 消费，<span class="highlight-text">短信挂了下游不受影响</span>。';
+        document.getElementById('dSms').classList.remove('fail');
+        document.getElementById('dEmail').style.opacity = '1';
+        document.getElementById('dCoupon').style.opacity = '1';
+    } else if (currentStep === 3) {
+        document.getElementById('descDecouple').innerHTML = '<strong>✅ 下游独立部署、独立扩缩容：</strong>优惠券服务需要扩容？只需要多加几个消费者实例。<br>新增一个"推送通知"服务？只需要订阅同一个 Topic，<span class="highlight-text">上游代码一行不改</span>。';
+    } else if (currentStep === 4) {
+        document.getElementById('descDecouple').innerHTML = '<strong>🎯 解耦的精髓：</strong>上游只生产消息，不关心谁来消费。下游各自独立，互不影响。<br>这就是"发布/订阅"模型的威力——<span class="highlight-text">时间解耦 + 空间解耦</span>。';
+    }
+}
+
+function stepPeak() {
+    if (currentStep === 1) {
+        document.getElementById('descPeak').innerHTML = '<strong>🌊 洪峰来临：</strong>秒杀开始，100万人在同一秒点击"立即抢购"。<br>如果直接打 MySQL → <span class="highlight-text">数据库瞬间被打死，谁都买不了</span>。';
+    } else if (currentStep === 2) {
+        document.getElementById('descPeak').innerHTML = '<strong>🏔️ 削峰：</strong>100万请求全部写入消息队列（MQ 吞吐量远超数据库）。<br>订单服务按自身 5000 QPS 的能力慢慢消费，<span class="highlight-text">数据库压力始终可控</span>。';
+        document.getElementById('pMq').classList.add('highlight');
+    } else if (currentStep === 3) {
+        document.getElementById('descPeak').innerHTML = '<strong>🎯 削峰的精髓：</strong>消息队列像水库——<span class="highlight-text">洪峰来的时候蓄水，干旱的时候放水</span>。<br>下游服务不需要为峰值设计容量，按平均流量设计即可，大幅节省服务器成本。';
+    }
+}
+
+function stepAsync() {
+    if (currentStep === 1) {
+        document.getElementById('descAsync').innerHTML = '<strong>📤 用户提交请求：</strong>后端接收到"生成年度报表"请求 → <span class="highlight-text">直接发消息到 MQ</span> → 立即返回"任务已提交，完成后通知您"。<br>用户无需等待，可以继续浏览其他页面。';
+        document.getElementById('aArrowBack').querySelector('.arrow').style.opacity = '1';
+        document.getElementById('aArrowBack').querySelector('.label').style.opacity = '1';
+        document.getElementById('aArrowBack').querySelector('.label').textContent = '"任务已提交"';
+    } else if (currentStep === 2) {
+        document.getElementById('descAsync').innerHTML = '<strong>⚙️ 后台处理：</strong>Worker 从 MQ 拉取任务 → 开始生成报表（耗时 30 秒）。<br>在此期间用户可以做其他事情，<span class="highlight-text">完全不被阻塞</span>。';
+        document.getElementById('aArrowFwd').querySelector('.arrow').style.opacity = '1';
+        document.getElementById('aArrowFwd').querySelector('.label').style.opacity = '1';
+        document.getElementById('aArrowFwd').querySelector('.label').textContent = '拉取任务';
+        document.getElementById('aWorker').classList.add('highlight');
+    } else if (currentStep === 3) {
+        document.getElementById('descAsync').innerHTML = '<strong>✅ 完成通知：</strong>报表生成完毕 → 通过短信/WebSocket/App Push 通知用户。<br><span class="highlight-text">用户体验：提交后立刻能离开，等通知即可。</span><br>🎯 <strong>异步的精髓：</strong>把长时间的阻塞变为"提交 + 回调"，用户不等待，系统不阻塞。';
+        document.getElementById('aWorker').classList.remove('highlight');
+    }
+}
+
+function drawPeakChart(id, isBefore) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.innerHTML = '';
+    for (let i = 0; i < 30; i++) {
+        const bar = document.createElement('div');
+        bar.className = 'bar' + (isBefore ? '' : ' after');
+        const h = isBefore
+            ? (i >= 10 && i <= 15 ? 70 : Math.random() * 25 + 5)
+            : 15 + Math.random() * 10;
+        bar.style.height = h + 'px';
+        el.appendChild(bar);
+    }
+}
+
+function toggleTheme() {
+    const html = document.documentElement;
+    html.style.colorScheme = html.style.colorScheme === 'dark' ? 'light' : 'dark';
+}
+
+// init
+showTab('decouple');
+drawPeakChart('chartBefore', true);
+drawPeakChart('chartAfter', false);
+</script>
+</body>
+</html>

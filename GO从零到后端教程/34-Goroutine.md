@@ -109,6 +109,99 @@ go func() {
 
 ---
 
+> ❌ **常见错误 1：主 Goroutine 退出后子 Goroutine 立刻终止**
+> 
+> ```go
+> func main() {
+>     go func() {
+>         time.Sleep(1 * time.Second)
+>         fmt.Println("这条信息你可能永远看不到")
+>     }()
+>     // ❌ main 立即结束，子 Goroutine 被强制终止
+> }
+> ```
+> 
+> 主 Goroutine（`main` 函数）一旦返回，整个进程退出，**所有还在运行的子 Goroutine 会被立即杀死**，不会等它们执行完。
+> 
+> ✅ **正确做法**：
+> ```go
+> func main() {
+>     var wg sync.WaitGroup
+>     wg.Add(1)
+>     go func() {
+>         defer wg.Done()
+>         time.Sleep(1 * time.Second)
+>         fmt.Println("这条信息一定能看到")
+>     }()
+>     wg.Wait()   // ✅ 等待子 Goroutine 完成后再退出
+> }
+> ```
+
+> ❌ **常见错误 2：闭包捕获循环变量陷阱**
+> 
+> ```go
+> for i := 0; i < 3; i++ {
+>     go func() {
+>         fmt.Println(i)   // ❌ 可能打印 3, 3, 3 而不是 0, 1, 2
+>     }()
+> }
+> time.Sleep(time.Second)
+> ```
+> 
+> 闭包捕获的是变量 `i` 的**引用**，不是值。当 Goroutine 真正执行时，循环早已结束，`i` 已经变成了 3。Go 1.22 之前这会打印三个 `3`（Go 1.22+ 修复了此行为，循环变量每次迭代都是新变量，但旧代码仍需警惕）。
+> 
+> ✅ **正确做法**（两种方式，推荐第一种）：
+> ```go
+> // 方式一：通过参数传值（最安全，所有 Go 版本通用）
+> for i := 0; i < 3; i++ {
+>     go func(n int) {
+>         fmt.Println(n)   // ✅ 参数 n 是值拷贝
+>     }(i)
+> }
+> 
+> // 方式二：循环内创建局部变量
+> for i := 0; i < 3; i++ {
+>     i := i               // ✅ 新建局部变量 i，遮蔽外部 i
+>     go func() {
+>         fmt.Println(i)
+>     }()
+> }
+> ```
+
+> ❌ **常见错误 3：忘了用 WaitGroup 等待 Goroutine 完成**
+> 
+> ```go
+> func main() {
+>     var wg sync.WaitGroup
+>     for i := 0; i < 5; i++ {
+>         go func(n int) {
+>             fmt.Println(n)
+>         }(i)
+>     }
+>     // ❌ 没有 wg.Add() 和 wg.Wait()，程序可能在 Goroutine 执行前就退出了
+> }
+> ```
+> 
+> 启动 Goroutine 后如果不等待，main 可能提前退出。即使你加了 `time.Sleep` 也不可靠——你无法确定到底该睡多久。
+> 
+> ✅ **正确做法**：
+> ```go
+> func main() {
+>     var wg sync.WaitGroup
+>     for i := 0; i < 5; i++ {
+>         wg.Add(1)           // ✅ 计数器 +1
+>         go func(n int) {
+>             defer wg.Done() // ✅ 完成时计数器 -1
+>             fmt.Println(n)
+>         }(i)
+>     }
+>     wg.Wait()               // ✅ 等待全部完成
+>     fmt.Println("全部完成")
+> }
+> ```
+
+---
+
 ## 34.3 GMP调度模型
 
 Goroutine为什么这么高效？这要讲到Go运行时的**GMP调度模型**。

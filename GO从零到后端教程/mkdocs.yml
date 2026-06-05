@@ -6,10 +6,12 @@ site_url: https://tian-nu.github.io/tutorial-byAI/
 repo_name: tian-nu/tutorial-byAI
 repo_url: https://github.com/tian-nu/tutorial-byAI
 
+docs_dir: docs
+site_dir: site
+
 theme:
   name: material
   language: zh
-  custom_dir: overrides
   features:
     - navigation.instant      # 即时加载（SPA式导航）
     - navigation.tracking     # URL跟踪锚点

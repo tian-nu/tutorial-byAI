@@ -1,0 +1,11 @@
+# MkDocs 构建产物
+site/
+build_log.txt
+
+# Python 缓存
+__pycache__/
+*.pyc
+
+# 临时文件
+.project/_sandbox/
+*.tmp

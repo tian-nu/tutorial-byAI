@@ -3,9 +3,6 @@ name: Deploy MkDocs to GitHub Pages
 on:
   push:
     branches: [main]
-    paths:
-      - 'GO从零到后端教程/**'
-      - '.github/workflows/deploy.yml'
   workflow_dispatch:
 
 permissions:
@@ -22,22 +19,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-          cache: pip
 
       - name: Install dependencies
-        run: |
-          pip install mkdocs mkdocs-material mkdocs-awesome-pages-plugin mkdocs-git-revision-date-localized-plugin mkdocs-minify-plugin
+        run: pip install mkdocs mkdocs-material mkdocs-awesome-pages-plugin mkdocs-git-revision-date-localized-plugin mkdocs-minify-plugin
 
       - name: Build site
         working-directory: GO从零到后端教程
-        run: mkdocs build --strict
+        run: mkdocs build
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

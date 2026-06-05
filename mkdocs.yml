@@ -27,6 +27,12 @@ theme:
     - content.code.annotate
     - content.tabs.link
     - toc.follow
+    - navigation.footer
+    - navigation.path
+    - content.tooltips
+    - announce.dismiss
+    - header.autohide
+    - content.code.select
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default

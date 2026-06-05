@@ -1,26 +1,256 @@
-/* 中文字体优化 */
-.md-typeset {
-  font-size: 0.8rem;
-  line-height: 1.8;
+/* ===================================================
+   Ocean Depths Theme for MkDocs Material
+   深海主题：专业沉稳的海洋色调
+   Palette: Deep Navy #1a2332 | Teal #2d8b8b | Seafoam #a8dadc | Cream #f1faee
+   =================================================== */
+
+/* ---------- 亮色模式覆盖 ---------- */
+[data-md-color-scheme="default"] {
+  --md-primary-fg-color:             #2d8b8b;
+  --md-primary-fg-color--light:      #3da3a3;
+  --md-primary-fg-color--dark:       #1f6b6b;
+  --md-accent-fg-color:              #1a6b6b;
+  --md-accent-fg-color--transparent: rgba(45,139,139,0.1);
+  --md-default-bg-color:             #f8fcfc;
+  --md-code-bg-color:                #eef6f6;
+  --md-code-fg-color:                #1a2332;
 }
 
-.md-typeset h1 { font-weight: 700; }
-.md-typeset h2 { font-weight: 600; margin-top: 1.5em; }
+/* ---------- 暗色模式覆盖 ---------- */
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color:             #2d8b8b;
+  --md-primary-fg-color--light:      #3da3a3;
+  --md-primary-fg-color--dark:       #1a2332;
+  --md-accent-fg-color:              #a8dadc;
+  --md-accent-fg-color--transparent: rgba(168,218,220,0.1);
+  --md-default-bg-color:             #1a2332;
+  --md-default-fg-color:             #f1faee;
+  --md-default-fg-color--light:      #a8dadc;
+  --md-default-fg-color--lighter:    #7ab0b4;
+  --md-code-bg-color:               #1e2a3a;
+  --md-code-fg-color:               #a8dadc;
+  --md-typeset-a-color:             #5ec4c4;
+  --md-typeset-mark-color:          rgba(45,139,139,0.3);
+  --md-typeset-del-color:           rgba(255,82,82,0.2);
+  --md-typeset-ins-color:           rgba(45,139,139,0.2);
+  --md-typeset-kbd-color:           #243447;
+  --md-typeset-kbd-border-color:    #2d4a5a;
+  --md-typeset-table-color:         #243447;
+  --md-admonition-fg-color:         #f1faee;
+  --md-admonition-bg-color:         #1e2a3a;
+  --md-footer-fg-color:             #f1faee;
+  --md-footer-fg-color--light:      #a8dadc;
+  --md-footer-bg-color:             #141c28;
+  --md-footer-bg-color--dark:       #0f1520;
+}
 
-.md-typeset code { font-size: 0.75rem; word-break: break-all; }
-.md-typeset pre { font-size: 0.72rem; }
+/* ---------- 全局排版 ---------- */
+.md-typeset {
+  font-size: 0.82rem;
+  line-height: 1.85;
+  -webkit-font-smoothing: antialiased;
+}
 
-.md-clipboard { color: var(--md-default-fg-color--lighter); }
-.md-clipboard:hover { color: var(--md-accent-fg-color); }
+.md-typeset h1 {
+  font-weight: 700;
+  color: var(--md-primary-fg-color);
+  border-bottom: 2px solid var(--md-primary-fg-color--transparent, rgba(45,139,139,0.2));
+  padding-bottom: 0.4em;
+  margin-top: 0.8em;
+}
 
+.md-typeset h2 {
+  font-weight: 600;
+  margin-top: 1.8em;
+  color: var(--md-primary-fg-color--dark, #1f6b6b);
+}
+
+.md-typeset h3 {
+  font-weight: 600;
+  margin-top: 1.4em;
+}
+
+/* ---------- 代码块 ---------- */
+.md-typeset code {
+  font-size: 0.76rem;
+  word-break: break-word;
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+}
+
+.md-typeset pre {
+  font-size: 0.74rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.md-typeset pre > code {
+  padding: 0.8em 1em;
+  line-height: 1.6;
+}
+
+/* 代码复制按钮 */
+.md-clipboard {
+  color: var(--md-default-fg-color--lighter, #7ab0b4);
+  transition: color 0.2s;
+}
+
+.md-clipboard:hover {
+  color: var(--md-accent-fg-color, #a8dadc);
+}
+
+/* ---------- 警告框 / Admonition ---------- */
 .md-typeset .admonition,
 .md-typeset details {
   border-width: 0;
   border-left-width: 4px;
-  font-size: 0.78rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.05);
 }
 
-.md-typeset table:not([class]) { font-size: 0.75rem; }
-.md-typeset table:not([class]) th { font-weight: 600; }
-.md-nav__link--active { font-weight: 600; }
-.md-search-result__article { font-size: 0.78rem; }
+.md-typeset .admonition-title,
+.md-typeset summary {
+  font-weight: 600;
+}
+
+/* tip 绿色 */
+.md-typeset .admonition.tip,
+.md-typeset details.tip {
+  border-left-color: #2d8b8b;
+}
+
+/* warning 橙色 */
+.md-typeset .admonition.warning,
+.md-typeset details.warning {
+  border-left-color: #e8a838;
+}
+
+/* danger 红色 */
+.md-typeset .admonition.danger,
+.md-typeset details.danger {
+  border-left-color: #e05252;
+}
+
+/* info 蓝色 */
+.md-typeset .admonition.info,
+.md-typeset details.info {
+  border-left-color: #4a9aba;
+}
+
+/* ---------- 表格 ---------- */
+.md-typeset table:not([class]) {
+  font-size: 0.78rem;
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+
+.md-typeset table:not([class]) th {
+  font-weight: 600;
+  background: var(--md-primary-fg-color--transparent, rgba(45,139,139,0.08));
+}
+
+.md-typeset table:not([class]) tr:hover {
+  background: var(--md-primary-fg-color--transparent, rgba(45,139,139,0.04));
+}
+
+/* ---------- 链接 ---------- */
+.md-typeset a {
+  color: var(--md-accent-fg-color, #2d8b8b);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.2s;
+}
+
+.md-typeset a:hover {
+  border-bottom-color: var(--md-accent-fg-color, #2d8b8b);
+}
+
+/* ---------- 侧边栏 ---------- */
+.md-nav__link--active {
+  font-weight: 600;
+  color: var(--md-primary-fg-color, #2d8b8b);
+}
+
+.md-nav__link:hover {
+  color: var(--md-accent-fg-color, #2d8b8b);
+}
+
+/* ---------- 搜索 ---------- */
+.md-search-result__article {
+  font-size: 0.8rem;
+}
+
+.md-search-result__teaser {
+  color: var(--md-default-fg-color--light, #7ab0b4);
+}
+
+/* ---------- 返回顶部按钮 ---------- */
+.md-top {
+  background: var(--md-primary-fg-color, #2d8b8b);
+  color: #fff;
+  border-radius: 50%;
+  box-shadow: 0 2px 8px rgba(45,139,139,0.3);
+}
+
+.md-top:hover {
+  background: var(--md-primary-fg-color--dark, #1f6b6b);
+}
+
+/* ---------- 页脚 ---------- */
+.md-footer {
+  background: var(--md-footer-bg-color, #141c28);
+}
+
+.md-footer-meta {
+  background: var(--md-footer-bg-color--dark, #0f1520);
+}
+
+/* ---------- 首页特殊样式 ---------- */
+.md-typeset .grid cards {
+  gap: 0.8em;
+}
+
+/* 教程卡片效果 */
+.md-typeset .card {
+  border-radius: 8px;
+  padding: 1.2em;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.md-typeset .card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(45,139,139,0.15);
+}
+
+/* ---------- 徽章 ---------- */
+.md-typeset img[alt*="badge"] {
+  vertical-align: middle;
+  margin-right: 0.3em;
+}
+
+/* ---------- 滚动条美化（暗色模式） ---------- */
+[data-md-color-scheme="slate"] ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+[data-md-color-scheme="slate"] ::-webkit-scrollbar-track {
+  background: #141c28;
+}
+
+[data-md-color-scheme="slate"] ::-webkit-scrollbar-thumb {
+  background: #2d4a5a;
+  border-radius: 4px;
+}
+
+[data-md-color-scheme="slate"] ::-webkit-scrollbar-thumb:hover {
+  background: #3d6a7a;
+}
+
+/* ---------- 选中文字颜色 ---------- */
+::selection {
+  background: rgba(45,139,139,0.25);
+  color: inherit;
+}

@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MVCC 版本链与 ReadView 可见性判断 — 可视化</title>
+<!-- 依赖：无外部CDN，完全自包含。如需更新，可替换内联SVG资源。 -->
+<style>
+:root {
+  --bg: #ffffff; --text: #1a1a1a; --panel-bg: #f8f9fa; --border: #dee2e6;
+  --node-cur: #4a90d9; --node-cur-bg: #e8f0fe; --node-undo: #f9ab00; --node-undo-bg: #fef7e0;
+  --node-old: #34a853; --node-old-bg: #e6f4ea;
+  --tx-active: #ff6b6b; --tx-active-bg: #ffe0e0; --tx-committed: #888; --tx-committed-bg: #eee;
+  --highlight: #e74c3c; --highlight-bg: #fdecea;
+  --btn-bg: #4a90d9; --btn-text: #fff; --arrow: #888; --tag-bg: #e8e8e8;
+  --visible-yes: #27ae60; --visible-no: #e74c3c;
+}
+[data-theme="dark"] {
+  --bg: #1e1e2e; --text: #cdd6f4; --panel-bg: #181825; --border: #45475a;
+  --node-cur: #89b4fa; --node-cur-bg: #313244; --node-undo: #f9e2af; --node-undo-bg: #3e3020;
+  --node-old: #a6e3a1; --node-old-bg: #1e3a2f;
+  --tx-active: #f38ba8; --tx-active-bg: #3a202a; --tx-committed: #6c7086; --tx-committed-bg: #313244;
+  --highlight: #f38ba8; --highlight-bg: #3a202a;
+  --btn-bg: #89b4fa; --btn-text: #1e1e2e; --arrow: #a6adc8; --tag-bg: #313244;
+  --visible-yes: #a6e3a1; --visible-no: #f38ba8;
+}
+* { box-sizing: border-box; }
+body { font-family: -apple-system, 'Segoe UI', 'Noto Sans SC', sans-serif; margin: 0; padding: 20px; background: var(--bg); color: var(--text); transition: all 0.3s; }
+h1 { font-size: 1.5em; margin: 0 0 4px; }
+.subtitle { color: var(--arrow); font-size: 0.85em; margin-bottom: 15px; }
+.controls { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 15px; align-items: center; }
+.controls button { padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9em; background: var(--btn-bg); color: var(--btn-text); transition: opacity 0.2s; }
+.controls button:hover { opacity: 0.85; }
+.controls button:disabled { opacity: 0.4; cursor: not-allowed; }
+.controls .step-label { font-size: 0.9em; color: var(--arrow); margin-left: 8px; }
+.main-area { display: flex; gap: 20px; flex-wrap: wrap; }
+.vis-panel { flex: 2; min-width: 400px; }
+.info-panel { flex: 1; min-width: 280px; background: var(--panel-bg); border-radius: 8px; padding: 15px; border: 1px solid var(--border); }
+.info-panel h3 { margin: 0 0 10px; font-size: 1em; }
+.info-panel p { font-size: 0.9em; line-height: 1.6; margin: 6px 0; }
+.legend { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; font-size: 0.8em; }
+.legend span { display: inline-flex; align-items: center; gap: 4px; }
+.legend .swatch { display: inline-block; width: 14px; height: 14px; border-radius: 3px; }
+.chain-area { display: flex; align-items: center; gap: 0; flex-wrap: wrap; margin: 15px 0; padding: 20px; background: var(--panel-bg); border-radius: 8px; border: 1px solid var(--border); overflow-x: auto; }
+.node { width: 100px; height: 80px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 0.78em; text-align: center; border: 2px solid; transition: all 0.4s; flex-shrink: 0; position: relative; }
+.node.cur { background: var(--node-cur-bg); border-color: var(--node-cur); }
+.node.undo { background: var(--node-undo-bg); border-color: var(--node-undo); }
+.node.old { background: var(--node-old-bg); border-color: var(--node-old); }
+.node.highlight { box-shadow: 0 0 15px 3px var(--highlight); border-color: var(--highlight); }
+.node .val { font-weight: bold; font-size: 1.1em; }
+.node .tx { font-size: 0.75em; color: var(--arrow); }
+.arrow-conn { font-size: 1.5em; color: var(--arrow); margin: 0 2px; flex-shrink: 0; }
+.readview-area { margin: 15px 0; padding: 15px; background: var(--panel-bg); border-radius: 8px; border: 1px solid var(--border); }
+.readview-area h4 { margin: 0 0 8px; font-size: 0.95em; }
+.tx-list { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.tx-badge { padding: 4px 10px; border-radius: 12px; font-size: 0.78em; font-weight: bold; }
+.tx-badge.active { background: var(--tx-active-bg); color: var(--tx-active); }
+.tx-badge.committed { background: var(--tx-committed-bg); color: var(--tx-committed); }
+.tx-badge.me { background: var(--node-old-bg); color: var(--node-old); }
+.verdict { padding: 8px 12px; border-radius: 6px; font-size: 0.9em; font-weight: bold; text-align: center; margin-top: 8px; }
+.verdict.yes { background: #e6f4ea; color: var(--visible-yes); border: 1px solid var(--visible-yes); }
+.verdict.no { background: #fdecea; color: var(--visible-no); border: 1px solid var(--visible-no); }
+.verdict .reason { font-weight: normal; font-size: 0.85em; display: block; }
+footer { margin-top: 20px; font-size: 0.75em; color: var(--arrow); text-align: center; }
+footer a { color: var(--btn-bg); }
+</style>
+</head>
+<body data-theme="light">
+
+<h1>📊 MVCC 版本链与 ReadView 可见性判断</h1>
+<div class="subtitle">本可视化对应 <a href="22-事务隔离级别.md">22-事务隔离级别</a> 步骤三（MVCC 原理），数据基于 high_level_design.md v1</div>
+
+<div class="controls">
+  <button id="btnPrev" onclick="prevStep()" disabled>◀ 上一步</button>
+  <button id="btnNext" onclick="nextStep()">下一步 ▶</button>
+  <button id="btnReset" onclick="resetSteps()">↺ 重置</button>
+  <button id="btnAuto" onclick="toggleAuto()">▶ 自动播放</button>
+  <button class="toggle-btn" onclick="toggleTheme()" style="background:var(--panel-bg);color:var(--text);border:1px solid var(--border);">🌓 切换暗色/亮色</button>
+  <span class="step-label" id="stepLabel">步骤 1/8</span>
+</div>
+
+<div class="legend">
+  <span><span class="swatch" style="background:var(--node-cur)"></span> 当前数据</span>
+  <span><span class="swatch" style="background:var(--node-undo)"></span> undo log 版本</span>
+  <span><span class="swatch" style="background:var(--node-old)"></span> 旧版本/可见版本</span>
+  <span><span class="swatch" style="background:var(--tx-active)"></span> 活跃事务</span>
+  <span><span class="swatch" style="background:var(--tx-committed)"></span> 已提交事务</span>
+</div>
+
+<div class="main-area">
+  <div class="vis-panel">
+    <div class="chain-area" id="chainArea">
+      <!-- 动态填充 -->
+    </div>
+    <div class="readview-area" id="rvArea">
+      <!-- 动态填充 -->
+    </div>
+  </div>
+  <div class="info-panel" id="infoPanel">
+    <h3>📖 当前说明</h3>
+    <p id="stepDesc">点击"下一步"开始演示。</p>
+  </div>
+</div>
+
+<footer>
+  数据来源：database_mastery_detailed_outline.md v2 · 可离线运行 · 步骤演示 MVCC 版本链遍历与可见性判断
+</footer>
+
+<script>
+// ========== 场景数据 ==========
+// 表 accounts, 初始 A 的余额 = 1000
+
+const steps = [
+  {
+    title: "初始状态",
+    desc: "accounts 表刚创建，A 的余额是 1000。还没有任何事务修改过这条数据。版本链上只有一个版本：当前值=1000。",
+    chain: [
+      { val: "1000", tx: "初始", type: "cur", id: "v0" }
+    ],
+    rv: null,
+    highlight: null,
+    verdict: null
+  },
+  {
+    title: "事务 A 开始（id=1）",
+    desc: "事务 A 开始，读取 A 的余额。在 REPEATABLE READ 下，事务 A 创建了一个 ReadView，记录了当前活跃事务列表。此时只有事务 A 自己在活跃。它沿着版本链查找：当前值 1000 的版本在事务 A 开始前就存在 → <strong>可见！</strong> 事务 A 读到 1000。",
+    chain: [
+      { val: "1000", tx: "初始", type: "old", id: "v0" }
+    ],
+    rv: { me: 1, active: [1], nextId: 2 },
+    highlight: "v0",
+    verdict: { result: "yes", reason: "版本在事务 A 开始前就已存在" }
+  },
+  {
+    title: "事务 B 开始（id=2），修改 A 余额为 900",
+    desc: "事务 B 开始（id=2），执行 <code>UPDATE accounts SET balance = 900 WHERE name = 'A'</code>。InnoDB 先把旧值 1000 写入 undo log，然后写入新值 900。版本链变成：当前值=900 → undo(旧值=1000)。",
+    chain: [
+      { val: "900", tx: "B(id=2)", type: "cur", id: "v2" },
+      { val: "1000", tx: "初始", type: "undo", id: "v0" }
+    ],
+    rv: null,
+    highlight: null,
+    verdict: null
+  },
+  {
+    title: "事务 B 提交",
+    desc: "事务 B 提交了（COMMIT），A 的余额正式变为 900。但事务 A 还在进行中，它的 ReadView 还是之前那个（活跃事务列表只有事务 A 自己）。事务 B 提交后不再是活跃事务。",
+    chain: [
+      { val: "900", tx: "B(id=2)已提交", type: "cur", id: "v2" },
+      { val: "1000", tx: "初始", type: "undo", id: "v0" }
+    ],
+    rv: { me: 1, active: [1], nextId: 3, committed: [2] },
+    highlight: null,
+    verdict: null
+  },
+  {
+    title: "事务 C 开始（id=3），修改 A 余额为 800",
+    desc: "事务 C 开始（id=3），执行 <code>UPDATE accounts SET balance = 800 WHERE name = 'A'</code>。InnoDB 把旧值 900 写入 undo log，写入新值 800。版本链变成：当前值=800 → undo(旧值=900) → undo(旧值=1000)。",
+    chain: [
+      { val: "800", tx: "C(id=3)", type: "cur", id: "v3" },
+      { val: "900", tx: "B(id=2)已提交", type: "undo", id: "v2" },
+      { val: "1000", tx: "初始", type: "undo", id: "v0" }
+    ],
+    rv: null,
+    highlight: null,
+    verdict: null
+  },
+  {
+    title: "事务 C 提交",
+    desc: "事务 C 提交了，A 的余额变为 800。版本链：当前值=800 → undo(900) → undo(1000)。事务 A 的 ReadView 仍然不变。",
+    chain: [
+      { val: "800", tx: "C(id=3)已提交", type: "cur", id: "v3" },
+      { val: "900", tx: "B(id=2)已提交", type: "undo", id: "v2" },
+      { val: "1000", tx: "初始", type: "undo", id: "v0" }
+    ],
+    rv: { me: 1, active: [1], nextId: 4, committed: [2, 3] },
+    highlight: null,
+    verdict: null
+  },
+  {
+    title: "事务 A 再次读取 A 的余额（REPEATABLE READ）",
+    desc: "事务 A 再次执行 <code>SELECT balance FROM accounts WHERE name = 'A'</code>。在 REPEATABLE READ 下，它沿用之前的 ReadView。<br><br>遍历版本链：<br>① 当前值 800，版本是事务 C(id=3) → 事务 C 在 ReadView 中 <strong>不是活跃事务</strong>（已提交），但 id=3 ≥ nextId=2（在事务 A 开始之后才开始）→ <strong>不可见！</strong><br>② 跳到 900，版本是事务 B(id=2) → id=2 ≥ nextId=2 → <strong>不可见！</strong><br>③ 跳到 1000，初始版本 → 在事务 A 开始前就存在 → <strong>✅ 可见！</strong><br><br>所以事务 A 又读到 1000，和第一次一样 —— <strong>可重复读！</strong>",
+    chain: [
+      { val: "800", tx: "C(id=3)已提交", type: "undo", id: "v3" },
+      { val: "900", tx: "B(id=2)已提交", type: "undo", id: "v2" },
+      { val: "1000", tx: "初始", type: "old", id: "v0" }
+    ],
+    rv: { me: 1, active: [1], nextId: 2, committed: [2, 3] },
+    highlight: "v0",
+    verdict: { result: "yes", reason: "沿版本链回溯，找到事务 A 开始前存在的版本 1000" }
+  },
+  {
+    title: "对比：如果是 READ COMMITTED",
+    desc: "如果事务 A 用的是 READ COMMITTED 级别，每次查询都会<strong>创建新的 ReadView</strong>。在事务 C 提交后，新 ReadView 中事务 B 和 C 都已提交，不再活跃。<br><br>遍历版本链：当前值 800，版本是事务 C(id=3) → 已提交，且 id=3 < nextId=4 → <strong>✅ 可见！</strong><br><br>所以读到 800，和第一次读到的 1000 不一样 —— <strong>不可重复读！</strong>",
+    chain: [
+      { val: "800", tx: "C(id=3)已提交", type: "old", id: "v3" },
+      { val: "900", tx: "B(id=2)已提交", type: "undo", id: "v2" },
+      { val: "1000", tx: "初始", type: "undo", id: "v0" },
+    ],
+    rv: { me: 1, active: [1], nextId: 4, committed: [2, 3], rc: true },
+    highlight: "v3",
+    verdict: { result: "yes", reason: "READ COMMITTED 每次查询创建新 ReadView，800 的版本已提交，可见" }
+  }
+];
+
+let currentStep = 0;
+let autoTimer = null;
+
+function render() {
+  const s = steps[currentStep];
+  document.getElementById("stepLabel").textContent = `步骤 ${currentStep + 1}/${steps.length}`;
+  document.getElementById("btnPrev").disabled = currentStep === 0;
+  document.getElementById("btnNext").disabled = currentStep === steps.length - 1;
+  document.getElementById("stepDesc").innerHTML = s.desc;
+
+  // 渲染版本链
+  let chainHTML = '';
+  s.chain.forEach((n, i) => {
+    if (i > 0) chainHTML += '<span class="arrow-conn">←</span>';
+    let cls = n.type;
+    if (n.id === s.highlight) cls += ' highlight';
+    chainHTML += `<div class="node ${cls}"><span class="val">${n.val}</span><span class="tx">${n.tx}</span></div>`;
+  });
+  document.getElementById("chainArea").innerHTML = chainHTML;
+
+  // 渲染 ReadView
+  let rvHTML = '<h4>🔍 ReadView（事务 A 的快照）</h4>';
+  if (s.rv) {
+    rvHTML += `<p style="font-size:0.85em;margin:4px 0;">我的事务 ID：<span class="tx-badge me">${s.rv.me}</span></p>`;
+    rvHTML += `<p style="font-size:0.85em;margin:4px 0;">下一个事务 ID：<span class="tx-badge" style="background:var(--tag-bg);color:var(--text)">${s.rv.nextId}</span></p>`;
+    rvHTML += '<p style="font-size:0.85em;margin:8px 0 4px;">活跃事务列表：</p><div class="tx-list">';
+    if (s.rv.active.length === 0) {
+      rvHTML += '<span style="font-size:0.8em;color:var(--arrow)">（无活跃事务）</span>';
+    } else {
+      s.rv.active.forEach(id => {
+        let cls = (id === s.rv.me) ? 'me' : 'active';
+        rvHTML += `<span class="tx-badge ${cls}">事务 ${id}</span>`;
+      });
+    }
+    rvHTML += '</div>';
+    if (s.rv.committed && s.rv.committed.length > 0) {
+      rvHTML += '<p style="font-size:0.85em;margin:8px 0 4px;">已提交事务：</p><div class="tx-list">';
+      s.rv.committed.forEach(id => {
+        rvHTML += `<span class="tx-badge committed">事务 ${id}</span>`;
+      });
+      rvHTML += '</div>';
+    }
+    if (s.rv.rc) {
+      rvHTML += '<p style="font-size:0.8em;color:var(--highlight);margin-top:8px;">⚠️ READ COMMITTED：每次查询创建新 ReadView</p>';
+    }
+  } else {
+    rvHTML += '<p style="font-size:0.85em;color:var(--arrow)">当前没有活跃的 ReadView（事务 A 尚未开始读取）</p>';
+  }
+  // 渲染判定结果
+  if (s.verdict) {
+    let cls = s.verdict.result === "yes" ? "yes" : "no";
+    let label = s.verdict.result === "yes" ? "✅ 可见" : "❌ 不可见";
+    rvHTML += `<div class="verdict ${cls}">${label}<span class="reason">${s.verdict.reason}</span></div>`;
+  }
+  document.getElementById("rvArea").innerHTML = rvHTML;
+}
+
+function nextStep() {
+  if (currentStep < steps.length - 1) { currentStep++; render(); }
+}
+function prevStep() {
+  if (currentStep > 0) { currentStep--; render(); }
+}
+function resetSteps() {
+  currentStep = 0; stopAuto(); render();
+}
+function toggleAuto() {
+  if (autoTimer) { stopAuto(); } else { startAuto(); }
+}
+function startAuto() {
+  document.getElementById("btnAuto").textContent = "⏸ 停止播放";
+  autoTimer = setInterval(() => {
+    if (currentStep < steps.length - 1) { currentStep++; render(); }
+    else { stopAuto(); }
+  }, 2000);
+}
+function stopAuto() {
+  clearInterval(autoTimer); autoTimer = null;
+  document.getElementById("btnAuto").textContent = "▶ 自动播放";
+}
+function toggleTheme() {
+  const body = document.body;
+  body.setAttribute('data-theme', body.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+}
+
+// 初始渲染
+render();
+</script>
+</body>
+</html>

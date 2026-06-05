@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>主从复制架构 — 数据库精通教程</title>
+<!-- 自包含单文件，无外部依赖，可离线运行 -->
+<!-- 基于 database_mastery_detailed_outline.md v2 -->
+<style>
+:root {
+    --bg: #ffffff;
+    --text: #1a1a2e;
+    --text-secondary: #555;
+    --border: #ddd;
+    --accent: #2563eb;
+    --accent-light: #dbeafe;
+    --master-bg: #fef2f2;
+    --master-border: #ef4444;
+    --slave-bg: #f0fdf4;
+    --slave-border: #22c55e;
+    --log-bg: #fefce8;
+    --relay-bg: #f0f9ff;
+    --code-bg: #f8f9fa;
+    --btn-bg: #2563eb;
+    --btn-text: #fff;
+    --btn-hover: #1d4ed8;
+    --card-bg: #f9fafb;
+    --step-active: #2563eb;
+    --step-inactive: #d1d5db;
+    --shadow: 0 1px 3px rgba(0,0,0,0.1);
+    --highlight: #f59e0b;
+    --arrow-color: #6b7280;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #1a1a2e;
+        --text: #e5e7eb;
+        --text-secondary: #9ca3af;
+        --border: #374151;
+        --accent: #60a5fa;
+        --accent-light: #1e3a5f;
+        --master-bg: #3b1a1a;
+        --master-border: #ef4444;
+        --slave-bg: #1a3b1a;
+        --slave-border: #22c55e;
+        --log-bg: #3b350a;
+        --relay-bg: #0a2a3b;
+        --code-bg: #111827;
+        --btn-bg: #3b82f6;
+        --btn-text: #fff;
+        --btn-hover: #2563eb;
+        --card-bg: #1f2937;
+        --step-active: #60a5fa;
+        --step-inactive: #4b5563;
+        --shadow: 0 1px 3px rgba(0,0,0,0.4);
+        --highlight: #fbbf24;
+        --arrow-color: #9ca3af;
+    }
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 20px;
+    max-width: 1100px;
+    margin: 0 auto;
+    line-height: 1.6;
+}
+
+h1 { font-size: 1.6em; margin-bottom: 4px; color: var(--accent); }
+.subtitle { color: var(--text-secondary); font-size: 0.9em; margin-bottom: 20px; }
+
+.controls {
+    display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+    margin-bottom: 20px; padding: 15px; background: var(--card-bg);
+    border-radius: 8px; box-shadow: var(--shadow);
+}
+
+.controls button {
+    padding: 8px 16px; border: none; border-radius: 6px;
+    background: var(--btn-bg); color: var(--btn-text);
+    cursor: pointer; font-size: 0.9em; transition: background 0.2s;
+}
+.controls button:hover { background: var(--btn-hover); }
+.controls button:disabled { background: var(--step-inactive); cursor: not-allowed; }
+
+.step-indicator {
+    display: flex; gap: 6px; margin-left: auto; align-items: center;
+}
+.step-dot {
+    width: 12px; height: 12px; border-radius: 50%;
+    background: var(--step-inactive); transition: all 0.3s;
+}
+.step-dot.active { background: var(--step-active); transform: scale(1.3); }
+.step-dot.done { background: var(--slave-border); }
+
+.legend {
+    display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 15px;
+    font-size: 0.85em; color: var(--text-secondary);
+}
+.legend-item { display: flex; align-items: center; gap: 6px; }
+.legend-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+}
+
+/* Architecture diagram */
+.arch-container {
+    display: flex; flex-direction: column; gap: 20px;
+    position: relative;
+}
+
+.arch-row {
+    display: flex; gap: 20px; align-items: stretch;
+    justify-content: center;
+}
+
+/* Master box */
+.master-box {
+    background: var(--master-bg);
+    border: 2px solid var(--master-border);
+    border-radius: 12px; padding: 20px;
+    flex: 1; min-width: 280px; max-width: 450px;
+}
+
+.master-box h3 {
+    color: var(--master-border); margin-bottom: 12px; font-size: 1.1em;
+}
+
+/* Slave box */
+.slave-box {
+    background: var(--slave-bg);
+    border: 2px solid var(--slave-border);
+    border-radius: 12px; padding: 20px;
+    flex: 1; min-width: 280px; max-width: 450px;
+}
+
+.slave-box h3 {
+    color: var(--slave-border); margin-bottom: 12px; font-size: 1.1em;
+}
+
+/* Component boxes */
+.component {
+    padding: 10px 14px; border-radius: 8px; margin: 8px 0;
+    font-size: 0.9em; position: relative;
+    transition: all 0.5s;
+    border: 2px solid transparent;
+}
+
+.component.active {
+    border-color: var(--highlight);
+    box-shadow: 0 0 12px rgba(245, 158, 11, 0.4);
+    transform: scale(1.03);
+    z-index: 2;
+}
+
+.component.binlog { background: var(--log-bg); }
+.component.relay { background: var(--relay-bg); }
+.component.io   { background: var(--slave-bg); border: 1px solid var(--slave-border); }
+.component.sql  { background: var(--slave-bg); border: 1px solid var(--slave-border); }
+
+/* Arrow between master and slave */
+.arrow-section {
+    display: flex; align-items: center; justify-content: center;
+    padding: 5px 0;
+}
+
+.arrow-line {
+    height: 2px; background: var(--arrow-color);
+    flex: 1; position: relative;
+}
+
+.arrow-head {
+    width: 0; height: 0;
+    border-top: 8px solid transparent;
+    border-bottom: 8px solid transparent;
+    border-left: 12px solid var(--arrow-color);
+}
+
+.arrow-label {
+    position: absolute; top: -22px; left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.78em; color: var(--text-secondary);
+    white-space: nowrap;
+    background: var(--bg); padding: 0 6px;
+    transition: all 0.5s;
+}
+
+.arrow-label.active {
+    color: var(--highlight);
+    font-weight: bold;
+}
+
+/* Data flow animation */
+.data-packet {
+    position: absolute; width: 10px; height: 10px;
+    background: var(--accent); border-radius: 50%;
+    animation: none;
+    opacity: 0;
+}
+
+.data-packet.running {
+    animation: dataFlow 2s ease-in-out infinite;
+    opacity: 1;
+}
+
+@keyframes dataFlow {
+    0% { left: 0; opacity: 1; }
+    100% { left: calc(100% - 10px); opacity: 0; }
+}
+
+/* Description panel */
+.desc-panel {
+    background: var(--card-bg); border-radius: 8px;
+    padding: 15px 20px; margin-top: 15px;
+    box-shadow: var(--shadow); min-height: 60px;
+    font-size: 0.95em; line-height: 1.7;
+    transition: all 0.3s;
+}
+
+.desc-panel .step-num {
+    color: var(--accent); font-weight: bold; margin-right: 6px;
+}
+
+.desc-panel .highlight-text {
+    color: var(--highlight); font-weight: bold;
+}
+
+/* Status indicators */
+.status-dot {
+    display: inline-block; width: 8px; height: 8px;
+    border-radius: 50%; margin-right: 4px;
+}
+.status-dot.running { background: #22c55e; }
+.status-dot.waiting { background: #f59e0b; }
+.status-dot.stopped { background: #ef4444; }
+
+/* Table */
+.info-table {
+    width: 100%; border-collapse: collapse; margin: 10px 0;
+    font-size: 0.85em;
+}
+.info-table th, .info-table td {
+    border: 1px solid var(--border); padding: 6px 10px; text-align: left;
+}
+.info-table th { background: var(--card-bg); }
+
+.footer {
+    margin-top: 25px; padding-top: 15px; border-top: 1px solid var(--border);
+    font-size: 0.8em; color: var(--text-secondary);
+}
+
+.footer a { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<h1>🔗 主从复制架构</h1>
+<p class="subtitle">时序图：binlog 产生 → IO 线程拉取 → SQL 线程回放</p>
+
+<div class="controls">
+    <button id="btnPrev" disabled>◀ 上一步</button>
+    <button id="btnNext">下一步 ▶</button>
+    <button id="btnReset">↺ 重置</button>
+    <button id="btnAuto" style="background:#22c55e;">▶ 自动播放</button>
+    <div class="step-indicator">
+        <span style="font-size:0.8em;color:var(--text-secondary);margin-right:6px;">步骤</span>
+        <span class="step-dot" id="dot0"></span>
+        <span class="step-dot" id="dot1"></span>
+        <span class="step-dot" id="dot2"></span>
+        <span class="step-dot" id="dot3"></span>
+        <span class="step-dot" id="dot4"></span>
+        <span class="step-dot" id="dot5"></span>
+    </div>
+</div>
+
+<div class="legend">
+    <span class="legend-item"><span class="legend-dot" style="background:#ef4444;"></span> 主库 (Master)</span>
+    <span class="legend-item"><span class="legend-dot" style="background:#22c55e;"></span> 从库 (Slave)</span>
+    <span class="legend-item"><span class="legend-dot" style="background:var(--highlight);"></span> 当前步骤高亮</span>
+</div>
+
+<div class="arch-container">
+    <!-- Master -->
+    <div class="arch-row">
+        <div class="master-box" id="masterBox">
+            <h3>🖥️ 主库 (Master)</h3>
+            <div class="component binlog" id="compBinlog">
+                <strong>📦 binlog（二进制日志）</strong><br>
+                <span style="font-size:0.8em;color:var(--text-secondary);">mysql-bin.000001</span>
+                <div style="margin-top:4px;font-size:0.78em;color:var(--text-secondary);">
+                    记录所有写操作（INSERT/UPDATE/DELETE）<br>
+                    <span class="status-dot" id="binlogStatus"></span>
+                    <span id="binlogStatusText">等待写入</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Arrow: binlog → IO -->
+    <div class="arrow-section" style="position:relative;">
+        <div style="display:flex;align-items:center;justify-content:center;gap:0;width:100%;">
+            <div class="arrow-line" style="flex:1;max-width:300px;" id="arrow1">
+                <span class="arrow-label" id="arrowLabel1">② IO 线程拉取 binlog</span>
+                <div class="data-packet" id="packet1"></div>
+            </div>
+            <div class="arrow-head"></div>
+        </div>
+    </div>
+
+    <!-- Slave -->
+    <div class="arch-row">
+        <div class="slave-box" id="slaveBox">
+            <h3>🖥️ 从库 (Slave)</h3>
+            <div class="component io" id="compIO">
+                <strong>🔌 IO 线程 (I/O Thread)</strong><br>
+                <span style="font-size:0.8em;color:var(--text-secondary);">
+                    连接主库 → 拉取 binlog → 写入 relay log
+                </span>
+                <div style="margin-top:4px;font-size:0.78em;">
+                    <span class="status-dot" id="ioStatus"></span>
+                    <span id="ioStatusText">等待启动</span>
+                </div>
+            </div>
+            <div class="component relay" id="compRelay">
+                <strong>📋 relay log（中继日志）</strong><br>
+                <span style="font-size:0.8em;color:var(--text-secondary);">slave-relay-bin.000001</span>
+                <div style="margin-top:4px;font-size:0.78em;color:var(--text-secondary);">
+                    存储从主库拉取的 binlog 事件<br>
+                    <span class="status-dot" id="relayStatus"></span>
+                    <span id="relayStatusText">等待数据</span>
+                </div>
+            </div>
+            <div class="component sql" id="compSQL">
+                <strong>⚙️ SQL 线程 (SQL Thread)</strong><br>
+                <span style="font-size:0.8em;color:var(--text-secondary);">
+                    读取 relay log → 执行 SQL → 从库数据更新
+                </span>
+                <div style="margin-top:4px;font-size:0.78em;">
+                    <span class="status-dot" id="sqlStatus"></span>
+                    <span id="sqlStatusText">等待启动</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Description -->
+<div class="desc-panel" id="descPanel">
+    <span class="step-num">[初始状态]</span>
+    点击「下一步」开始，逐步展示主从复制中 binlog 产生、IO 线程拉取、SQL 线程回放的完整流程。
+</div>
+
+<!-- Summary table -->
+<div class="desc-panel" style="margin-top:10px;" id="summaryPanel">
+    <table class="info-table">
+        <tr><th>角色</th><th>位置</th><th>职责</th></tr>
+        <tr><td><strong>binlog</strong></td><td>主库磁盘</td><td>记录所有写操作，复制的数据源</td></tr>
+        <tr><td><strong>IO 线程</strong></td><td>从库</td><td>连接主库，拉取 binlog，写入 relay log</td></tr>
+        <tr><td><strong>SQL 线程</strong></td><td>从库</td><td>读取 relay log，在从库上执行 SQL</td></tr>
+        <tr><td><strong>relay log</strong></td><td>从库磁盘</td><td>临时存储从主库拉取的 binlog 事件</td></tr>
+    </table>
+</div>
+
+<div class="footer">
+    本可视化对应 <a href="26-主从复制.md">26-主从复制.md</a> 步骤一（复制原理）<br>
+    基于 database_mastery_detailed_outline.md v2 | 支持暗色/亮色模式，跟随系统
+</div>
+
+<script>
+// Step definitions
+const steps = [
+    {
+        title: '初始状态',
+        desc: '主库正常接受客户端写请求，binlog 开始记录。从库的 IO 线程和 SQL 线程尚未启动。',
+        highlight: null,
+        binlog: 'empty', io: 'stopped', relay: 'empty', sql: 'stopped',
+        arrow1: ''
+    },
+    {
+        title: '① 主库写入 binlog',
+        desc: '客户端提交一个写事务（如 INSERT INTO users ...），主库执行成功后，将事件写入 <span class="highlight-text">binlog</span>（二进制日志）。binlog 是复制的唯一数据源，记录每个写操作的详细信息。',
+        highlight: 'compBinlog',
+        binlog: 'writing', io: 'stopped', relay: 'empty', sql: 'stopped',
+        arrow1: ''
+    },
+    {
+        title: '② IO 线程拉取 binlog',
+        desc: '从库的 <span class="highlight-text">IO 线程</span>（I/O Thread）主动连接主库，请求从上次同步位置之后的新 binlog 事件。主库将 binlog 通过网络发送给从库。IO 线程收到后写入 <span class="highlight-text">relay log</span>（中继日志）。<br><br>💡 为什么是从库主动拉取？异步解耦——主库不依赖从库状态，写完 binlog 就完事。',
+        highlight: 'compIO',
+        binlog: 'written', io: 'running', relay: 'writing', sql: 'stopped',
+        arrow1: 'active'
+    },
+    {
+        title: '③ SQL 线程回放 relay log',
+        desc: '从库的 <span class="highlight-text">SQL 线程</span>（SQL Thread）读取 relay log 中的事件，像放电影一样逐条执行。执行完毕后，relay log 中的事件被标记为已完成，从库数据与主库保持一致。<br><br>💡 IO 线程和 SQL 线程是独立的——IO 线程只管拉取，SQL 线程只管执行，互不阻塞。',
+        highlight: 'compSQL',
+        binlog: 'written', io: 'running', relay: 'done', sql: 'running',
+        arrow1: ''
+    },
+    {
+        title: '✅ 同步完成',
+        desc: '一个完整的复制周期结束：<br>1. 主库写入 binlog<br>2. IO 线程拉取到 relay log<br>3. SQL 线程回放完成<br>从库数据与主库完全一致，<span class="highlight-text">Seconds_Behind_Master = 0</span>。<br><br>⚡ 这个循环持续运行，确保主从数据实时同步。',
+        highlight: null,
+        binlog: 'written', io: 'running', relay: 'done', sql: 'running',
+        arrow1: 'done'
+    },
+    {
+        title: '⚠️ 主库故障，从库切换为新主库',
+        desc: '主库宕机！运维立即执行故障切换：<br>1. 从库执行 <code>STOP SLAVE; RESET SLAVE ALL;</code><br>2. 从库提升为新主库，关闭只读模式<br>3. 应用层将写请求指向新主库<br>4. 如果有 GTID，其他从库自动从正确位置继续复制<br><br>💡 这就是异步复制的代价：从库可能还没同步到主库的最新数据，切换时可能丢失最后几秒的数据。金融业务请用半同步复制。',
+        highlight: 'compSQL',
+        binlog: 'written', io: 'stopped', relay: 'done', sql: 'stopped',
+        arrow1: ''
+    }
+];
+
+let currentStep = 0;
+let autoTimer = null;
+
+function updateUI() {
+    const step = steps[currentStep];
+
+    // Update description
+    document.getElementById('descPanel').innerHTML =
+        `<span class="step-num">[${currentStep}/${steps.length - 1}] ${step.title}</span> ${step.desc}`;
+
+    // Update step dots
+    for (let i = 0; i < steps.length; i++) {
+        const dot = document.getElementById('dot' + i);
+        if (!dot) continue;
+        dot.className = 'step-dot';
+        if (i < currentStep) dot.classList.add('done');
+        if (i === currentStep) dot.classList.add('active');
+    }
+
+    // Update highlights
+    document.querySelectorAll('.component').forEach(el => el.classList.remove('active'));
+    if (step.highlight) {
+        const el = document.getElementById(step.highlight);
+        if (el) el.classList.add('active');
+    }
+
+    // Update binlog status
+    updateStatus('binlogStatus', 'binlogStatusText', step.binlog, 'binlog');
+    updateStatus('ioStatus', 'ioStatusText', step.io, 'IO');
+    updateStatus('relayStatus', 'relayStatusText', step.relay, 'relay');
+    updateStatus('sqlStatus', 'sqlStatusText', step.sql, 'SQL');
+
+    // Update arrow
+    const arrowLabel = document.getElementById('arrowLabel1');
+    const packet = document.getElementById('packet1');
+    arrowLabel.classList.remove('active');
+    packet.classList.remove('running');
+    if (step.arrow1 === 'active') {
+        arrowLabel.classList.add('active');
+        packet.classList.add('running');
+    }
+
+    // Update buttons
+    document.getElementById('btnPrev').disabled = (currentStep === 0);
+    document.getElementById('btnNext').disabled = (currentStep === steps.length - 1);
+}
+
+function updateStatus(dotId, textId, state, role) {
+    const dot = document.getElementById(dotId);
+    const text = document.getElementById(textId);
+    if (!dot || !text) return;
+
+    dot.className = 'status-dot';
+    switch (state) {
+        case 'writing': dot.classList.add('running'); text.textContent = role + ' 写入中...'; break;
+        case 'written': dot.classList.add('running'); text.textContent = role + ' 已写入'; break;
+        case 'running': dot.classList.add('running'); text.textContent = role + ' 运行中'; break;
+        case 'done': dot.classList.add('running'); text.textContent = role + ' 已完成'; break;
+        case 'empty': dot.classList.add('waiting'); text.textContent = role + ' 等待数据'; break;
+        case 'stopped': dot.classList.add('stopped'); text.textContent = role + ' 已停止'; break;
+        default: dot.classList.add('waiting'); text.textContent = role + ' 等待...';
+    }
+}
+
+function nextStep() {
+    if (currentStep < steps.length - 1) {
+        currentStep++;
+        updateUI();
+    }
+}
+
+function prevStep() {
+    if (currentStep > 0) {
+        currentStep--;
+        updateUI();
+    }
+}
+
+function reset() {
+    stopAuto();
+    currentStep = 0;
+    updateUI();
+}
+
+function startAuto() {
+    stopAuto();
+    if (currentStep >= steps.length - 1) {
+        currentStep = 0;
+        updateUI();
+    }
+    autoTimer = setInterval(() => {
+        if (currentStep < steps.length - 1) {
+            currentStep++;
+            updateUI();
+        } else {
+            stopAuto();
+        }
+    }, 2500);
+}
+
+function stopAuto() {
+    if (autoTimer) {
+        clearInterval(autoTimer);
+        autoTimer = null;
+    }
+}
+
+document.getElementById('btnNext').addEventListener('click', nextStep);
+document.getElementById('btnPrev').addEventListener('click', prevStep);
+document.getElementById('btnReset').addEventListener('click', reset);
+document.getElementById('btnAuto').addEventListener('click', () => {
+    if (autoTimer) {
+        stopAuto();
+        document.getElementById('btnAuto').textContent = '▶ 自动播放';
+        document.getElementById('btnAuto').style.background = '#22c55e';
+    } else {
+        startAuto();
+        document.getElementById('btnAuto').textContent = '⏸ 暂停';
+        document.getElementById('btnAuto').style.background = '#ef4444';
+    }
+});
+
+// Keyboard navigation
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight') nextStep();
+    if (e.key === 'ArrowLeft') prevStep();
+    if (e.key === 'r' || e.key === 'R') reset();
+    if (e.key === ' ') { e.preventDefault(); startAuto(); }
+});
+
+// Init
+updateUI();
+</script>
+</body>
+</html>

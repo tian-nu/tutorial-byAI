@@ -1,0 +1,26 @@
+/* 中文字体优化 */
+.md-typeset {
+  font-size: 0.8rem;
+  line-height: 1.8;
+}
+
+.md-typeset h1 { font-weight: 700; }
+.md-typeset h2 { font-weight: 600; margin-top: 1.5em; }
+
+.md-typeset code { font-size: 0.75rem; word-break: break-all; }
+.md-typeset pre { font-size: 0.72rem; }
+
+.md-clipboard { color: var(--md-default-fg-color--lighter); }
+.md-clipboard:hover { color: var(--md-accent-fg-color); }
+
+.md-typeset .admonition,
+.md-typeset details {
+  border-width: 0;
+  border-left-width: 4px;
+  font-size: 0.78rem;
+}
+
+.md-typeset table:not([class]) { font-size: 0.75rem; }
+.md-typeset table:not([class]) th { font-weight: 600; }
+.md-nav__link--active { font-weight: 600; }
+.md-search-result__article { font-size: 0.78rem; }

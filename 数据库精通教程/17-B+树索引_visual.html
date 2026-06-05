@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>B+树索引结构可视化</title>
+<!-- 依赖：无外部CDN，完全自包含 -->
+<style>
+:root {
+  --bg: #ffffff;
+  --text: #1a1a1a;
+  --node-bg: #e8f0fe;
+  --node-border: #4a90d9;
+  --leaf-bg: #e6f4ea;
+  --leaf-border: #34a853;
+  --data-bg: #fef7e0;
+  --data-border: #f9ab00;
+  --highlight: #ff6b6b;
+  --highlight-bg: #ffe0e0;
+  --arrow: #666;
+  --btn-bg: #4a90d9;
+  --btn-text: #fff;
+  --step-bg: #f0f4f8;
+  --panel-bg: #fafafa;
+  --table-border: #ddd;
+}
+[data-theme="dark"] {
+  --bg: #1e1e2e;
+  --text: #cdd6f4;
+  --node-bg: #313244;
+  --node-border: #89b4fa;
+  --leaf-bg: #1e3a2f;
+  --leaf-border: #a6e3a1;
+  --data-bg: #3e3020;
+  --data-border: #f9e2af;
+  --highlight: #f38ba8;
+  --highlight-bg: #3a202a;
+  --arrow: #a6adc8;
+  --btn-bg: #89b4fa;
+  --btn-text: #1e1e2e;
+  --step-bg: #313244;
+  --panel-bg: #181825;
+  --table-border: #45475a;
+}
+body { font-family: -apple-system, 'Segoe UI', 'Noto Sans SC', sans-serif; margin: 0; padding: 20px; background: var(--bg); color: var(--text); transition: all 0.3s; }
+h1 { font-size: 1.5em; margin: 0 0 5px; }
+.subtitle { color: var(--arrow); font-size: 0.85em; margin-bottom: 15px; }
+.controls { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 15px; align-items: center; }
+.controls button { padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9em; background: var(--btn-bg); color: var(--btn-text); transition: opacity 0.2s; }
+.controls button:hover { opacity: 0.85; }
+.controls button:disabled { opacity: 0.4; cursor: not-allowed; }
+.controls button.active { outline: 3px solid var(--highlight); }
+.toggle-btn { background: var(--step-bg) !important; color: var(--text) !important; border: 1px solid var(--arrow) !important; }
+.main-area { display: flex; gap: 20px; flex-wrap: wrap; }
+.tree-panel { flex: 2; min-width: 350px; }
+.info-panel { flex: 1; min-width: 280px; background: var(--panel-bg); border-radius: 8px; padding: 15px; border: 1px solid var(--table-border); }
+.info-panel h3 { margin: 0 0 10px; font-size: 1em; }
+.info-panel .step-desc { font-size: 0.9em; line-height: 1.6; }
+.info-panel .step-desc strong { color: var(--highlight); }
+.info-panel table { width: 100%; border-collapse: collapse; font-size: 0.8em; margin-top: 10px; }
+.info-panel th, .info-panel td { padding: 4px 6px; border: 1px solid var(--table-border); text-align: center; }
+.info-panel th { background: var(--step-bg); }
+.tree-container { background: var(--panel-bg); border-radius: 8px; padding: 20px; border: 1px solid var(--table-border); min-height: 400px; position: relative; overflow-x: auto; }
+.node-row { display: flex; justify-content: center; gap: 8px; margin-bottom: 8px; }
+.node { padding: 8px 12px; border-radius: 6px; border: 2px solid transparent; font-size: 0.8em; text-align: center; min-width: 60px; transition: all 0.3s; }
+.node.internal { background: var(--node-bg); border-color: var(--node-border); }
+.node.leaf { background: var(--leaf-bg); border-color: var(--leaf-border); }
+.node.data { background: var(--data-bg); border-color: var(--data-border); }
+.node.highlight { background: var(--highlight-bg); border-color: var(--highlight); transform: scale(1.08); }
+.node.highlight-path { background: var(--highlight-bg); border-color: var(--highlight); }
+.node small { display: block; color: var(--arrow); font-size: 0.7em; }
+.arrow-down { text-align: center; color: var(--arrow); font-size: 1.2em; line-height: 1.2; margin-bottom: 3px; }
+.linked-list { display: flex; justify-content: center; gap: 0; align-items: center; margin: 10px 0; }
+.linked-list .link { color: var(--arrow); font-size: 0.8em; padding: 0 2px; }
+.legend { display: flex; gap: 15px; flex-wrap: wrap; margin-top: 10px; font-size: 0.8em; }
+.legend span { display: flex; align-items: center; gap: 4px; }
+.legend .dot { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.back-link { font-size: 0.8em; margin-top: 15px; color: var(--arrow); }
+.back-link a { color: var(--btn-bg); }
+@media (max-width: 700px) { .main-area { flex-direction: column; } }
+</style>
+</head>
+<body data-theme="light">
+
+<h1>🌳 B+树索引结构 — 可视化演示</h1>
+<div class="subtitle">基于 detailed_design.md v2 · 对应教程 <a href="17-B+树索引原理.md" style="color:var(--btn-bg)">17-B+树索引原理.md</a> 步骤一至五</div>
+
+<div class="controls">
+  <button onclick="playStep(0)" id="btn0">1. 全表扫描</button>
+  <button onclick="playStep(1)" id="btn1">2. 查找45</button>
+  <button onclick="playStep(2)" id="btn2">3. 查找12</button>
+  <button onclick="playStep(3)" id="btn3">4. 回表演示</button>
+  <button onclick="playStep(4)" id="btn4">5. 范围查询</button>
+  <button onclick="reset()" class="toggle-btn">⟳ 重置</button>
+  <button onclick="toggleTheme()" class="toggle-btn">🌓 切换主题</button>
+</div>
+
+<div class="main-area">
+  <div class="tree-panel">
+    <div class="tree-container" id="treeContainer">
+      <!-- B+树由JS动态渲染 -->
+    </div>
+    <div class="legend">
+      <span><span class="dot" style="background:var(--node-bg);border:1px solid var(--node-border)"></span> 内部节点（仅存键）</span>
+      <span><span class="dot" style="background:var(--leaf-bg);border:1px solid var(--leaf-border)"></span> 叶子节点（键+数据/主键）</span>
+      <span><span class="dot" style="background:var(--data-bg);border:1px solid var(--data-border)"></span> 完整行数据</span>
+      <span><span class="dot" style="background:var(--highlight-bg);border:1px solid var(--highlight)"></span> 当前查找路径</span>
+    </div>
+  </div>
+  <div class="info-panel" id="infoPanel">
+    <h3>📖 步骤说明</h3>
+    <div class="step-desc" id="stepDesc">点击上方按钮开始演示...</div>
+    <div id="stepExtra"></div>
+  </div>
+</div>
+
+<div class="back-link">
+  ← 返回教程：<a href="17-B+树索引原理.md">17 — B+树索引原理</a>
+</div>
+
+<script>
+// ==================== B+树数据模型 ====================
+// 简化B+树：阶数3，每个节点最多2个键、3个子节点
+// 内部节点：[键1, 键2] + [子指针1, 子指针2, 子指针3]
+// 叶子节点：[键, 值] 对，且有链表指针指向下一个叶子
+
+const btree = {
+  root: {
+    type: 'internal',
+    keys: [30, 60],
+    children: [
+      { // 左子树
+        type: 'internal',
+        keys: [10, 20],
+        children: [
+          { type: 'leaf', keys: [3, 7], values: ['行3', '行7'], next: null },
+          { type: 'leaf', keys: [12, 15, 18], values: ['行12', '行15', '行18'], next: null },
+          { type: 'leaf', keys: [22, 25, 28], values: ['行22', '行25', '行28'], next: null }
+        ]
+      },
+      { // 中子树
+        type: 'internal',
+        keys: [40, 50],
+        children: [
+          { type: 'leaf', keys: [32, 35, 38], values: ['行32', '行35', '行38'], next: null },
+          { type: 'leaf', keys: [42, 45, 48], values: ['行42', '行45', '行48'], next: null },
+          { type: 'leaf', keys: [52, 55, 58], values: ['行52', '行55', '行58'], next: null }
+        ]
+      },
+      { // 右子树
+        type: 'leaf',
+        keys: [62, 68, 72, 78],
+        values: ['行62', '行68', '行72', '行78'],
+        next: null
+      }
+    ]
+  }
+};
+
+// 建立叶子链表
+function linkLeaves(node) {
+  if (node.type === 'leaf') return [node];
+  let leaves = [];
+  for (const child of node.children) {
+    leaves = leaves.concat(linkLeaves(child));
+  }
+  return leaves;
+}
+const allLeaves = linkLeaves(btree.root);
+for (let i = 0; i < allLeaves.length - 1; i++) {
+  allLeaves[i].next = allLeaves[i + 1];
+}
+
+// 模拟的行数据表（聚集索引：叶子存完整行）
+const rowData = {
+  3:  { id: 3,  name: 'Alice',  age: 25, city: '北京' },
+  7:  { id: 7,  name: 'Bob',    age: 30, city: '上海' },
+  12: { id: 12, name: 'Charlie',age: 22, city: '广州' },
+  15: { id: 15, name: 'Diana',  age: 28, city: '深圳' },
+  18: { id: 18, name: 'Eve',    age: 35, city: '杭州' },
+  22: { id: 22, name: 'Frank',  age: 40, city: '成都' },
+  25: { id: 25, name: 'Grace',  age: 27, city: '武汉' },
+  28: { id: 28, name: 'Henry',  age: 33, city: '南京' },
+  32: { id: 32, name: 'Ivy',    age: 29, city: '重庆' },
+  35: { id: 35, name: 'Jack',   age: 31, city: '西安' },
+  38: { id: 38, name: 'Kate',   age: 26, city: '苏州' },
+  42: { id: 42, name: 'Leo',    age: 24, city: '天津' },
+  45: { id: 45, name: 'Mia',    age: 32, city: '长沙' },
+  48: { id: 48, name: 'Nick',   age: 36, city: '青岛' },
+  52: { id: 52, name: 'Olivia', age: 23, city: '大连' },
+  55: { id: 55, name: 'Paul',   age: 38, city: '厦门' },
+  58: { id: 58, name: 'Quinn',  age: 34, city: '郑州' },
+  62: { id: 62, name: 'Rose',   age: 21, city: '济南' },
+  68: { id: 68, name: 'Sam',    age: 39, city: '合肥' },
+  72: { id: 72, name: 'Tom',    age: 37, city: '福州' },
+  78: { id: 78, name: 'Uma',    age: 41, city: '昆明' }
+};
+
+// 二级索引：假设在 age 列上建了索引
+const secondaryIndex = {
+  root: {
+    type: 'internal',
+    keys: [30, 40],
+    children: [
+      { type: 'leaf', keys: [21, 22, 23, 24, 25, 26, 27, 28, 29], values: [62, 12, 42, 3, 38, 28, 25, 15, 32], next: null },
+      { type: 'leaf', keys: [30, 31, 32, 33, 34, 35, 36, 37, 38], values: [7, 35, 45, 28, 58, 18, 48, 72, 55], next: null },
+      { type: 'leaf', keys: [40, 41], values: [22, 78], next: null }
+    ]
+  }
+};
+
+let highlightIds = [];
+let currentStep = -1;
+
+function renderTree() {
+  const container = document.getElementById('treeContainer');
+  const root = btree.root;
+  
+  let html = '';
+  
+  // 根节点
+  html += '<div class="node-row">';
+  html += renderNode(root, 'root');
+  html += '</div>';
+  
+  html += '<div class="arrow-down">↓</div>';
+  
+  // 第二层
+  html += '<div class="node-row">';
+  for (let i = 0; i < root.children.length; i++) {
+    html += renderNode(root.children[i], 'l2-' + i);
+  }
+  html += '</div>';
+  
+  html += '<div class="arrow-down">↓</div>';
+  
+  // 第三层（叶子层）
+  html += '<div class="node-row">';
+  for (let i = 0; i < root.children.length; i++) {
+    const child = root.children[i];
+    if (child.type === 'leaf') {
+      html += renderNode(child, 'l3-' + i);
+    } else {
+      for (let j = 0; j < child.children.length; j++) {
+        html += renderNode(child.children[j], 'l3-' + i + '-' + j);
+      }
+    }
+  }
+  html += '</div>';
+  
+  // 叶子链表
+  html += '<div class="linked-list">';
+  for (let i = 0; i < allLeaves.length; i++) {
+    html += '<span style="font-size:0.7em;color:var(--arrow)">[' + allLeaves[i].keys[0] + ']</span>';
+    if (i < allLeaves.length - 1) {
+      html += '<span class="link">→</span>';
+    }
+  }
+  html += '</div>';
+  html += '<div style="text-align:center;font-size:0.7em;color:var(--arrow);margin-top:2px">叶子节点有序链表（支持范围查询）</div>';
+  
+  container.innerHTML = html;
+}
+
+function renderNode(node, id) {
+  let cls = 'node ';
+  if (node.type === 'internal') cls += 'internal';
+  else if (node.type === 'leaf') cls += 'leaf';
+  else cls += 'data';
+  
+  if (highlightIds.includes(id)) cls += ' highlight-path';
+  
+  let label = '';
+  if (node.type === 'internal') {
+    label = '[' + node.keys.join(', ') + ']';
+    label += '<small>仅存键</small>';
+  } else if (node.type === 'leaf') {
+    label = node.keys.map((k, i) => k + '→' + (node.values ? node.values[i] : '行'+k)).join(' | ');
+    label += '<small>键+数据</small>';
+  } else {
+    label = JSON.stringify(node).substring(0, 30);
+  }
+  
+  return `<span class="${cls}" id="node-${id}">${label}</span>`;
+}
+
+function findPath(targetKey) {
+  const path = [];
+  const root = btree.root;
+  path.push({ node: root, id: 'root' });
+  
+  let current = root;
+  while (current.type === 'internal') {
+    let childIdx = 0;
+    for (let i = 0; i < current.keys.length; i++) {
+      if (targetKey >= current.keys[i]) childIdx = i + 1;
+    }
+    const child = current.children[childIdx];
+    // find the id
+    let cid = '';
+    if (current === root) {
+      cid = 'l2-' + childIdx;
+    } else {
+      // find which child of root
+      for (let i = 0; i < root.children.length; i++) {
+        if (root.children[i] === current) {
+          cid = 'l3-' + i + '-' + childIdx;
+          break;
+        }
+      }
+      if (!cid) {
+        for (let i = 0; i < root.children.length; i++) {
+          if (root.children[i] === current && root.children[i].type === 'leaf') {
+            cid = 'l3-' + i;
+            break;
+          }
+        }
+      }
+    }
+    path.push({ node: child, id: cid });
+    current = child;
+  }
+  
+  // 在叶子中定位
+  const leaf = current;
+  let keyIdx = leaf.keys.indexOf(targetKey);
+  if (keyIdx === -1) {
+    keyIdx = leaf.keys.findIndex(k => k > targetKey);
+    if (keyIdx === -1) keyIdx = leaf.keys.length - 1;
+  }
+  
+  return { path, leaf, keyIdx, found: leaf.keys[keyIdx] === targetKey };
+}
+
+function highlightPath(nodeIds) {
+  highlightIds = nodeIds;
+  renderTree();
+}
+
+function reset() {
+  highlightIds = [];
+  currentStep = -1;
+  renderTree();
+  document.getElementById('stepDesc').innerHTML = '点击上方按钮开始演示...';
+  document.getElementById('stepExtra').innerHTML = '';
+  document.querySelectorAll('.controls button[id^="btn"]').forEach(b => b.classList.remove('active'));
+}
+
+function playStep(step) {
+  currentStep = step;
+  document.querySelectorAll('.controls button[id^="btn"]').forEach(b => b.classList.remove('active'));
+  document.getElementById('btn' + step).classList.add('active');
+  
+  reset();
+  
+  switch (step) {
+    case 0: stepFullScan(); break;
+    case 1: stepFind45(); break;
+    case 2: stepFind12(); break;
+    case 3: stepBackToTable(); break;
+    case 4: stepRangeQuery(); break;
+  }
+}
+
+function stepFullScan() {
+  document.getElementById('stepDesc').innerHTML = `
+    <strong>全表扫描（Full Table Scan）</strong><br>
+    没有索引时，MySQL 必须从磁盘逐行读取所有数据。<br>
+    假设 1000 万行数据，每行 ~200 字节，需要读取 ~2GB 数据。<br>
+    磁盘 IO 速度约 100MB/s → 需要 <strong>20 秒</strong>！<br><br>
+    而有了 B+树索引后，<strong>3 层查找只需 3 次磁盘 IO ≈ 30ms</strong>。<br>
+    差距：<strong>约 600 倍</strong>。
+  `;
+  document.getElementById('stepExtra').innerHTML = `
+    <table>
+      <tr><th>操作</th><th>耗时</th></tr>
+      <tr><td>磁盘寻道一次</td><td>~10ms</td></tr>
+      <tr><td>内存访问一次</td><td>~100ns</td></tr>
+      <tr><td>差距</td><td><strong>10万倍</strong></td></tr>
+      <tr><td>全表扫描(1000万行)</td><td>~20秒</td></tr>
+      <tr><td>B+树查找(3层)</td><td>~30ms</td></tr>
+    </table>
+  `;
+}
+
+function stepFind45() {
+  const result = findPath(45);
+  highlightIds = result.path.map(p => p.id);
+  renderTree();
+  
+  document.getElementById('stepDesc').innerHTML = `
+    <strong>查找 key=45 的过程</strong><br>
+    ① 根节点 [30, 60]：45 在 30 和 60 之间 → 走中间子节点<br>
+    ② 中间节点 [40, 50]：45 在 40 和 50 之间 → 走中间子节点<br>
+    ③ 叶子节点 [42, 45, 48]：找到 45 → 取出对应数据<br><br>
+    <strong>仅 3 次磁盘 IO！</strong>（每层一次）
+  `;
+  document.getElementById('stepExtra').innerHTML = `
+    <table>
+      <tr><th>步骤</th><th>节点</th><th>判断</th></tr>
+      <tr><td>1</td><td>[30,60]</td><td>30 ≤ 45 ≤ 60 → 走中间</td></tr>
+      <tr><td>2</td><td>[40,50]</td><td>40 ≤ 45 ≤ 50 → 走中间</td></tr>
+      <tr><td>3</td><td>[42,45,48]</td><td>✅ 找到 45！</td></tr>
+    </table>
+  `;
+}
+
+function stepFind12() {
+  const result = findPath(12);
+  highlightIds = result.path.map(p => p.id);
+  renderTree();
+  
+  document.getElementById('stepDesc').innerHTML = `
+    <strong>查找 key=12 的过程</strong><br>
+    ① 根节点 [30, 60]：12 < 30 → 走左边子节点<br>
+    ② 左内部节点 [10, 20]：10 ≤ 12 ≤ 20 → 走中间子节点<br>
+    ③ 叶子节点 [12, 15, 18]：找到 12 → 取出对应数据<br><br>
+    <strong>同样是 3 次 IO，与查找 45 一样快！</strong><br>
+    这就是 B+树的魅力：<strong>查找任意 key 的 IO 次数都等于树的高度</strong>。
+  `;
+  document.getElementById('stepExtra').innerHTML = `
+    <table>
+      <tr><th>步骤</th><th>节点</th><th>判断</th></tr>
+      <tr><td>1</td><td>[30,60]</td><td>12 < 30 → 走左边</td></tr>
+      <tr><td>2</td><td>[10,20]</td><td>10 ≤ 12 ≤ 20 → 走中间</td></tr>
+      <tr><td>3</td><td>[12,15,18]</td><td>✅ 找到 12！</td></tr>
+    </table>
+  `;
+}
+
+function stepBackToTable() {
+  // 演示二级索引回表
+  document.getElementById('stepDesc').innerHTML = `
+    <strong>二级索引 + 回表</strong><br>
+    假设表的主键是 id，在 age 列上建了二级索引。<br>
+    查询：<code>SELECT * FROM users WHERE age = 45;</code><br><br>
+    ① 在 age 索引（二级索引）中找到 age=45<br>
+    ② 叶子节点存的是 <strong>主键值 id=45</strong>（不是完整行！）<br>
+    ③ 拿着 id=45 再去<strong>聚集索引</strong>中查找完整行 → <strong>这就是"回表"</strong><br><br>
+    <strong>回表 = 多一次 B+树查找 = 多 3~4 次 IO</strong><br>
+    如果查询只需要 id 和 age（<code>SELECT id, age FROM users WHERE age = 45</code>），<br>
+    二级索引中已有这两列 → <strong>不需要回表</strong> → 这就是"覆盖索引"！
+  `;
+  
+  // 渲染简化的二级索引 + 回表路径
+  const container = document.getElementById('treeContainer');
+  container.innerHTML = `
+    <div style="text-align:center;margin-bottom:10px;font-weight:bold;color:var(--highlight)">二级索引（age）</div>
+    <div class="node-row">
+      <span class="node internal highlight-path">[30, 40]</span>
+    </div>
+    <div class="arrow-down">↓</div>
+    <div class="node-row">
+      <span class="node leaf">[21-29]</span>
+      <span class="node leaf">[30-38]</span>
+      <span class="node leaf highlight-path">[40, 41]</span>
+    </div>
+    <div class="arrow-down">↓</div>
+    <div style="text-align:center;margin:15px 0;font-weight:bold;color:var(--highlight)">回表 → 聚集索引（主键 id）</div>
+    <div class="node-row">
+      <span class="node internal highlight-path">[30, 60]</span>
+    </div>
+    <div class="arrow-down">↓</div>
+    <div class="node-row">
+      <span class="node internal">[10, 20]</span>
+      <span class="node internal highlight-path">[40, 50]</span>
+      <span class="node leaf">[62, 68, 72, 78]</span>
+    </div>
+    <div class="arrow-down">↓</div>
+    <div class="node-row">
+      <span class="node leaf highlight-path" style="font-size:0.9em">[42, 45, 48]</span>
+    </div>
+    <div class="arrow-down">↓</div>
+    <div class="node-row">
+      <span class="node data highlight-path">完整行: id=45, name='Mia', age=32, city='长沙'</span>
+    </div>
+    <div style="text-align:center;margin-top:10px;font-size:0.8em;color:var(--arrow)">
+      二级索引叶子存主键值 → 回表到聚集索引 → 读取完整行数据
+    </div>
+  `;
+}
+
+function stepRangeQuery() {
+  // 范围查询：查找 22 到 48 之间的所有数据
+  highlightIds = [];
+  renderTree();
+  
+  // 找到起始叶子
+  const result22 = findPath(22);
+  const leafIdx = allLeaves.indexOf(result22.leaf);
+  
+  let rangeLeaves = [];
+  let rangeKeys = [];
+  for (let i = leafIdx; i < allLeaves.length; i++) {
+    const leaf = allLeaves[i];
+    let hasInRange = false;
+    for (const k of leaf.keys) {
+      if (k >= 22 && k <= 48) {
+        rangeKeys.push(k);
+        hasInRange = true;
+      }
+    }
+    if (hasInRange) rangeLeaves.push(leaf);
+    if (leaf.keys[leaf.keys.length - 1] > 48) break;
+  }
+  
+  // 高亮相关叶子
+  const allLeafIds = [];
+  const root = btree.root;
+  for (let i = 0; i < root.children.length; i++) {
+    const child = root.children[i];
+    if (child.type === 'leaf') {
+      if (rangeLeaves.includes(child)) allLeafIds.push('l3-' + i);
+    } else {
+      for (let j = 0; j < child.children.length; j++) {
+        if (rangeLeaves.includes(child.children[j])) allLeafIds.push('l3-' + i + '-' + j);
+      }
+    }
+  }
+  highlightIds = allLeafIds;
+  renderTree();
+  
+  document.getElementById('stepDesc').innerHTML = `
+    <strong>范围查询：WHERE id BETWEEN 22 AND 48</strong><br>
+    ① 用 B+树定位到 22 所在的叶子节点<br>
+    ② 顺着叶子节点的<strong>有序链表</strong>向右扫描<br>
+    ③ 直到遇到 > 48 的 key 停止<br><br>
+    <strong>范围查询是 B+树的最大优势！</strong><br>
+    叶子节点形成有序链表，从起点顺序扫描即可，<br>
+    不需要反复从根节点查找。
+  `;
+  document.getElementById('stepExtra').innerHTML = `
+    <table>
+      <tr><th>范围</th><th>查到的 key</th></tr>
+      <tr><td>22-48</td><td>${rangeKeys.join(', ')}</td></tr>
+      <tr><th>涉及叶子节点</th><th>${rangeLeaves.length} 个</th></tr>
+      <tr><th>IO 次数</th><th>定位(3次) + 扫描叶子 = 约 5-6 次</th></tr>
+    </table>
+  `;
+}
+
+function toggleTheme() {
+  const body = document.body;
+  const current = body.getAttribute('data-theme');
+  const next = current === 'dark' ? 'light' : 'dark';
+  body.setAttribute('data-theme', next);
+}
+
+// 初始渲染
+renderTree();
+</script>
+</body>
+</html>

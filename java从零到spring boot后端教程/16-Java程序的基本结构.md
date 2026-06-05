@@ -303,7 +303,7 @@ my-project/
 │                   └── demo/
 │                       └── UserServiceTest.java
 ├── target/                                ← 编译产物（maven生成）
-└── pom.xml                                ← Maven配置（第63章才用）
+└── pom.xml                                ← Maven配置（第111章深入讲解）
 ```
 
 **现阶段你不需要记住全部**，只需要记住两件事：

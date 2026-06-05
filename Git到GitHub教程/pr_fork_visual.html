@@ -104,12 +104,12 @@ footer a:hover { text-decoration: underline; }
 (function(){
 var step=0, total=7;
 var steps=[
-  {label:"准备",desc:"原仓库 <b>tian-nu/test</b> 在 GitHub 上。你只能看，不能修改。",
+  {label:"准备",desc:"原仓库 <b>&lt;原仓库作者&gt;/&lt;原仓库名&gt;</b> 在 GitHub 上。你只能看，不能修改。",
    hl:[],cmd:""},
-  {label:"① Fork",desc:"在 GitHub 网页上点击 <b>Fork</b> 按钮。原仓库被完整复制到你账户下，创建了 <b>你的用户名/test</b>。",
-   hl:["rf","af"],cmd:"在 tian-nu/test 页面右上角点击 Fork 按钮"},
+  {label:"① Fork",desc:"在 GitHub 网页上点击 <b>Fork</b> 按钮。原仓库被完整复制到你账户下，创建了 <b>你的用户名/&lt;原仓库名&gt;</b>。",
+   hl:["rf","af"],cmd:"在原仓库页面右上角点击 Fork 按钮"},
   {label:"② Clone",desc:"执行 <b>git clone</b> 把你的 Fork 下载到本地电脑。现在你有了本地副本。",
-   hl:["rf","rl","ac"],cmd:"git clone git@github.com:&lt;你的用户名&gt;/test.git"},
+   hl:["rf","rl","ac"],cmd:"git clone git@github.com:&lt;你的用户名&gt;/&lt;原仓库名&gt;.git"},
   {label:"③ 修改",desc:"在本地修改代码、<b>git add</b>、<b>git commit</b>。本地仓库有了新提交，但 Fork 和原仓库还不知道。",
    hl:["rl","ct"],cmd:"编辑代码 → git add . → git commit -m \"feat: 我的贡献\""},
   {label:"④ Push",desc:"执行 <b>git push origin main</b> 把本地提交推送到你的 Fork 仓库。",
@@ -190,13 +190,13 @@ function draw(){
   h+=te(440,225,"你的电脑",11,lt,'start');
 
   h+=re(ux-uw/2,uy-uh/2,uw,uh,ru,nsu.stroke,nsu.sw);
-  h+=te(ux,uy-12,"tian-nu / test",13,tc,'middle',true);
+  h+=te(ux,uy-12,"&lt;原仓库作者&gt; / &lt;原仓库名&gt;",13,tc,'middle',true);
   h+=te(ux,uy+10,"原仓库 (upstream)",10.5,lt);
   h+=te(ux,uy+24,"只读",10,"#ef4444");
 
   var fsShow=step>=1;
   h+=re(fx-fw/2,fy-fh/2,fw,fh,rf,nsf.stroke,nsf.sw);
-  h+=te(fx,fy-12,"你的用户名 / test",13,tc,'middle',true);
+  h+=te(fx,fy-12,"你的用户名 / &lt;原仓库名&gt;",13,tc,'middle',true);
   h+=te(fx,fy+10,"你的 Fork (origin)",10.5,lt);
   if(fsShow)h+=te(fx,fy+24,"可读写 ✓",10,"#22c55e");
 

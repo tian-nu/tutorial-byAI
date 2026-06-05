@@ -146,12 +146,13 @@
 
 ---
 
-## 第四篇：Spring Boot 核心（15章）
+## 第四篇：Spring Boot 核心（15+1章）
 
 > 目标：从零掌握 Spring Boot 全家桶，能搭建生产级 RESTful API 服务。
 
 | 章节 | 标题 | 核心内容 |
 |------|------|----------|
+| 70a | RESTful API 设计规范 | REST六大约束、URL设计（名词vs动词）、HTTP方法映射、状态码、统一响应格式 |
 | 71 | Spring 框架概述 | IoC/DI/AOP概念、Spring发展史、Spring Boot定位 |
 | 72 | Spring Boot 入门 | Spring Initializr、Hello World、启动流程分析 |
 | 73 | 依赖注入（IoC 容器） | @Component/@Service/@Repository、@Autowired、Bean生命周期 |
@@ -293,4 +294,17 @@
 
 ---
 
-> **总计：10篇 124章，覆盖从零基础到高级 Java 后端工程师的全部知识体系。**
+## 附录（6个）
+
+| 附录 | 标题 | 内容 |
+|------|------|------|
+| A | Java 标准库速查 | java.lang/java.util/java.io/java.time/java.util.stream/java.util.concurrent 常用类和方法 |
+| B | MySQL 命令速查 | DDL/DML/查询/索引/事务/用户管理常用命令 |
+| C | Redis 命令速查 | String/Hash/List/Set/Sorted Set + 通用命令 + Spring Data Redis 集成 |
+| D | Docker 命令速查 | 镜像/容器/docker-compose/网络/卷常用命令 + Java 多阶段构建示例 |
+| E | Git 命令速查 | clone/commit/push/pull/分支/撤销/远程操作 + Java .gitignore 模板 |
+| F | 技术术语速查 | 148 个术语，分8类：计算机底层/Java核心/Spring生态/数据库/网络/架构/测试/编程通识 |
+
+---
+
+> **总计：10篇 124章 + 1插章（70a） + 6附录 + 7可视化HTML，覆盖从零基础到高级 Java 后端工程师的全部知识体系。**

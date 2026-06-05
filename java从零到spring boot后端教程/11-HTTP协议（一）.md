@@ -157,7 +157,7 @@ public class HttpDemo {
 }
 ```
 
-> 💡 `jsonplaceholder.typicode.com` 是一个免费的假数据API，专门用来测试HTTP请求。学第17章RestTemplate时会再次遇到它。
+> 💡 `jsonplaceholder.typicode.com` 是一个免费的假数据API，专门用来测试HTTP请求。学第72章Spring Boot入门时会再次遇到它——那时你将不用笨重的HttpURLConnection，而是用更优雅的方式发送请求。
 
 ## 11.5 HTTP与Spring Boot的对应关系
 

@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MySQL 锁机制：锁类型关系图与死锁等待图 — 可视化</title>
+<!-- 依赖：无外部CDN，完全自包含 -->
+<style>
+:root {
+  --bg: #ffffff; --text: #1a1a1a; --panel-bg: #f8f9fa; --border: #dee2e6;
+  --lock-global: #e74c3c; --lock-global-bg: #fdecea;
+  --lock-table: #f39c12; --lock-table-bg: #fef9e7;
+  --lock-row: #3498db; --lock-row-bg: #eaf2f8;
+  --lock-gap: #27ae60; --lock-gap-bg: #eafaf1;
+  --lock-nk: #8e44ad; --lock-nk-bg: #f4ecf7;
+  --tx-a: #e74c3c; --tx-b: #3498db;
+  --arrow: #888; --btn-bg: #4a90d9; --btn-text: #fff;
+  --highlight: #e74c3c; --highlight-bg: #fdecea;
+}
+[data-theme="dark"] {
+  --bg: #1e1e2e; --text: #cdd6f4; --panel-bg: #181825; --border: #45475a;
+  --lock-global: #f38ba8; --lock-global-bg: #3a202a;
+  --lock-table: #f9e2af; --lock-table-bg: #3e3020;
+  --lock-row: #89b4fa; --lock-row-bg: #313244;
+  --lock-gap: #a6e3a1; --lock-gap-bg: #1e3a2f;
+  --lock-nk: #cba6f7; --lock-nk-bg: #2e2040;
+  --tx-a: #f38ba8; --tx-b: #89b4fa;
+  --arrow: #a6adc8; --btn-bg: #89b4fa; --btn-text: #1e1e2e;
+  --highlight: #f38ba8; --highlight-bg: #3a202a;
+}
+* { box-sizing: border-box; }
+body { font-family: -apple-system, 'Segoe UI', 'Noto Sans SC', sans-serif; margin: 0; padding: 20px; background: var(--bg); color: var(--text); transition: all 0.3s; }
+h1 { font-size: 1.5em; margin: 0 0 4px; }
+.subtitle { color: var(--arrow); font-size: 0.85em; margin-bottom: 15px; }
+.controls { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 15px; align-items: center; }
+.controls button { padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9em; background: var(--btn-bg); color: var(--btn-text); transition: opacity 0.2s; }
+.controls button:hover { opacity: 0.85; }
+.controls button:disabled { opacity: 0.4; cursor: not-allowed; }
+.controls .step-label { font-size: 0.9em; color: var(--arrow); margin-left: 8px; }
+.tab-bar { display: flex; gap: 0; margin-bottom: 15px; }
+.tab-btn { padding: 8px 20px; border: 1px solid var(--border); background: var(--panel-bg); color: var(--text); cursor: pointer; font-size: 0.9em; border-radius: 6px 6px 0 0; margin-right: -1px; }
+.tab-btn.active { background: var(--btn-bg); color: var(--btn-text); border-color: var(--btn-bg); }
+.main-area { display: flex; gap: 20px; flex-wrap: wrap; }
+.vis-panel { flex: 2; min-width: 400px; }
+.info-panel { flex: 1; min-width: 280px; background: var(--panel-bg); border-radius: 8px; padding: 15px; border: 1px solid var(--border); }
+.info-panel h3 { margin: 0 0 10px; font-size: 1em; }
+.info-panel p { font-size: 0.9em; line-height: 1.6; margin: 6px 0; }
+svg { width: 100%; height: auto; }
+footer { margin-top: 20px; font-size: 0.75em; color: var(--arrow); text-align: center; }
+footer a { color: var(--btn-bg); }
+</style>
+</head>
+<body data-theme="light">
+
+<h1>🔒 MySQL 锁机制：锁类型关系图与死锁等待图</h1>
+<div class="subtitle">本可视化对应 <a href="23-锁机制.md">23-锁机制</a>，数据基于 database_mastery_detailed_outline.md v2</div>
+
+<div class="controls">
+  <button id="btnPrev" onclick="prevStep()" disabled>◀ 上一步</button>
+  <button id="btnNext" onclick="nextStep()">下一步 ▶</button>
+  <button id="btnReset" onclick="resetSteps()">↺ 重置</button>
+  <button id="btnAuto" onclick="toggleAuto()">▶ 自动播放</button>
+  <button class="toggle-btn" onclick="toggleTheme()" style="background:var(--panel-bg);color:var(--text);border:1px solid var(--border);">🌓 切换暗色/亮色</button>
+  <span class="step-label" id="stepLabel">步骤 1/6</span>
+</div>
+
+<div class="tab-bar">
+  <button class="tab-btn active" onclick="switchTab('types')">锁类型关系图</button>
+  <button class="tab-btn" onclick="switchTab('deadlock')">死锁等待图</button>
+</div>
+
+<div class="main-area">
+  <div class="vis-panel" id="visPanel">
+    <svg id="mainSvg" viewBox="0 0 700 500" xmlns="http://www.w3.org/2000/svg"></svg>
+  </div>
+  <div class="info-panel" id="infoPanel">
+    <h3>📖 当前说明</h3>
+    <p id="stepDesc">点击"下一步"开始演示。</p>
+  </div>
+</div>
+
+<footer>
+  数据来源：database_mastery_detailed_outline.md v2 · 可离线运行 · 支持暗色/亮色模式
+</footer>
+
+<script>
+let currentTab = 'types';
+let currentStep = 0;
+let autoTimer = null;
+const theme = document.body.getAttribute('data-theme');
+
+// ========== 锁类型关系图步骤 ==========
+const typeSteps = [
+  {
+    title: "全局锁（FTWRL）",
+    desc: "全局锁（Flash Tables With Read Lock）锁住整个数据库实例，所有表变成只读。粒度最大，并发性能最差。一般只在全库备份时使用（InnoDB 可用 mysqldump --single-transaction 替代）。",
+    highlight: ["global"],
+    draw: drawTypeGlobal
+  },
+  {
+    title: "表级锁：MDL + 表锁",
+    desc: "表级锁分两种：<strong>MDL（元数据锁）</strong>是 MySQL 自动加的，执行 SELECT 加 MDL 读锁，ALTER TABLE 加 MDL 写锁。<strong>表锁</strong>是手动加的（LOCK TABLES）。粒度比全局锁小，但一张表上的所有操作都会受影响。",
+    highlight: ["table"],
+    draw: drawTypeTable
+  },
+  {
+    title: "行级锁：记录锁（Record Lock）",
+    desc: "行级锁是 InnoDB 的看家本领。记录锁直接锁住索引中的一条记录，粒度最小，并发性能最好。<code>SELECT ... FOR UPDATE</code> 就是加记录锁。注意：WHERE 条件没有命中索引时，会退化为锁定所有行（表锁效果）。",
+    highlight: ["record"],
+    draw: drawTypeRecord
+  },
+  {
+    title: "间隙锁（Gap Lock）",
+    desc: "间隙锁是 InnoDB 特有的锁，锁住索引记录之间的间隙，防止别人插入新数据。这是 InnoDB 在 REPEATABLE READ 下解决幻读的关键武器。只在 REPEATABLE READ 及以上级别生效。",
+    highlight: ["gap"],
+    draw: drawTypeGap
+  },
+  {
+    title: "临键锁（Next-Key Lock）：记录锁 + 间隙锁",
+    desc: "临键锁 = 记录锁 + 间隙锁，是 InnoDB 的默认行锁。锁住一行数据，同时锁住它前面的间隙。这确保了 REPEATABLE READ 下不会出现幻读——既不能修改已有数据，也不能插入新数据到间隙中。",
+    highlight: ["nk"],
+    draw: drawTypeNK
+  },
+  {
+    title: "完整锁体系一览",
+    desc: "锁的粒度从大到小：全局锁 → 表锁（MDL + 表锁）→ 行锁（记录锁 + 间隙锁 = 临键锁）。<strong>粒度越小，并发性能越好，但实现越复杂。</strong>InnoDB 支持行级锁，所以比 MyISAM 的并发能力强得多。",
+    highlight: ["global", "table", "record", "gap", "nk"],
+    draw: drawTypeAll
+  }
+];
+
+// ========== 死锁图步骤 ==========
+const deadlockSteps = [
+  {
+    title: "正常状态",
+    desc: "事务 A 和事务 B 各自开始，还没有加锁。",
+    highlight: [],
+    draw: drawDeadlockInit
+  },
+  {
+    title: "事务 A 锁住 id=1",
+    desc: "事务 A 执行 <code>SELECT ... FOR UPDATE WHERE id=1</code>，获得了 id=1 的排他锁（X 锁）。",
+    highlight: ["a-hold-1"],
+    draw: drawDeadlockAHold1
+  },
+  {
+    title: "事务 B 锁住 id=2",
+    desc: "事务 B 执行 <code>SELECT ... FOR UPDATE WHERE id=2</code>，获得了 id=2 的排他锁（X 锁）。",
+    highlight: ["a-hold-1", "b-hold-2"],
+    draw: drawDeadlockBHold2
+  },
+  {
+    title: "事务 A 等待 id=2 → 事务 B 等待 id=1 → 死锁！",
+    desc: "事务 A 想锁 id=2（但被 B 锁住了），事务 B 想锁 id=1（但被 A 锁住了）。<strong>形成循环等待</strong>：A 等 B 释放 id=2，B 等 A 释放 id=1。MySQL 检测到死锁，自动回滚其中一个事务。",
+    highlight: ["a-wait-2", "b-wait-1"],
+    draw: drawDeadlockFull
+  },
+  {
+    title: "死锁解决：回滚事务 B",
+    desc: "MySQL 选择了回滚事务 B（通常回滚代价较小的那个）。事务 A 获得了 id=2 的锁，继续执行。事务 B 收到错误 <code>ERROR 1213: Deadlock found</code>，需要重试。",
+    highlight: ["a-hold-1", "a-hold-2"],
+    draw: drawDeadlockResolved
+  },
+  {
+    title: "预防方法：按相同顺序加锁",
+    desc: "如果所有事务都按相同的顺序加锁（比如都先锁 id=1，再锁 id=2），就不会形成循环等待，从根源上避免死锁。",
+    highlight: ["order"],
+    draw: drawDeadlockPrevent
+  }
+];
+
+// ========== 绘制函数 ==========
+
+function getColors() {
+  const isDark = document.body.getAttribute('data-theme') === 'dark';
+  return {
+    global: isDark ? '#f38ba8' : '#e74c3c',
+    table: isDark ? '#f9e2af' : '#f39c12',
+    record: isDark ? '#89b4fa' : '#3498db',
+    gap: isDark ? '#a6e3a1' : '#27ae60',
+    nk: isDark ? '#cba6f7' : '#8e44ad',
+    txA: isDark ? '#f38ba8' : '#e74c3c',
+    txB: isDark ? '#89b4fa' : '#3498db',
+    text: isDark ? '#cdd6f4' : '#1a1a1a',
+    dim: isDark ? '#a6adc8' : '#999',
+    bg: isDark ? '#1e1e2e' : '#ffffff',
+  };
+}
+
+function drawTypeGlobal(svg) {
+  const c = getColors();
+  svg.innerHTML = `
+    <text x="350" y="30" text-anchor="middle" font-size="16" fill="${c.text}" font-weight="bold">锁类型层级关系图</text>
+    <rect x="200" y="60" width="300" height="60" rx="10" fill="${c.global}20" stroke="${c.global}" stroke-width="3" opacity="1"/>
+    <text x="350" y="85" text-anchor="middle" font-size="14" fill="${c.global}" font-weight="bold">🔒 全局锁（FTWRL）</text>
+    <text x="350" y="105" text-anchor="middle" font-size="11" fill="${c.dim}">整个数据库只读</text>
+    <text x="350" y="140" text-anchor="middle" font-size="20" fill="${c.dim}">↓</text>
+    <rect x="200" y="160" width="300" height="60" rx="10" fill="${c.table}20" stroke="${c.dim}" stroke-width="2" opacity="0.4"/>
+    <text x="350" y="185" text-anchor="middle" font-size="14" fill="${c.dim}" opacity="0.4">表级锁（MDL + 表锁）</text>
+    <text x="350" y="205" text-anchor="middle" font-size="11" fill="${c.dim}" opacity="0.4">锁住整张表</text>
+    <text x="350" y="240" text-anchor="middle" font-size="20" fill="${c.dim}" opacity="0.4">↓</text>
+    <rect x="200" y="260" width="300" height="60" rx="10" fill="${c.record}20" stroke="${c.dim}" stroke-width="2" opacity="0.4"/>
+    <text x="350" y="285" text-anchor="middle" font-size="14" fill="${c.dim}" opacity="0.4">行级锁（InnoDB 专属）</text>
+    <text x="350" y="305" text-anchor="middle" font-size="11" fill="${c.dim}" opacity="0.4">锁住单行或间隙</text>
+    <text x="350" y="450" text-anchor="middle" font-size="12" fill="${c.dim}">全局锁粒度最大，并发性能最差</text>
+  `;
+}
+
+function drawTypeTable(svg) {
+  const c = getColors();
+  svg.innerHTML = `
+    <text x="350" y="30" text-anchor="middle" font-size="16" fill="${c.text}" font-weight="bold">锁类型层级关系图</text>
+    <rect x="200" y="60" width="300" height="60" rx="10" fill="${c.global}20" stroke="${c.global}" stroke-width="2" opacity="0.5"/>
+    <text x="350" y="85" text-anchor="middle" font-size="14" fill="${c.global}" opacity="0.5">🔒 全局锁（FTWRL）</text>
+    <text x="350" y="105" text-anchor="middle" font-size="11" fill="${c.dim}" opacity="0.5">整个数据库只读</text>
+    <text x="350" y="140" text-anchor="middle" font-size="20" fill="${c.dim}">↓</text>
+    <rect x="200" y="160" width="300" height="60" rx="10" fill="${c.table}20" stroke="${c.table}" stroke-width="3"/>
+    <text x="350" y="185" text-anchor="middle" font-size="14" fill="${c.table}" font-weight="bold">🔒 表级锁（MDL + 表锁）</text>
+    <text x="350" y="205" text-anchor="middle" font-size="11" fill="${c.dim}">锁住整张表</text>
+    <text x="350" y="240" text-anchor="middle" font-size="20" fill="${c.dim}" opacity="0.4">↓</text>
+    <rect x="200" y="260" width="300" height="60" rx="10" fill="${c.record}20" stroke="${c.dim}" stroke-width="2" opacity="0.4"/>
+    <text x="350" y="285" text-anchor="middle" font-size="14" fill="${c.dim}" opacity="0.4">行级锁（InnoDB 专属）</text>
+    <text x="350" y="305" text-anchor="middle" font-size="11" fill="${c.dim}" opacity="0.4">锁住单行或间隙</text>
+    <text x="350" y="450" text-anchor="middle" font-size="12" fill="${c.dim}">表级锁包含 MDL 和手动表锁，粒度居中</text>
+  `;
+}
+
+function drawTypeRecord(svg) {
+  const c = getColors();
+  svg.innerHTML = `
+    <text x="350" y="30" text-anchor="middle" font-size="16" fill="${c.text}" font-weight="bold">锁类型层级关系图</text>
+    <rect x="200" y="60" width="300" height="45" rx="10" fill="${c.global}20" stroke="${c.global}" stroke-width="1.5" opacity="0.35"/>
+    <text x="350" y="88" text-anchor="middle" font-size="13" fill="${c.global}" opacity="0.35">🔒 全局锁</text>
+    <text x="350" y="120" text-anchor="middle" font-size="16" fill="${c.dim}">↓</text>
+    <rect x="200" y="140" width="300" height="45" rx="10" fill="${c.table}20" stroke="${c.table}" stroke-width="1.5" opacity="0.35"/>
+    <text x="350" y="168" text-anchor="middle" font-size="13" fill="${c.table}" opacity="0.35">🔒 表级锁</text>
+    <text x="350" y="200" text-anchor="middle" font-size="16" fill="${c.dim}">↓</text>
+    <rect x="150" y="220" width="400" height="140" rx="10" fill="${c.record}10" stroke="${c.record}" stroke-width="2"/>
+    <text x="350" y="248" text-anchor="middle" font-size="14" fill="${c.record}" font-weight="bold">🔒 行级锁（InnoDB 专属）</text>
+    <rect x="180" y="265" width="150" height="60" rx="8" fill="${c.record}20" stroke="${c.record}" stroke-width="3"/>
+    <text x="255" y="295" text-anchor="middle" font-size="13" fill="${c.record}" font-weight="bold">记录锁</text>
+    <text x="255" y="315" text-anchor="middle" font-size="10" fill="${c.dim}">锁住单行索引记录</text>
+    <rect x="370" y="265" width="150" height="60" rx="8" fill="${c.gap}20" stroke="${c.dim}" stroke-width="1.5" opacity="0.4"/>
+    <text x="445" y="295" text-anchor="middle" font-size="13" fill="${c.dim}" opacity="0.4">间隙锁</text>
+    <text x="445" y="315" text-anchor="middle" font-size="10" fill="${c.dim}" opacity="0.4">锁住索引间隙</text>
+    <text x="350" y="450" text-anchor="middle" font-size="12" fill="${c.dim}">记录锁是最基本的行锁，锁住一条索引记录</text>
+  `;
+}
+
+function drawTypeGap(svg) {
+  const c = getColors();
+  svg.innerHTML = `
+    <text x="350" y="30" text-anchor="middle" font-size="16" fill="${c.text}" font-weight="bold">锁类型层级关系图</text>
+    <rect x="200" y="60" width="300" height="45" rx="10" fill="${c.global}20" stroke="${c.global}" stroke-width="1.5" opacity="0.35"/>
+    <text x="350" y="88" text-anchor="middle" font-size="13" fill="${c.global}" opacity="0.35">🔒 全局锁</text>
+    <text x="350" y="120" text-anchor="middle" font-size="16" fill="${c.dim}">↓</text>
+    <rect x="200" y="140" width="300" height="45" rx="10" fill="${c.table}20" stroke="${c.table}" stroke-width="1.5" opacity="0.35"/>
+    <text x="350" y="168" text-anchor="middle" font-size="13" fill="${c.table}" opacity="0.35">🔒 表级锁</text>
+    <text x="350" y="200" text-anchor="middle" font-size="16" fill="${c.dim}">↓</text>
+    <rect x="150" y="220" width="400" height="140" rx="10" fill="${c.record}10" stroke="${c.record}" stroke-width="2"/>
+    <text x="350" y="248" text-anchor="middle" font-size="14" fill="${c.record}" font-weight="bold">🔒 行级锁（InnoDB 专属）</text>
+    <rect x="180" y="265" width="150" height="60" rx="8" fill="${c.record}20" stroke="${c.record}" stroke-width="2" opacity="0.5"/>
+    <text x="255" y="295" text-anchor="middle" font-size="13" fill="${c.record}" opacity="0.5">记录锁</text>
+    <text x="255" y="315" text-anchor="middle" font-size="10" fill="${c.dim}" opacity="0.5">锁住单行</text>
+    <rect x="370" y="265" width="150" height="60" rx="8" fill="${c.gap}20" stroke="${c.gap}" stroke-width="3"/>
+    <text x="445" y="295" text-anchor="middle" font-size="13" fill="${c.gap}" font-weight="bold">间隙锁</text>
+    <text x="445" y="315" text-anchor="middle" font-size="10" fill="${c.dim}">锁住索引间隙</text>
+    <text x="350" y="450" text-anchor="middle" font-size="12" fill="${c.dim}">间隙锁防止插入，是解决幻读的关键</text>
+  `;
+}
+
+function drawTypeNK(svg) {
+  const c = getColors();
+  svg.innerHTML = `
+    <text x="350" y="30" text-anchor="middle" font-size="16" fill="${c.text}" font-weight="bold">锁类型层级关系图</text>
+    <rect x="200" y="60" width="300" height="45" rx="10" fill="${c.global}20" stroke="${c.global}" stroke-width="1.5" opacity="0.35"/>
+    <text x="350" y="88" text-anchor="middle" font-size="13" fill="${c.global}" opacity="0.35">🔒 全局锁</text>
+    <text x="350" y="120" text-anchor="middle" font-size="16" fill="${c.dim}">↓</text>
+    <rect x="200" y="140" width="300" height="45" rx="10" fill="${c.table}20" stroke="${c.table}" stroke-width="1.5" opacity="0.35"/>
+    <text x="350" y="168" text-anchor="middle" font-size="13" fill="${c.table}" opacity="0.35">🔒 表级锁</text>
+    <text x="350" y="200" text-anchor="middle" font-size="16" fill="${c.dim}">↓</text>
+    <rect x="150" y="220" width="400" height="140" rx="10" fill="${c.record}10" stroke="${c.record}" stroke-width="2"/>
+    <text x="350" y="248" text-anchor="middle" font-size="14" fill="${c.record}" font-weight="bold">🔒 行级锁（InnoDB 专属）</text>
+    <rect x="180" y="265" width="150" height="60" rx="8" fill="${c.record}20" stroke="${c.record}" stroke-width="2" opacity="0.5"/>
+    <text x="255" y="295" text-anchor="middle" font-size="13" fill="${c.record}" opacity="0.5">记录锁</text>
+    <rect x="370" y="265" width="150" height="60" rx="8" fill="${c.gap}20" stroke="${c.gap}" stroke-width="2" opacity="0.5"/>
+    <text x="445" y="295" text-anchor="middle" font-size="13" fill="${c.gap}" opacity="0.5">间隙锁</text>
+    <rect x="230" y="340" width="240" height="50" rx="8" fill="${c.nk}20" stroke="${c.nk}" stroke-width="3"/>
+    <text x="350" y="365" text-anchor="middle" font-size="14" fill="${c.nk}" font-weight="bold">🔒 临键锁 = 记录锁 + 间隙锁</text>
+    <text x="350" y="385" text-anchor="middle" font-size="10" fill="${c.dim}">InnoDB 默认行锁</text>
+    <text x="350" y="450" text-anchor="middle" font-size="12" fill="${c.dim}">临键锁 = 记录锁 + 间隙锁，确保 REPEATABLE READ 无幻读</text>
+  `;
+}
+
+function drawTypeAll(svg) {
+  drawTypeNK(svg);
+}
+
+// ========== 死锁图绘制 ==========
+function drawDeadlockInit(svg) {
+  const c = getColors();
+  svg.innerHTML = `
+    <text x="350" y="30" text-anchor="middle" font-size="16" fill="${c.text}" font-weight="bold">死锁等待图</text>
+    <circle cx="180" cy="200" r="45" fill="${c.txA}20" stroke="${c.txA}" stroke-width="2"/>
+    <text x="180" y="195" text-anchor="middle" font-size="14" fill="${c.txA}" font-weight="bold">事务 A</text>
+    <text x="180" y="215" text-anchor="middle" font-size="11" fill="${c.dim}">空闲</text>
+    <circle cx="520" cy="200" r="45" fill="${c.txB}20" stroke="${c.txB}" stroke-width="2"/>
+    <text x="520" y="195" text-anchor="middle" font-size="14" fill="${c.txB}" font-weight="bold">事务 B</text>
+    <text x="520" y="215" text-anchor="middle" font-size="11" fill="${c.dim}">空闲</text>
+    <rect x="270" y="320" width="70" height="35" rx="6" fill="${c.record}20" stroke="${c.dim}" stroke-width="1.5" opacity="0.4"/>
+    <text x="305" y="343" text-anchor="middle" font-size="12" fill="${c.dim}" opacity="0.4">id=1</text>
+    <rect x="370" y="320" width="70" height="35" rx="6" fill="${c.record}20" stroke="${c.dim}" stroke-width="1.5" opacity="0.4"/>
+    <text x="405" y="343" text-anchor="middle" font-size="12" fill="${c.dim}" opacity="0.4">id=2</text>
+    <text x="350" y="450" text-anchor="middle" font-size="12" fill="${c.dim}">两个事务都还没有加锁</text>
+  `;
+}
+
+function drawDeadlockAHold1(svg) {
+  const c = getColors();
+  svg.innerHTML = `
+    <text x="350" y="30" text-anchor="middle" font-size="16" fill="${c.text}" font-weight="bold">死锁等待图</text>
+    <circle cx="180" cy="200" r="45" fill="${c.txA}20" stroke="${c.txA}" stroke-width="3"/>
+    <text x="180" y="195" text-anchor="middle" font-size="14" fill="${c.txA}" font-weight="bold">事务 A</text>
+    <text x="180" y="215" text-anchor="middle" font-size="11" fill="${c.dim}">持有 id=1</text>
+    <circle cx="520" cy="200" r="45" fill="${c.txB}20" stroke="${c.txB}" stroke-width="2"/>
+    <text x="520" y="195" text-anchor="middle" font-size="14" fill="${c.txB}" font-weight="bold">事务 B</text>
+    <text x="520" y="215" text-anchor="middle" font-size="11" fill="${c.dim}">空闲</text>
+    <rect x="270" y="320" width="70" height="35" rx="6" fill="${c.txA}20" stroke="${c.txA}" stroke-width="2"/>
+    <text x="305" y="343" text-anchor="middle" font-size="12" fill="${c.txA}">id=1 🔒</text>
+    <rect x="370" y="320" width="70" height="35" rx="6" fill="${c.record}20" stroke="${c.dim}" stroke-width="1.5" opacity="0.4"/>
+    <text x="405" y="343" text-anchor="middle" font-size="12" fill="${c.dim}" opacity="0.4">id=2</text>
+    <line x1="180" y1="245" x2="290" y2="320" stroke="${c.txA}" stroke-width="2" marker-end="url(#arrowA)"/>
+    <defs><marker id="arrowA" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="${c.txA}"/></marker></defs>
+    <text x="350" y="450" text-anchor="middle" font-size="12" fill="${c.dim}">事务 A 获得了 id=1 的排他锁</text>
+  `;
+}
+
+function drawDeadlockBHold2(svg) {
+  const c = getColors();
+  svg.innerHTML = `
+    <text x="350" y="30" text-anchor="middle" font-size="16" fill="${c.text}" font-weight="bold">死锁等待图</text>
+    <circle cx="180" cy="200" r="45" fill="${c.txA}20" stroke="${c.txA}" stroke-width="3"/>
+    <text x="180" y="195" text-anchor="middle" font-size="14" fill="${c.txA}" font-weight="bold">事务 A</text>
+    <text x="180" y="215" text-anchor="middle" font-size="11" fill="${c.dim}">持有 id=1</text>
+    <circle cx="520" cy="200" r="45" fill="${c.txB}20" stroke="${c.txB}" stroke-width="3"/>
+    <text x="520" y="195" text-anchor="middle" font-size="14" fill="${c.txB}" font-weight="bold">事务 B</text>
+    <text x="520" y="215" text-anchor="middle" font-size="11" fill="${c.dim}">持有 id=2</text>
+    <rect x="270" y="320" width="70" height="35" rx="6" fill="${c.txA}20" stroke="${c.txA}" stroke-width="2"/>
+    <text x="305" y="343" text-anchor="middle" font-size="12" fill="${c.txA}">id=1 🔒</text>
+    <rect x="370" y="320" width="70" height="35" rx="6" fill="${c.txB}20" stroke="${c.txB}" stroke-width="2"/>
+    <text x="405" y="343" text-anchor="middle" font-size="12" fill="${c.txB}">id=2 🔒</text>
+    <line x1="180" y1="245" x2="290" y2="320" stroke="${c.txA}" stroke-width="2"/>
+    <line x1="520" y1="245" x2="410" y2="320" stroke="${c.txB}" stroke-width="2"/>
+    <text x="350" y="450" text-anchor="middle" font-size="12" fill="${c.dim}">事务 A 持有 id=1，事务 B 持有 id=2</text>
+  `;
+}
+
+function drawDeadlockFull(svg) {
+  const c = getColors();
+  svg.innerHTML = `
+    <text x="350" y="30" text-anchor="middle" font-size="16" fill="${c.text}" font-weight="bold">死锁等待图 — 循环等待！</text>
+    <circle cx="180" cy="200" r="45" fill="${c.txA}20" stroke="${c.txA}" stroke-width="3"/>
+    <text x="180" y="195" text-anchor="middle" font-size="14" fill="${c.txA}" font-weight="bold">事务 A</text>
+    <text x="180" y="215" text-anchor="middle" font-size="11" fill="${c.dim}">持有 id=1，等 id=2</text>
+    <circle cx="520" cy="200" r="45" fill="${c.txB}20" stroke="${c.txB}" stroke-width="3"/>
+    <text x="520" y="195" text-anchor="middle" font-size="14" fill="${c.txB}" font-weight="bold">事务 B</text>
+    <text x="520" y="215" text-anchor="middle" font-size="11" fill="${c.dim}">持有 id=2，等 id=1</text>
+    <rect x="270" y="320" width="70" height="35" rx="6" fill="${c.txA}20" stroke="${c.txA}" stroke-width="2"/>
+    <text x="305" y="343" text-anchor="middle" font-size="12" fill="${c.txA}">id=1 🔒</text>
+    <rect x="370" y="320" width="70" height="35" rx="6" fill="${c.txB}20" stroke="${c.txB}" stroke-width="2"/>
+    <text x="405" y="343" text-anchor="middle" font-size="12" fill="${c.txB}">id=2 🔒</text>
+    <line x1="180" y1="245" x2="290" y2="320" stroke="${c.txA}" stroke-width="2"/>
+    <line x1="520" y1="245" x2="410" y2="320" stroke="${c.txB}" stroke-width="2"/>
+    <line x1="180" y1="200" x2="410" y2="340" stroke="#ff4444" stroke-width="2.5" stroke-dasharray="6,3" marker-end="url(#arrowX)"/>
+    <line x1="520" y1="200" x2="290" y2="340" stroke="#ff4444" stroke-width="2.5" stroke-dasharray="6,3" marker-end="url(#arrowX)"/>
+    <defs><marker id="arrowX" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#ff4444"/></marker></defs>
+    <text x="350" y="420" text-anchor="middle" font-size="14" fill="#ff4444" font-weight="bold">⚠️ 循环等待 → 死锁！</text>
+    <text x="350" y="440" text-anchor="middle" font-size="11" fill="${c.dim}">A 等 B 释放 id=2，B 等 A 释放 id=1</text>
+  `;
+}
+
+function drawDeadlockResolved(svg) {
+  const c = getColors();
+  svg.innerHTML = `
+    <text x="350" y="30" text-anchor="middle" font-size="16" fill="${c.text}" font-weight="bold">死锁解决：回滚事务 B</text>
+    <circle cx="180" cy="200" r="45" fill="${c.txA}20" stroke="${c.txA}" stroke-width="3"/>
+    <text x="180" y="195" text-anchor="middle" font-size="14" fill="${c.txA}" font-weight="bold">✅ 事务 A</text>
+    <text x="180" y="215" text-anchor="middle" font-size="11" fill="${c.dim}">持有 id=1, id=2</text>
+    <circle cx="520" cy="200" r="45" fill="${c.txB}20" stroke="${c.dim}" stroke-width="2" opacity="0.4"/>
+    <text x="520" y="195" text-anchor="middle" font-size="14" fill="${c.dim}" opacity="0.4">❌ 事务 B</text>
+    <text x="520" y="215" text-anchor="middle" font-size="11" fill="${c.dim}" opacity="0.4">被回滚</text>
+    <rect x="270" y="320" width="70" height="35" rx="6" fill="${c.txA}20" stroke="${c.txA}" stroke-width="2"/>
+    <text x="305" y="343" text-anchor="middle" font-size="12" fill="${c.txA}">id=1 🔒</text>
+    <rect x="370" y="320" width="70" height="35" rx="6" fill="${c.txA}20" stroke="${c.txA}" stroke-width="2"/>
+    <text x="405" y="343" text-anchor="middle" font-size="12" fill="${c.txA}">id=2 🔒</text>
+    <line x1="180" y1="245" x2="290" y2="320" stroke="${c.txA}" stroke-width="2"/>
+    <line x1="180" y1="245" x2="400" y2="320" stroke="${c.txA}" stroke-width="2"/>
+    <text x="350" y="430" text-anchor="middle" font-size="14" fill="${c.gap}" font-weight="bold">✅ 死锁已解除</text>
+    <text x="350" y="450" text-anchor="middle" font-size="11" fill="${c.dim}">事务 B 被回滚，事务 A 继续执行</text>
+  `;
+}
+
+function drawDeadlockPrevent(svg) {
+  const c = getColors();
+  svg.innerHTML = `
+    <text x="350" y="30" text-anchor="middle" font-size="16" fill="${c.text}" font-weight="bold">预防死锁：按相同顺序加锁</text>
+    <circle cx="180" cy="160" r="45" fill="${c.txA}20" stroke="${c.txA}" stroke-width="2"/>
+    <text x="180" y="155" text-anchor="middle" font-size="14" fill="${c.txA}" font-weight="bold">事务 A</text>
+    <text x="180" y="175" text-anchor="middle" font-size="11" fill="${c.dim}">先锁 id=1</text>
+    <circle cx="520" cy="160" r="45" fill="${c.txB}20" stroke="${c.txB}" stroke-width="2"/>
+    <text x="520" y="155" text-anchor="middle" font-size="14" fill="${c.txB}" font-weight="bold">事务 B</text>
+    <text x="520" y="175" text-anchor="middle" font-size="11" fill="${c.dim}">先锁 id=1</text>
+    <rect x="265" y="260" width="80" height="35" rx="6" fill="${c.gap}20" stroke="${c.gap}" stroke-width="2"/>
+    <text x="305" y="283" text-anchor="middle" font-size="12" fill="${c.gap}">1. id=1</text>
+    <text x="350" y="310" text-anchor="middle" font-size="20" fill="${c.gap}">↓</text>
+    <rect x="265" y="330" width="80" height="35" rx="6" fill="${c.gap}20" stroke="${c.gap}" stroke-width="2"/>
+    <text x="305" y="353" text-anchor="middle" font-size="12" fill="${c.gap}">2. id=2</text>
+    <line x1="180" y1="205" x2="290" y2="260" stroke="${c.txA}" stroke-width="1.5"/>
+    <line x1="520" y1="205" x2="310" y2="260" stroke="${c.txB}" stroke-width="1.5"/>
+    <text x="350" y="430" text-anchor="middle" font-size="14" fill="${c.gap}" font-weight="bold">✅ 统一加锁顺序 → 不会死锁</text>
+    <text x="350" y="450" text-anchor="middle" font-size="11" fill="${c.dim}">所有事务按相同顺序加锁，避免循环等待</text>
+  `;
+}
+
+// ========== 渲染逻辑 ==========
+function render() {
+  const svg = document.getElementById('mainSvg');
+  const steps = currentTab === 'types' ? typeSteps : deadlockSteps;
+  const s = steps[currentStep];
+  document.getElementById('stepLabel').textContent = `步骤 ${currentStep + 1}/${steps.length}`;
+  document.getElementById('btnPrev').disabled = currentStep === 0;
+  document.getElementById('btnNext').disabled = currentStep === steps.length - 1;
+  document.getElementById('stepDesc').innerHTML = s.desc;
+  s.draw(svg);
+}
+
+function nextStep() {
+  const steps = currentTab === 'types' ? typeSteps : deadlockSteps;
+  if (currentStep < steps.length - 1) { currentStep++; render(); }
+}
+function prevStep() {
+  if (currentStep > 0) { currentStep--; render(); }
+}
+function resetSteps() {
+  currentStep = 0; stopAuto(); render();
+}
+function toggleAuto() {
+  if (autoTimer) { stopAuto(); } else { startAuto(); }
+}
+function startAuto() {
+  document.getElementById('btnAuto').textContent = '⏸ 停止播放';
+  autoTimer = setInterval(() => {
+    const steps = currentTab === 'types' ? typeSteps : deadlockSteps;
+    if (currentStep < steps.length - 1) { currentStep++; render(); }
+    else { stopAuto(); }
+  }, 2000);
+}
+function stopAuto() {
+  clearInterval(autoTimer); autoTimer = null;
+  document.getElementById('btnAuto').textContent = '▶ 自动播放';
+}
+function switchTab(tab) {
+  currentTab = tab; currentStep = 0;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-btn')[tab === 'types' ? 0 : 1].classList.add('active');
+  stopAuto(); render();
+}
+function toggleTheme() {
+  const body = document.body;
+  body.setAttribute('data-theme', body.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+  render();
+}
+
+render();
+</script>
+</body>
+</html>

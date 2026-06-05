@@ -67,7 +67,7 @@
 在浏览器的地址栏（最顶上那个白色长条）里输入：
 
 ```
-https://github.com/tian-nu/test
+https://github.com/<你的用户名>/my-first-project
 ```
 
 然后按键盘上的 **Enter 键**（就是回车键）。页面加载出来后，你看到的是你的仓库首页。这个页面你应该已经很熟悉了——就是我们前面几个步骤一直在用的页面。
@@ -82,7 +82,7 @@ Code   Issues   Pull requests   Actions   Projects   Wiki   Security   Insights 
 
 用你的鼠标（或者触摸板）移动屏幕上的白色小箭头，移动到写着 **"Issues"** 的那个标签上面。然后**按一下鼠标左键**（就是点一下）。
 
-> 如果你找不到这排标签在哪里：把你的视线放在 "tian-nu / test" 这个大字下面大约一厘米的位置。它们就在那里。
+> 如果你找不到这排标签在哪里：把你的视线放在 "<你的用户名> / my-first-project" 这个大字下面大约一厘米的位置。它们就在那里。
 
 **第3步：看 Issues 页面**
 
@@ -192,7 +192,7 @@ Bug 就是程序出了毛病，和你想要的效果不一样。
 过一两秒，页面会跳转到一个新页面。你现在看到的是**你刚创建的 Issue 的详情页**。看浏览器顶部的地址栏——网址应该类似于：
 
 ```
-https://github.com/tian-nu/test/issues/1
+https://github.com/<你的用户名>/my-first-project/issues/1
 ```
 
 看到这个网址，说明你的第一张 Issue 便利贴已经贴上去了！
@@ -235,7 +235,7 @@ https://github.com/tian-nu/test/issues/1
 
 关闭后你会发现：
 - 那个紫色 Open 标签变成了**紫色 Closed 标签**（带一个 ✓ 标志）
-- 页面中间出现一条横幅说 "tian-nu closed this as completed"
+- 页面中间出现一条横幅说 "<你的用户名> closed this as completed"
 - 这张 Issue 默认不在列表里显示了——就像你把便利贴从白板上撕掉了
 
 **重新打开 Issue：**
@@ -374,12 +374,12 @@ Closes #1
 
 **⑤ 合并 PR。**
 
-合并之后，打开浏览器访问 `https://github.com/tian-nu/test/issues/1`。你会看到：
+合并之后，打开浏览器访问 `https://github.com/<你的用户名>/my-first-project/issues/1`。你会看到：
 
 - Issue 状态变成了紫色大标签 **"Closed as completed"**（带 ✓ 标志）
 - 在描述下方，GitHub 自动添加了一条绿色注释：
 
-> `tian-nu closed this as completed in #2 2 minutes ago`
+> `<你的用户名> closed this as completed in #2 2 minutes ago`
 
 - 点击那个蓝色的 **#2** 链接，可以直接跳到对应的 PR
 

@@ -5,6 +5,7 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
-# MkDocs 构建产物
-*/site/
+# MkDocs 构建产物（sync_docs.py 生成的）
+docs/
+site/
 build_log.txt

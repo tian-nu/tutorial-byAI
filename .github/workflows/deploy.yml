@@ -26,16 +26,18 @@ jobs:
           python-version: '3.12'
 
       - name: Install dependencies
-        run: pip install mkdocs mkdocs-material mkdocs-awesome-pages-plugin mkdocs-git-revision-date-localized-plugin mkdocs-minify-plugin
+        run: pip install mkdocs mkdocs-material mkdocs-awesome-pages-plugin mkdocs-minify-plugin
+
+      - name: Sync docs
+        run: python sync_docs.py
 
       - name: Build site
-        working-directory: GO从零到后端教程
         run: mkdocs build
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: GO从零到后端教程/site
+          path: site
 
   deploy:
     environment:

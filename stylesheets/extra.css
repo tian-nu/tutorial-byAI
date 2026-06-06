@@ -252,25 +252,32 @@
    =================================================== */
 
 /* 首页：彻底覆盖 MkDocs 容器约束 */
-.home-page {
+.md-content--home {
+  max-width: none !important;
+  width: 100% !important;
+}
+
+.md-typeset.home-page {
   max-width: none !important;
   margin: 0 !important;
   padding: 0 !important;
 }
 
-/* 首页时隐藏 MkDocs 默认左侧导航和 TOC */
-.md-main__inner:has(.home-page) .md-sidebar--primary,
-.md-main__inner:has(.home-page) .md-sidebar--secondary {
+/* 首页时隐藏 MkDocs 默认侧栏 - :has() 选择器 */
+.md-main__inner:has(.md-content--home) > .md-sidebar {
   display: none !important;
 }
 
-/* 首页时让内容区占满全宽 */
-.md-main__inner:has(.home-page) .md-content {
+.md-main__inner:has(.md-content--home) {
+  max-width: none !important;
+}
+
+.md-main__inner:has(.md-content--home) > .md-content {
   max-width: none !important;
   width: 100% !important;
 }
 
-.md-main__inner:has(.home-page) .md-content__inner {
+.md-main__inner:has(.md-content--home) > .md-content > .md-content__inner {
   max-width: none !important;
   padding: 0 !important;
   margin: 0 !important;
@@ -356,7 +363,9 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 20px;
+  padding: 5px 8px;
+  margin: 0 12px;
+  border-radius: 6px;
   font-size: 0.82rem;
   color: var(--text-2);
   cursor: pointer;
@@ -533,6 +542,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-top: 6px;
 }
 
 .t-tag {

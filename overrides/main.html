@@ -2,11 +2,11 @@
 
 {% block content %}
   {% if page.url == "" or page.url == "/" or page.url == "index.html" %}
-  {# 首页：完全自定义布局，替换 MkDocs 默认内容区 #}
-  <div class="md-content__inner">
-    <div class="home-page">
+  {# 首页：完全自定义布局，不显示 MkDocs 侧栏 #}
+  <div class="md-content md-content--home" data-md-component="content">
+    <article class="md-content__inner md-typeset home-page">
       {{ page.content }}
-    </div>
+    </article>
   </div>
   {% else %}
   {{ super() }}
@@ -31,6 +31,25 @@ document.addEventListener('DOMContentLoaded', function() {
       if (searchInput) searchInput.focus();
     }
   });
+
+  // 首页隐藏 MkDocs 默认侧栏（:has() fallback）
+  var homeContent = document.querySelector('.md-content--home');
+  if (homeContent) {
+    var mainInner = homeContent.closest('.md-main__inner');
+    if (mainInner) {
+      var sidebars = mainInner.querySelectorAll(':scope > .md-sidebar');
+      sidebars.forEach(function(sb) { sb.style.display = 'none'; });
+      mainInner.style.maxWidth = 'none';
+      homeContent.style.maxWidth = 'none';
+      homeContent.style.width = '100%';
+      var inner = homeContent.querySelector('.md-content__inner');
+      if (inner) {
+        inner.style.maxWidth = 'none';
+        inner.style.padding = '0';
+        inner.style.margin = '0';
+      }
+    }
+  }
 });
 </script>
 {% endblock %}

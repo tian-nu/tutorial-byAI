@@ -585,4 +585,4 @@ func handleOrderMessage(msg OrderMessage) {
 > 🚀 下一章：离开RabbitMQ的温柔乡，我们进入Kafka的世界——一个为海量数据而生、每秒百万条消息的"高速公路"。Kafka为什么快？什么是Partition？Consumer Group又是什么？
 
 ---
-[← 上一章：86-RabbitMQ入门.md](86-RabbitMQ入门.md) | [下一章：88-Kafka入门.md →](88-Kafka入门.md)
+[← 上一章：86-RabbitMQ入门.md](86-RabbitMQ入门/) | [下一章：88-Kafka入门.md →](88-Kafka入门/)

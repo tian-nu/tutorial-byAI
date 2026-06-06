@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>幂函数 y = x^α 可视化</title>
+<style>
+:root{--bg:#fff;--text:#1f2937;--card:#f9fafb;--border:#e5e7eb;--green:#059669;--green-light:#10B981;--green-bg:#ECFDF5;--green-dark:#064E3B;--canvas-bg:#fefefe;--grid:#e5e7eb;--axis:#6b7280}
+.dark{--bg:#111827;--text:#e5e7eb;--card:#1f2937;--border:#374151;--canvas-bg:#1a1a2e;--grid:#2d3748;--axis:#9ca3af}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:16px;transition:background .3s,color .3s}
+h1{font-size:1.4rem;color:var(--green-dark);margin-bottom:4px}
+.subtitle{font-size:.85rem;color:var(--axis);margin-bottom:12px}
+.controls{display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:center;margin-bottom:8px}
+.controls label{font-weight:600;font-size:.9rem}
+.controls input[type=range]{width:200px;accent-color:var(--green)}
+.controls span{font-weight:700;color:var(--green);min-width:40px;text-align:center}
+.controls button{padding:6px 16px;border:2px solid var(--green);border-radius:6px;background:var(--green-bg);color:var(--green-dark);cursor:pointer;font-weight:600;font-size:.85rem;transition:all .2s}
+.controls button:hover{background:var(--green);color:#fff}
+.theme-btn{position:absolute;top:12px;right:16px;background:none;border:1px solid var(--border);border-radius:6px;padding:4px 10px;cursor:pointer;font-size:.85rem;color:var(--text)}
+canvas{border:1px solid var(--border);border-radius:8px;background:var(--canvas-bg);max-width:100%;height:auto}
+.props{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:8px;max-width:600px}
+.prop{padding:6px 14px;border-radius:6px;background:var(--green-bg);border:1px solid var(--green-light);font-size:.82rem;font-weight:500}
+.footer{margin-top:auto;padding:12px 0;font-size:.75rem;color:var(--axis);text-align:center}
+</style>
+</head>
+<body>
+<button class="theme-btn" id="themeBtn" title="切换暗色/亮色模式">🌓</button>
+<h1>幂函数 y = x<sup>α</sup> 可视化</h1>
+<p class="subtitle">拖动滑块改变指数 α，观察函数图像变化 | 对应教程 14-幂函数</p>
+<div class="controls">
+  <label for="alpha">α =</label>
+  <input type="range" id="alpha" min="-3" max="5" step="0.1" value="2">
+  <span id="alphaVal">2.0</span>
+  <button id="playBtn">▶ 播放</button>
+</div>
+<canvas id="canvas" width="600" height="500"></canvas>
+<div class="props" id="props"></div>
+<div class="footer">数据来源：基于人教版高中数学必修第一册（2019版）</div>
+
+<script>
+(function(){
+const canvas=document.getElementById('canvas'),ctx=canvas.getContext('2d');
+const W=600,H=500,margin=40,midX=W/2,midY=H/2,scale=45;
+let alpha=2,animId=null,animDir=1;
+
+function toX(px){return(px-midX)/scale}
+function toY(py){return(midY-py)/scale}
+function toPx(x){return midX+x*scale}
+function toPy(y){return midY-y*scale}
+
+function getDomain(){
+  if(Number.isInteger(alpha)||alpha>=0)return[-5,5];
+  if(alpha>0)return[0,5];
+  return[0.01,5];
+}
+
+function f(x){
+  if(x<=0&&!Number.isInteger(alpha)&&alpha<4)return NaN;
+  if(x===0&&alpha<=0)return NaN;
+  return Math.pow(x,alpha);
+}
+
+function drawGrid(){
+  ctx.strokeStyle=getComputedStyle(document.body).getPropertyValue('--grid').trim()||'#e5e7eb';
+  ctx.lineWidth=.5;
+  for(let i=-5;i<=5;i++){
+    ctx.beginPath();ctx.moveTo(margin,toPy(i));ctx.lineTo(W-margin,toPy(i));ctx.stroke();
+    ctx.beginPath();ctx.moveTo(toPx(i),margin);ctx.lineTo(toPx(i),H-margin);ctx.stroke();
+  }
+  ctx.strokeStyle=getComputedStyle(document.body).getPropertyValue('--axis').trim()||'#6b7280';
+  ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.moveTo(margin,midY);ctx.lineTo(W-margin,midY);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(midX,margin);ctx.lineTo(midX,H-margin);ctx.stroke();
+  ctx.fillStyle=getComputedStyle(document.body).getPropertyValue('--axis').trim()||'#6b7280';
+  ctx.font='11px sans-serif';ctx.textAlign='center';
+  for(let i=-5;i<=5;i++){if(i!==0){ctx.fillText(i,toPx(i),midY+14);ctx.fillText(i,midX-14,toPy(i)+4)}}
+  ctx.fillText('O',midX-10,midY+14);ctx.fillText('x',W-margin-6,midY+14);ctx.fillText('y',midX-14,margin+10);
+}
+
+function drawCurve(color,style,dash){
+  ctx.strokeStyle=color;ctx.lineWidth=2.5;
+  if(style)ctx.setLineDash(style);
+  else ctx.setLineDash([]);
+  ctx.beginPath();
+  let started=false;
+  const [xMin,xMax]=getDomain();
+  for(let px=margin;px<=W-margin;px++){
+    const x=toX(px);
+    if(x<xMin||x>xMax)continue;
+    const y=f(x);
+    if(isNaN(y)||!isFinite(y)){started=false;continue}
+    const py=toPy(y);
+    if(py<margin-50||py>H-margin+50){started=false;continue}
+    if(!started){ctx.moveTo(px,py);started=true}
+    else ctx.lineTo(px,py);
+  }
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+function drawPoint(x,y,color,label){
+  const px=toPx(x),py=toPy(y);
+  ctx.fillStyle=color;ctx.beginPath();ctx.arc(px,py,5,0,Math.PI*2);ctx.fill();
+  ctx.strokeStyle=color;ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(px,py,5,0,Math.PI*2);ctx.stroke();
+  ctx.fillStyle=color;ctx.font='bold 12px sans-serif';
+  const offsetX=px>midX?-40:8,offsetY=py<midY?18:-8;
+  ctx.fillText(label,px+offsetX,py+offsetY);
+}
+
+function getParity(){
+  if(!Number.isInteger(alpha))return '非奇非偶';
+  if(Math.abs(alpha%2)<0.001)return '偶函数';
+  return '奇函数';
+}
+
+function getMonotonicity(){
+  if(alpha>0)return '在 [0,+∞) 上单调递增';
+  if(alpha<0)return '在 (0,+∞) 上单调递减';
+  return '常数函数';
+}
+
+function update(){
+  const cs=getComputedStyle(document.body);
+  const green=cs.getPropertyValue('--green').trim()||'#059669';
+  const red='#EF4444';
+  ctx.clearRect(0,0,W,H);
+  drawGrid();
+  drawCurve(green);
+  const y1=f(1);
+  if(isFinite(y1))drawPoint(1,y1,red,`(1, ${y1.toFixed(1)})`);
+  document.getElementById('alphaVal').textContent=alpha.toFixed(1);
+
+  const domain=alpha<0?'(-∞,0)∪(0,+∞)':'R';
+  const range=alpha===0?'{1}':(alpha>0&&Number.isInteger(alpha)&&alpha%2===1?'R':'[0,+∞)');
+  document.getElementById('props').innerHTML=
+    `<span class="prop">定义域: ${domain}</span>
+     <span class="prop">值域: ${range}</span>
+     <span class="prop">奇偶性: ${getParity()}</span>
+     <span class="prop">单调性: ${getMonotonicity()}</span>`;
+}
+
+function animate(){
+  alpha+=animDir*0.03;
+  if(alpha>=5){alpha=5;animDir=-1}
+  if(alpha<=-3){alpha=-3;animDir=1}
+  document.getElementById('alpha').value=alpha;
+  update();
+  animId=requestAnimationFrame(animate);
+}
+
+document.getElementById('alpha').addEventListener('input',function(){
+  alpha=parseFloat(this.value);
+  if(animId){cancelAnimationFrame(animId);animId=null;document.getElementById('playBtn').textContent='▶ 播放'}
+  update();
+});
+
+document.getElementById('playBtn').addEventListener('click',function(){
+  if(animId){cancelAnimationFrame(animId);animId=null;this.textContent='▶ 播放';return}
+  animDir=alpha>=5?-1:alpha<=-3?1:1;
+  this.textContent='⏸ 暂停';animate();
+});
+
+document.getElementById('themeBtn').addEventListener('click',function(){
+  document.documentElement.classList.toggle('dark');
+  update();
+});
+
+if(window.matchMedia('(prefers-color-scheme:dark)').matches)document.documentElement.classList.add('dark');
+update();
+})();
+</script>
+</body>
+</html>

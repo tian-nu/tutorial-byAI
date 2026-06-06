@@ -1,10 +1,10 @@
-# 11-SQL 增删改查实战
+﻿# 11-SQL 增删改查实战
 
 - 对应文档版本：首版教程
 - 适用环境：Python 3.10+（内置 sqlite3）, Windows/macOS/Linux
 - 读者角色：后端初学者
 - 预计耗时：新手 45 分钟 / 熟手 20 分钟
-- 前置教程：[09-数据库入门：SQLite 零配置上手](./09-数据库入门：SQLite零配置上手.md)、[10-建表：博客系统的表结构设计](./10-建表：博客系统的表结构设计.md)
+- 前置教程：[09-数据库入门：SQLite 零配置上手](./09-数据库入门：SQLite零配置上手/)、[10-建表：博客系统的表结构设计](./10-建表：博客系统的表结构设计/)
 - 可视化：无
 
 ---
@@ -38,7 +38,7 @@ python -c "import sqlite3; conn = sqlite3.connect('blog.db'); tables = conn.exec
 
 如果输出显示 `Tables: [('users',), ('posts',)]`，且 Users 和 Posts 都大于 0，前置条件满足。
 
-如果表存在但数据为空，没关系——本章第一步就会带你插入数据。如果表不存在，请回到 [10-建表：博客系统的表结构设计](./10-建表：博客系统的表结构设计.md) 先建表。
+如果表存在但数据为空，没关系——本章第一步就会带你插入数据。如果表不存在，请回到 [10-建表：博客系统的表结构设计](./10-建表：博客系统的表结构设计/) 先建表。
 
 ---
 
@@ -958,12 +958,12 @@ SELECT posts.title, users.username FROM posts JOIN users ON posts.author_id = us
 
 你已经掌握了 SQL 的四大基本句式。现在你可以在命令行里独立操作数据库了。但真正的后端开发中，你不会在命令行里手动敲 SQL——你会用 Python 代码来操作数据库。
 
-- **下一章**：[12-后端连数据库：FastAPI + SQLAlchemy](./12-后端连数据库：FastAPI+SQLAlchemy.md)——学习如何用 Python 代码执行 SQL，以及 ORM（对象关系映射）是什么。
-- **延伸练习**：回到 [10-建表](./10-建表：博客系统的表结构设计.md)，看看你建的 `comments` 表（如果有的话），试着对它做 INSERT、SELECT、JOIN 操作。
+- **下一章**：[12-后端连数据库：FastAPI + SQLAlchemy](./12-后端连数据库：FastAPI+SQLAlchemy/)——学习如何用 Python 代码执行 SQL，以及 ORM（对象关系映射）是什么。
+- **延伸练习**：回到 [10-建表](./10-建表：博客系统的表结构设计/)，看看你建的 `comments` 表（如果有的话），试着对它做 INSERT、SELECT、JOIN 操作。
 - **阶段三终点预告**：完成教程 13 后，你教程 07 写的"内存版 CRUD"将升级为"数据库版"——数据再也不会因为重启服务器而丢失了。
 
 ---
 
-> [可暂停点 5/9]：你已经会写 SQL 了。下次从 [12-后端连数据库：FastAPI + SQLAlchemy](./12-后端连数据库：FastAPI+SQLAlchemy.md) 继续。
+> [可暂停点 5/9]：你已经会写 SQL 了。下次从 [12-后端连数据库：FastAPI + SQLAlchemy](./12-后端连数据库：FastAPI+SQLAlchemy/) 继续。
 >
 > 本章新增术语：INSERT、SELECT、UPDATE、DELETE、WHERE、ORDER BY、JOIN、联表查询、聚合函数、LIMIT、外键、主键。已同步至全局术语索引。

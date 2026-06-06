@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>正弦余弦函数图象与性质</title>
+<style>
+:root{--bg:#fff;--fg:#1a1a2e;--card:#f8faf9;--bdr:#d1d5db;--accent:#059669;--accent2:#10B981;--accent3:#ECFDF5;--accent4:#064E3B;--shadow:0 2px 8px rgba(0,0,0,.08);--sin:#059669;--cos:#ef4444}
+@media(prefers-color-scheme:dark){:root{--bg:#0f172a;--fg:#e2e8f0;--card:#1e293b;--bdr:#334155;--accent3:#0d2b1b;--shadow:0 2px 8px rgba(0,0,0,.3)}}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,"Microsoft YaHei",sans-serif;background:var(--bg);color:var(--fg);min-height:100vh;padding:12px;display:flex;flex-direction:column;align-items:center;gap:10px;transition:background .3s,color .3s}
+header{text-align:center;max-width:900px;width:100%}
+h1{font-size:1.5rem;color:var(--accent);margin-bottom:4px}
+.desc{font-size:.85rem;color:var(--fg);opacity:.7}
+.main{display:flex;flex-wrap:wrap;gap:12px;max-width:1100px;width:100%;justify-content:center}
+canvas{border:1px solid var(--bdr);border-radius:8px;background:var(--card);max-width:100%}
+.panel{background:var(--card);border:1px solid var(--bdr);border-radius:8px;padding:12px 14px;min-width:240px;max-width:320px;box-shadow:var(--shadow);font-size:.82rem;line-height:1.6}
+.panel h2{font-size:1rem;color:var(--accent);margin-bottom:6px;border-bottom:1px solid var(--bdr);padding-bottom:4px}
+.panel .sin-c{color:var(--sin);font-weight:600}.panel .cos-c{color:var(--cos);font-weight:600}
+.controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center;font-size:.85rem}
+.btn{background:var(--accent);color:#fff;border:none;padding:5px 12px;border-radius:4px;cursor:pointer;font-size:.78rem;transition:opacity .2s}
+.btn:hover{opacity:.85}
+.btn-outline{background:transparent;color:var(--accent);border:1px solid var(--accent)}
+footer{font-size:.7rem;color:var(--fg);opacity:.5;text-align:center;margin-top:8px}
+.legend{display:flex;gap:16px;font-size:.78rem;margin:4px 0}
+.legend span{display:flex;align-items:center;gap:4px}
+.legend .sw{width:20px;height:2px;display:inline-block;border-radius:1px}
+</style>
+</head>
+<body>
+<header>
+<h1>📈 y = sin x 与 y = cos x 的图象与性质</h1>
+<p class="desc">标注五点法作图、周期、对称轴、单调区间</p>
+</header>
+<div class="controls">
+  <div class="legend">
+    <span><span class="sw" style="background:var(--sin)"></span> y=sin x</span>
+    <span><span class="sw" style="background:var(--cos)"></span> y=cos x</span>
+  </div>
+  <button class="btn" id="playBtn">▶ 播放描点动画</button>
+  <button class="btn btn-outline" id="resetBtn">↺ 重置</button>
+</div>
+<div class="main">
+  <canvas id="c" width="700" height="480"></canvas>
+  <div class="panel" id="infoPanel">
+    <h2>性质对比</h2>
+    <div id="props"></div>
+  </div>
+</div>
+<footer>数据来源：基于人教版高中数学必修第一册（2019版） · 对应教程 24-正弦余弦函数的图象与性质</footer>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const W=canvas.width,H=canvas.height;
+// layout: two graphs stacked
+const pad={l:55,r:20,t:30,b:25},gh=(H-pad.t-pad.b-20)/2;
+const g1y=pad.t,g2y=pad.t+gh+20;
+const gw=W-pad.l-pad.r;
+const xMin=-Math.PI,xMax=3*Math.PI; // show -π to 3π (2 full periods)
+const toX=v=>pad.l+(v-xMin)/(xMax-xMin)*gw;
+const toY1=v=>g1y+gh/2-v*gh/2.4;
+const toY2=v=>g2y+gh/2-v*gh/2.4;
+let animStep=0,animId=null;
+
+function draw(stepOverride){
+  const step=stepOverride!==undefined?stepOverride:animStep;
+  ctx.clearRect(0,0,W,H);
+  const style=getComputedStyle(document.body);
+  const fg=style.getPropertyValue('--fg'),bdr=style.getPropertyValue('--bdr');
+  const sinC='#059669',cosC='#ef4444';
+
+  function drawGraph(gY,isSin){
+    const toY=isSin?toY1:toY2,fn=isSin?Math.sin:Math.cos,col=isSin?sinC:cosC;
+    // axes
+    ctx.strokeStyle=bdr;ctx.lineWidth=.7;
+    ctx.beginPath();ctx.moveTo(pad.l,gY+gh/2);ctx.lineTo(W-pad.r,gY+gh/2);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(pad.l,gY);ctx.lineTo(pad.l,gY+gh);ctx.stroke();
+    // x tick marks
+    ctx.fillStyle=fg;ctx.font='11px "Microsoft YaHei",sans-serif';ctx.textAlign='center';
+    const ticks=[-Math.PI,0,Math.PI,2*Math.PI,3*Math.PI];
+    const tickLabels=['-π','0','π','2π','3π'];
+    ticks.forEach((v,i)=>{
+      const tx=toX(v);
+      ctx.beginPath();ctx.moveTo(tx,gY+gh/2-3);ctx.lineTo(tx,gY+gh/2+3);ctx.stroke();
+      ctx.fillText(tickLabels[i],tx,gY+gh/2+16);
+    });
+    // y ticks
+    ctx.textAlign='right';
+    [-1,-0.5,0.5,1].forEach(v=>{
+      const ty=toY(v);
+      ctx.beginPath();ctx.moveTo(pad.l-3,ty);ctx.lineTo(pad.l+3,ty);ctx.stroke();
+      ctx.fillText(v.toFixed(1),pad.l-6,ty+4);
+    });
+    // label
+    ctx.fillStyle=col;ctx.textAlign='left';ctx.font='bold 13px "Cambria Math","Microsoft YaHei",sans-serif';
+    ctx.fillText(isSin?'y = sin x':'y = cos x',W-pad.r-80,gY+16);
+    // grid
+    ctx.strokeStyle=bdr;ctx.globalAlpha=.3;ctx.setLineDash([3,5]);
+    [-Math.PI,0,Math.PI,2*Math.PI,3*Math.PI].forEach(v=>{ctx.beginPath();ctx.moveTo(toX(v),gY);ctx.lineTo(toX(v),gY+gh);ctx.stroke();});
+    [-1,1].forEach(v=>{ctx.beginPath();ctx.moveTo(pad.l,toY(v));ctx.lineTo(W-pad.r,toY(v));ctx.stroke();});
+    ctx.globalAlpha=1;ctx.setLineDash([]);
+
+    // five key points
+    const keyPts=isSin?[[0,0,'0'],[Math.PI/2,1,'π/2'],[Math.PI,0,'π'],[3*Math.PI/2,-1,'3π/2'],[2*Math.PI,0,'2π']]
+      :[[0,1,'0'],[Math.PI/2,0,'π/2'],[Math.PI,-1,'π'],[3*Math.PI/2,0,'3π/2'],[2*Math.PI,1,'2π']];
+    keyPts.forEach(([x,y,label])=>{
+      const px=toX(x),py=toY(y);
+      ctx.fillStyle='#f59e0b';ctx.beginPath();ctx.arc(px,py,4,0,2*Math.PI);ctx.fill();
+      ctx.fillStyle=fg;ctx.font='9px "Microsoft YaHei",sans-serif';ctx.textAlign='center';
+      ctx.fillText(label,px,py+(y>0?-10:14));
+    });
+    // second period key points
+    keyPts.forEach(([x,y,label])=>{
+      const px=toX(x+2*Math.PI),py=toY(y);
+      ctx.fillStyle='#f59e0b';ctx.beginPath();ctx.arc(px,py,3,0,2*Math.PI);ctx.fill();
+      ctx.globalAlpha=.6;
+      ctx.fillStyle=fg;ctx.font='9px "Microsoft YaHei",sans-serif';ctx.textAlign='center';
+      ctx.fillText(label,px,py+(y>0?-10:14));
+      ctx.globalAlpha=1;
+    });
+
+    // function curve (animated draw)
+    ctx.strokeStyle=col;ctx.lineWidth=2;
+    ctx.beginPath();
+    const totalPoints=Math.floor(gw);
+    const drawLimit=step*totalPoints;
+    for(let i=0;i<=Math.min(drawLimit,totalPoints);i++){
+      const x=xMin+i/(totalPoints)*(xMax-xMin);
+      const px=toX(x),py=toY(fn(x));
+      if(i===0)ctx.moveTo(px,py);else ctx.lineTo(px,py);
+    }
+    ctx.stroke();
+
+    // symmetry axes (dashed)
+    ctx.setLineDash([4,6]);ctx.lineWidth=1;
+    if(isSin){
+      // sin symmetry axes: x = π/2 + kπ
+      [-Math.PI/2,Math.PI/2,3*Math.PI/2,5*Math.PI/2].forEach(x=>{
+        if(x>=xMin&&x<=xMax){ctx.strokeStyle='#06b6d4';ctx.beginPath();ctx.moveTo(toX(x),gY);ctx.lineTo(toX(x),gY+gh);ctx.stroke();}
+      });
+    }else{
+      // cos symmetry axes: x = kπ
+      [-Math.PI,0,Math.PI,2*Math.PI,3*Math.PI].forEach(x=>{
+        if(x>=xMin&&x<=xMax){ctx.strokeStyle='#06b6d4';ctx.beginPath();ctx.moveTo(toX(x),gY);ctx.lineTo(toX(x),gY+gh);ctx.stroke();}
+      });
+    }
+    ctx.setLineDash([]);
+    // period bracket
+    ctx.strokeStyle='#8b5cf6';ctx.lineWidth=1.5;
+    const by=gY+gh-4;
+    [0,2*Math.PI].forEach(s=>{
+      const bx=toX(s);
+      ctx.beginPath();ctx.moveTo(bx,by+4);ctx.lineTo(bx,by+12);ctx.stroke();
+    });
+    ctx.beginPath();ctx.moveTo(toX(0),by+8);ctx.lineTo(toX(2*Math.PI),by+8);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(toX(0),by+12);ctx.lineTo(toX(0)+4,by+8);ctx.lineTo(toX(0),by+4);ctx.stroke(); // left arrow
+    ctx.beginPath();ctx.moveTo(toX(2*Math.PI),by+12);ctx.lineTo(toX(2*Math.PI)-4,by+8);ctx.lineTo(toX(2*Math.PI),by+4);ctx.stroke(); // right arrow
+    ctx.fillStyle='#8b5cf6';ctx.font='11px "Microsoft YaHei",sans-serif';ctx.textAlign='center';
+    ctx.fillText('T=2π',(toX(0)+toX(2*Math.PI))/2,by+24);
+  }
+  drawGraph(g1y,true);
+  drawGraph(g2y,false);
+  document.getElementById('props').innerHTML=`
+    <p><span class="sin-c">y=sin x</span></p>
+    <p>定义域：<b>R</b> · 值域：<b>[-1,1]</b></p>
+    <p>周期：<b style="color:#8b5cf6">T=2π</b></p>
+    <p>对称轴：x=π/2+kπ (k∈Z)</p>
+    <p>增区间：[2kπ-π/2, 2kπ+π/2]</p>
+    <p>减区间：[2kπ+π/2, 2kπ+3π/2]</p>
+    <hr style="border-color:var(--bdr);margin:8px 0">
+    <p><span class="cos-c">y=cos x</span></p>
+    <p>定义域：<b>R</b> · 值域：<b>[-1,1]</b></p>
+    <p>周期：<b style="color:#8b5cf6">T=2π</b></p>
+    <p>对称轴：x=kπ (k∈Z)</p>
+    <p>增区间：[2kπ-π, 2kπ]</p>
+    <p>减区间：[2kπ, 2kπ+π]</p>
+  `;
+}
+
+function animate(){
+  if(animStep<1){animStep=Math.min(1,animStep+0.02);draw();}
+  else{clearInterval(animId);animId=null;document.getElementById('playBtn').textContent='▶ 播放描点动画';}
+}
+
+document.getElementById('playBtn').addEventListener('click',function(){
+  if(animId){clearInterval(animId);animId=null;this.textContent='▶ 播放描点动画';return;}
+  this.textContent='⏸ 停止';
+  animStep=0;draw(0);
+  animId=setInterval(animate,25);
+});
+document.getElementById('resetBtn').addEventListener('click',()=>{if(animId){clearInterval(animId);animId=null;document.getElementById('playBtn').textContent='▶ 播放描点动画';}animStep=1;draw(1);});
+draw(1);
+</script>
+</body>
+</html>

@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>诱导公式 — 单位圆可视化</title>
+<style>
+:root{--bg:#fff;--fg:#1a1a2e;--card:#f8faf9;--bdr:#d1d5db;--accent:#059669;--accent2:#10B981;--accent3:#ECFDF5;--accent4:#064E3B;--shadow:0 2px 8px rgba(0,0,0,.08)}
+@media(prefers-color-scheme:dark){:root{--bg:#0f172a;--fg:#e2e8f0;--card:#1e293b;--bdr:#334155;--accent3:#0d2b1b;--shadow:0 2px 8px rgba(0,0,0,.3)}}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,"Microsoft YaHei",sans-serif;background:var(--bg);color:var(--fg);min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:12px;gap:10px;transition:background .3s,color .3s}
+header{text-align:center;max-width:900px;width:100%}
+h1{font-size:1.5rem;color:var(--accent);margin-bottom:4px}
+.desc{font-size:.85rem;color:var(--fg);opacity:.7;line-height:1.4}
+.main{display:flex;flex-wrap:wrap;gap:12px;max-width:1100px;width:100%;justify-content:center}
+canvas{border:1px solid var(--bdr);border-radius:8px;background:var(--card);cursor:pointer;max-width:100%}
+.panel{background:var(--card);border:1px solid var(--bdr);border-radius:8px;padding:12px 14px;min-width:240px;max-width:340px;flex:1;box-shadow:var(--shadow)}
+.panel h2{font-size:1rem;color:var(--accent);margin-bottom:8px;border-bottom:1px solid var(--bdr);padding-bottom:4px}
+.formula-row{display:flex;align-items:center;gap:6px;padding:5px 0;font-size:.82rem;border-bottom:1px solid var(--bdr);border-bottom-style:dotted;transition:all .2s}
+.formula-row.hl{background:var(--accent3);border-radius:4px;padding:5px 6px}
+.formula-row .lbl{font-weight:700;color:var(--accent);min-width:50px}
+.formula-row .eq{font-family:"Cambria Math","Times New Roman",serif;font-size:.88rem}
+.legend{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:.72rem;margin-top:8px}
+.legend span{display:flex;align-items:center;gap:3px}
+.legend .dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+.controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center;font-size:.85rem}
+.controls label{display:flex;align-items:center;gap:4px}
+input[type=range]{accent-color:var(--accent);width:140px}
+.btn{background:var(--accent);color:#fff;border:none;padding:5px 12px;border-radius:4px;cursor:pointer;font-size:.78rem;transition:opacity .2s}
+.btn:hover{opacity:.85}
+.info{font-size:.8rem;color:var(--accent);font-weight:600}
+footer{font-size:.7rem;color:var(--fg);opacity:.5;text-align:center;margin-top:8px}
+.mode-btn{background:var(--card);color:var(--fg);border:1px solid var(--bdr);padding:4px 10px;border-radius:4px;cursor:pointer;font-size:.75rem;position:absolute;top:8px;right:8px}
+</style>
+</head>
+<body>
+<header>
+<h1>📐 诱导公式 · 单位圆交互演示</h1>
+<p class="desc">拖拽单位圆上的黄色点改变角 <i>α</i>，观察各诱导角终边位置及对称关系</p>
+</header>
+<div class="controls">
+  <label>α = <span id="angleVal" class="info">45°</span></label>
+  <input type="range" id="angleSlider" min="1" max="89" value="45" step="0.5">
+  <button class="btn" id="playBtn">▶ 自动旋转</button>
+  <button class="btn" id="resetBtn">↺ 重置</button>
+</div>
+<div class="main">
+  <canvas id="c" width="520" height="520"></canvas>
+  <div class="panel" id="formulaPanel">
+    <h2>诱导公式</h2>
+    <div id="formulas"></div>
+    <div class="legend">
+      <span><span class="dot" style="background:#059669"></span> α（原角）</span>
+      <span><span class="dot" style="background:#f59e0b"></span> -α</span>
+      <span><span class="dot" style="background:#ef4444"></span> π-α</span>
+      <span><span class="dot" style="background:#8b5cf6"></span> π+α</span>
+      <span><span class="dot" style="background:#06b6d4"></span> π/2-α</span>
+      <span><span class="dot" style="background:#ec4899"></span> π/2+α</span>
+    </div>
+  </div>
+</div>
+<footer>数据来源：基于人教版高中数学必修第一册（2019版） · 对应教程 23-诱导公式</footer>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const W=canvas.width,H=canvas.height,cx=W/2,cy=H/2,R=180;
+let alpha=Math.PI/4,animId=null;
+
+const colors={alpha:'#059669',neg:'#f59e0b',piM:'#ef4444',piP:'#8b5cf6',halfM:'#06b6d4',halfP:'#ec4899'};
+const names={alpha:'α',neg:'-α',piM:'π-α',piP:'π+α',halfM:'π/2-α',halfP:'π/2+α'};
+const angles=()=>({alpha,neg:-alpha,piM:Math.PI-alpha,piP:Math.PI+alpha,halfM:Math.PI/2-alpha,halfP:Math.PI/2+alpha});
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  const style=getComputedStyle(document.body);
+  const fg=style.getPropertyValue('--fg'),bg=style.getPropertyValue('--bg'),bdr=style.getPropertyValue('--bdr');
+  // grid & axes
+  ctx.strokeStyle=bdr;ctx.lineWidth=.8;ctx.setLineDash([4,6]);
+  ctx.beginPath();ctx.moveTo(cx,0);ctx.lineTo(cx,H);ctx.moveTo(0,cy);ctx.lineTo(W,cy);ctx.stroke();
+  ctx.setLineDash([]);
+  // unit circle
+  ctx.strokeStyle='#94a3b8';ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.arc(cx,cy,R,0,2*Math.PI);ctx.stroke();
+  // symmetry axes
+  const dashLines=[[cx,cy-R,cx,cy+R,colors.neg],[cx-R,cy,cx+R,cy,colors.piM],[cx-R,cy-R,cx+R,cy+R,colors.halfM],[cx-R,cy+R,cx+R,cy-R,'#94a3b8']];
+  dashLines.forEach(([x1,y1,x2,y2,c])=>{
+    ctx.setLineDash([5,8]);ctx.strokeStyle=c;ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
+  });
+  ctx.setLineDash([]);
+  // label axes
+  ctx.fillStyle=fg;ctx.font='12px "Microsoft YaHei",sans-serif';ctx.textAlign='center';
+  ctx.fillText('x',cx+R+14,cy+4);ctx.fillText('y',cx,cy-R-10);
+  ctx.fillText('O',cx-12,cy+14);
+  // angles
+  const as=angles();
+  Object.entries(as).forEach(([k,a])=>{
+    const x=cx+R*Math.cos(a),y=cy-R*Math.sin(a);
+    const cc=colors[k];
+    // radius line
+    ctx.strokeStyle=cc;ctx.lineWidth=k==='alpha'?2.5:1.5;ctx.globalAlpha=k==='alpha'?1:.55;
+    ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(x,y);ctx.stroke();
+    ctx.globalAlpha=1;
+    // arc
+    ctx.strokeStyle=cc;ctx.lineWidth=1.5;ctx.beginPath();
+    if(a>=0)ctx.arc(cx,cy,22,0,a,false);
+    else ctx.arc(cx,cy,22,0,a,true);
+    ctx.stroke();
+    // point
+    ctx.fillStyle=cc;ctx.beginPath();ctx.arc(x,y,k==='alpha'?7:5,0,2*Math.PI);ctx.fill();
+    // label
+    ctx.fillStyle=cc;ctx.font=`${k==='alpha'?'bold 13':12}px "Microsoft YaHei",sans-serif`;ctx.textAlign='left';
+    const lx=x+(x>cx?6:-28),ly=y+(y<cy?16:-8);
+    ctx.fillText(names[k],lx,ly);
+  });
+  // legend for symmetry
+  ctx.fillStyle=fg;ctx.font='10px "Microsoft YaHei",sans-serif';ctx.textAlign='center';
+  ctx.fillText('关于x轴对称',cx+50,cy-R+10);ctx.fillText('关于y轴对称',cx+R-30,cy-16);
+  ctx.fillText('关于y=x对称',cx+R-45,cy-R+35);
+}
+
+function updateFormulas(){
+  const a=alpha,deg=Math.round(a*180/Math.PI);
+  document.getElementById('angleVal').textContent=deg+'°';
+  document.getElementById('angleSlider').value=deg;
+  const sinA=Math.sin(a).toFixed(3),cosA=Math.cos(a).toFixed(3);
+  const formulas=[
+    {k:'neg',lbl:'-α',sin:`sin(-α) = -sinα`,sinV:`${(-Math.sin(a)).toFixed(3)}`,cos:`cos(-α) = cosα`,cosV:cosA,hl:a<0.01},
+    {k:'piM',lbl:'π-α',sin:`sin(π-α) = sinα`,sinV:sinA,cos:`cos(π-α) = -cosα`,cosV:`${(-Math.cos(a)).toFixed(3)}`,hl:Math.abs(a-Math.PI/2)<0.02},
+    {k:'piP',lbl:'π+α',sin:`sin(π+α) = -sinα`,sinV:`${(-Math.sin(a)).toFixed(3)}`,cos:`cos(π+α) = -cosα`,cosV:`${(-Math.cos(a)).toFixed(3)}`,hl:Math.abs(a-Math.PI/4)<0.02},
+    {k:'halfM',lbl:'π/2-α',sin:`sin(π/2-α) = cosα`,sinV:cosA,cos:`cos(π/2-α) = sinα`,cosV:sinA,hl:Math.abs(a-Math.PI/4)<0.02},
+    {k:'halfP',lbl:'π/2+α',sin:`sin(π/2+α) = cosα`,sinV:cosA,cos:`cos(π/2+α) = -sinα`,cosV:`${(-Math.sin(a)).toFixed(3)}`,hl:Math.abs(a-Math.PI/4)<0.02},
+  ];
+  const html=formulas.map(f=>{
+    const hc=f.hl?' hl':'';
+    return `<div class="formula-row${hc}">
+      <span class="lbl" style="color:${colors[f.k]}">${f.lbl}</span>
+      <span class="eq">${f.sin} = <b>${f.sinV}</b></span>
+      <span class="eq">${f.cos} = <b>${f.cosV}</b></span>
+    </div>`;
+  }).join('');
+  document.getElementById('formulas').innerHTML=html;
+}
+
+function setAlpha(a){alpha=((a%360)+360)%360*Math.PI/180;if(alpha<0)alpha+=2*Math.PI;draw();updateFormulas();}
+
+canvas.addEventListener('mousedown',e=>{
+  const rect=canvas.getBoundingClientRect(),sx=W/rect.width,sy=H/rect.height;
+  const mx=(e.clientX-rect.left)*sx,my=(e.clientY-rect.top)*sy;
+  const dx=mx-cx,dy=my-cy,dist=Math.sqrt(dx*dx+dy*dy);
+  if(dist<R+60&&dist>10){alpha=Math.atan2(-dy,dx);if(alpha<0)alpha+=2*Math.PI;draw();updateFormulas();}
+  const onMove=ev=>{
+    const mx2=(ev.clientX-rect.left)*sx,my2=(ev.clientY-rect.top)*sy;
+    const dx2=mx2-cx,dy2=my2-cy,dist2=Math.sqrt(dx2*dx2+dy2*dy2);
+    if(dist2>10){alpha=Math.atan2(-dy2,dx2);if(alpha<0)alpha+=2*Math.PI;draw();updateFormulas();}
+  };
+  const onUp=()=>{document.removeEventListener('mousemove',onMove);document.removeEventListener('mouseup',onUp);};
+  document.addEventListener('mousemove',onMove);document.addEventListener('mouseup',onUp);
+});
+canvas.addEventListener('touchstart',e=>{
+  e.preventDefault();
+  const rect=canvas.getBoundingClientRect(),sx=W/rect.width,sy=H/rect.height;
+  const t=e.touches[0],mx=(t.clientX-rect.left)*sx,my=(t.clientY-rect.top)*sy;
+  const dx=mx-cx,dy=my-cy,dist=Math.sqrt(dx*dx+dy*dy);
+  if(dist<R+60&&dist>10){alpha=Math.atan2(-dy,dx);if(alpha<0)alpha+=2*Math.PI;draw();updateFormulas();}
+  const onMove=ev=>{
+    ev.preventDefault();
+    const t2=ev.touches[0],mx2=(t2.clientX-rect.left)*sx,my2=(t2.clientY-rect.top)*sy;
+    const dx2=mx2-cx,dy2=my2-cy,dist2=Math.sqrt(dx2*dx2+dy2*dy2);
+    if(dist2>10){alpha=Math.atan2(-dy2,dx2);if(alpha<0)alpha+=2*Math.PI;draw();updateFormulas();}
+  };
+  const onUp=()=>{document.removeEventListener('touchmove',onMove);document.removeEventListener('touchend',onUp);};
+  document.addEventListener('touchmove',onMove,{passive:false});document.addEventListener('touchend',onUp);
+},{passive:false});
+document.getElementById('angleSlider').addEventListener('input',e=>setAlpha(parseFloat(e.target.value)));
+document.getElementById('resetBtn').addEventListener('click',()=>{if(animId){clearInterval(animId);animId=null;document.getElementById('playBtn').textContent='▶ 自动旋转';}setAlpha(45);});
+document.getElementById('playBtn').addEventListener('click',function(){
+  if(animId){clearInterval(animId);animId=null;this.textContent='▶ 自动旋转';return;}
+  this.textContent='⏸ 停止';
+  animId=setInterval(()=>{alpha+=0.008;if(alpha>=2*Math.PI)alpha-=2*Math.PI;draw();updateFormulas();},20);
+});
+draw();updateFormulas();
+</script>
+</body>
+</html>

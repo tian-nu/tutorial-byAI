@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>y=Asin(ωx+φ) 参数调节</title>
+<style>
+:root{--bg:#fff;--fg:#1a1a2e;--card:#f8faf9;--bdr:#d1d5db;--accent:#059669;--accent2:#10B981;--accent3:#ECFDF5;--accent4:#064E3B;--shadow:0 2px 8px rgba(0,0,0,.08)}
+@media(prefers-color-scheme:dark){:root{--bg:#0f172a;--fg:#e2e8f0;--card:#1e293b;--bdr:#334155;--accent3:#0d2b1b;--shadow:0 2px 8px rgba(0,0,0,.3)}}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,"Microsoft YaHei",sans-serif;background:var(--bg);color:var(--fg);min-height:100vh;padding:12px;display:flex;flex-direction:column;align-items:center;gap:10px;transition:background .3s,color .3s}
+header{text-align:center;max-width:900px;width:100%}
+h1{font-size:1.5rem;color:var(--accent);margin-bottom:4px}
+.desc{font-size:.85rem;color:var(--fg);opacity:.7}
+.controls{display:flex;flex-wrap:wrap;gap:8px 16px;justify-content:center;align-items:center;font-size:.82rem;max-width:1000px;width:100%}
+.slider-group{display:flex;align-items:center;gap:6px;background:var(--card);padding:4px 10px;border-radius:6px;border:1px solid var(--bdr)}
+.slider-group label{font-weight:600;min-width:14px;color:var(--accent)}
+.slider-group .val{font-family:"Cambria Math",monospace;min-width:40px;text-align:center;font-size:.8rem}
+input[type=range]{accent-color:var(--accent);width:100px}
+.main{display:flex;flex-wrap:wrap;gap:12px;max-width:1100px;width:100%;justify-content:center;align-items:flex-start}
+canvas{border:1px solid var(--bdr);border-radius:8px;background:var(--card);max-width:100%}
+.panel{background:var(--card);border:1px solid var(--bdr);border-radius:8px;padding:12px 14px;min-width:220px;max-width:280px;box-shadow:var(--shadow);font-size:.82rem;line-height:1.7}
+.panel h2{font-size:1rem;color:var(--accent);margin-bottom:6px;border-bottom:1px solid var(--bdr);padding-bottom:4px}
+.panel .formula{font-family:"Cambria Math","Times New Roman",serif;font-size:.9rem;padding:4px 0;color:var(--accent)}
+.panel .key{color:var(--accent);font-weight:600}
+.btn{background:var(--accent);color:#fff;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:.75rem;transition:opacity .2s}
+.btn:hover{opacity:.85}
+.btn-outline{background:transparent;color:var(--accent);border:1px solid var(--accent)}
+footer{font-size:.7rem;color:var(--fg);opacity:.5;text-align:center;margin-top:8px}
+</style>
+</head>
+<body>
+<header>
+<h1>🎛 y = A sin(ωx + φ) 参数调节演示</h1>
+<p class="desc">拖动滑块实时观察 A（振幅）、ω（角频率）、φ（初相）对图象的影响</p>
+</header>
+<div class="controls">
+  <div class="slider-group">
+    <label>A</label><span style="color:#059669;font-weight:600">=</span>
+    <input type="range" id="sliderA" min="0.1" max="5" value="1" step="0.1">
+    <span class="val" id="valA">1.0</span>
+  </div>
+  <div class="slider-group">
+    <label>ω</label><span style="color:#059669;font-weight:600">=</span>
+    <input type="range" id="sliderW" min="0.5" max="5" value="1" step="0.1">
+    <span class="val" id="valW">1.0</span>
+  </div>
+  <div class="slider-group">
+    <label>φ</label><span style="color:#059669;font-weight:600">=</span>
+    <input type="range" id="sliderPhi" min="-3.14" max="3.14" value="0" step="0.01">
+    <span class="val" id="valPhi">0.00</span>
+  </div>
+  <button class="btn" id="resetBtn">↺ 重置</button>
+</div>
+<div class="main">
+  <canvas id="c" width="700" height="440"></canvas>
+  <div class="panel" id="infoPanel">
+    <h2>当前参数</h2>
+    <div id="paramInfo"></div>
+  </div>
+</div>
+<footer>数据来源：基于人教版高中数学必修第一册（2019版） · 对应教程 28-函数y=Asin(ωx+φ)的图象</footer>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const W=canvas.width,H=canvas.height;
+const pad={l:55,r:20,t:30,b:30},gw=W-pad.l-pad.r,gh=H-pad.t-pad.b;
+const xMin=-2*Math.PI,xMax=4*Math.PI;
+const toX=v=>pad.l+(v-xMin)/(xMax-xMin)*gw;
+const toY=v=>pad.t+gh/2-v*(gh/2-20)/5.5;
+
+let A=1,w=1,phi=0;
+
+function f(x){return A*Math.sin(w*x+phi);}
+
+function updatePanel(){
+  const T=(2*Math.PI/w);
+  const phase=-phi/w;
+  document.getElementById('paramInfo').innerHTML=`
+    <p class="formula">y = <b>${A.toFixed(1)}</b> sin(<b>${w.toFixed(1)}</b>x + <b>${phi.toFixed(2)}</b>)</p>
+    <p><span class="key">振幅 A</span> = ${A.toFixed(1)}</p>
+    <p><span class="key">周期 T</span> = 2π/${w.toFixed(1)} ≈ ${T.toFixed(2)}</p>
+    <p><span class="key">频率 f</span> = 1/T ≈ ${(1/T).toFixed(2)}</p>
+    <p><span class="key">初相 φ</span> = ${phi.toFixed(2)}</p>
+    <p><span class="key">相位平移</span> = ${phase>=0?'+':''}${phase.toFixed(2)}</p>
+    <hr style="border-color:var(--bdr);margin:8px 0">
+    <p style="font-size:.78rem">五点法关键点：</p>
+    <div id="fivePoints" style="font-size:.75rem;font-family:'Cambria Math',monospace"></div>
+  `;
+  const Tval=2*Math.PI/w;
+  const x0=(0-phi)/w,x1=(Math.PI/2-phi)/w,x2=(Math.PI-phi)/w,x3=(3*Math.PI/2-phi)/w,x4=(2*Math.PI-phi)/w;
+  const pts=[{x:x0,y:0,label:'起点'},{x:x1,y:A,label:'峰点'},{x:x2,y:0,label:'中点'},{x:x3,y:-A,label:'谷点'},{x:x4,y:0,label:'终点'}];
+  document.getElementById('fivePoints').innerHTML=pts.map(p=>
+    `<span>(<b>${p.x.toFixed(2)}</b>, <b>${p.y.toFixed(1)}</b>) ${p.label}</span>`
+  ).join('<br>');
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  const style=getComputedStyle(document.body);
+  const fg=style.getPropertyValue('--fg'),bdr=style.getPropertyValue('--bdr');
+  const sinC='#059669',refC='#94a3b8';
+
+  // axes
+  ctx.strokeStyle=bdr;ctx.lineWidth=.7;
+  ctx.beginPath();ctx.moveTo(pad.l,pad.t+gh/2);ctx.lineTo(W-pad.r,pad.t+gh/2);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(pad.l,pad.t);ctx.lineTo(pad.l,pad.t+gh);ctx.stroke();
+
+  // x ticks
+  ctx.fillStyle=fg;ctx.font='10px "Microsoft YaHei",sans-serif';ctx.textAlign='center';
+  const ticks=[-2*Math.PI,-Math.PI,0,Math.PI,2*Math.PI,3*Math.PI,4*Math.PI];
+  const tickLabels=['-2π','-π','0','π','2π','3π','4π'];
+  ticks.forEach((v,i)=>{
+    const tx=toX(v);
+    ctx.beginPath();ctx.moveTo(tx,pad.t+gh/2-3);ctx.lineTo(tx,pad.t+gh/2+3);ctx.stroke();
+    ctx.fillText(tickLabels[i],tx,pad.t+gh/2+14);
+  });
+  // y ticks
+  ctx.textAlign='right';
+  for(let i=-5;i<=5;i++){
+    if(i===0)continue;
+    const ty=toY(i);
+    ctx.beginPath();ctx.moveTo(pad.l-3,ty);ctx.lineTo(pad.l+3,ty);ctx.stroke();
+    ctx.fillText(i,pad.l-6,ty+4);
+  }
+
+  // grid
+  ctx.strokeStyle=bdr;ctx.globalAlpha=.2;ctx.setLineDash([3,5]);
+  ticks.forEach(v=>{ctx.beginPath();ctx.moveTo(toX(v),pad.t);ctx.lineTo(toX(v),pad.t+gh);ctx.stroke();});
+  for(let i=-5;i<=5;i++){ctx.beginPath();ctx.moveTo(pad.l,toY(i));ctx.lineTo(W-pad.r,toY(i));ctx.stroke();}
+  ctx.globalAlpha=1;ctx.setLineDash([]);
+
+  // reference y=sin x
+  ctx.strokeStyle=refC;ctx.lineWidth=1.2;ctx.setLineDash([5,8]);
+  ctx.beginPath();
+  for(let i=0;i<=gw;i++){
+    const x=xMin+i/gw*(xMax-xMin),px=toX(x),py=toY(Math.sin(x));
+    if(i===0)ctx.moveTo(px,py);else ctx.lineTo(px,py);
+  }
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle=refC;ctx.font='11px "Microsoft YaHei",sans-serif';ctx.textAlign='left';
+  ctx.fillText('y=sin x (参考)',W-pad.r-100,pad.t+16);
+
+  // main curve y = A sin(wx + phi)
+  ctx.strokeStyle=sinC;ctx.lineWidth=2.2;
+  ctx.beginPath();
+  for(let i=0;i<=gw;i++){
+    const x=xMin+i/gw*(xMax-xMin),px=toX(x),py=toY(f(x));
+    if(py<pad.t||py>pad.t+gh){if(i>0)ctx.moveTo(px,Math.max(pad.t,Math.min(pad.t+gh,py)));continue;}
+    if(i===0)ctx.moveTo(px,py);else ctx.lineTo(px,py);
+  }
+  ctx.stroke();
+
+  // five key points
+  const Tval=2*Math.PI/w;
+  const x0=(0-phi)/w,x1=(Math.PI/2-phi)/w,x2=(Math.PI-phi)/w,x3=(3*Math.PI/2-phi)/w,x4=(2*Math.PI-phi)/w;
+  const keyPts=[[x0,0,'起点'],[x1,A,'峰点'],[x2,0,'中点'],[x3,-A,'谷点'],[x4,0,'终点']];
+  keyPts.forEach(([x,y,label])=>{
+    const px=toX(x),py=toY(y);
+    if(px<pad.l||px>W-pad.r)return;
+    ctx.fillStyle='#f59e0b';ctx.beginPath();
+    ctx.arc(px,Math.max(pad.t,Math.min(pad.t+gh,py)),5,0,2*Math.PI);ctx.fill();
+    ctx.fillStyle=fg;ctx.font='9px "Microsoft YaHei",sans-serif';ctx.textAlign='center';
+    const ly=Math.max(pad.t+10,Math.min(pad.t+gh-4,py+(y>0?-12:16)));
+    ctx.fillText(label,px,ly);
+  });
+
+  // period bracket
+  if(x0>=xMin&&x4<=xMax){
+    const by=pad.t+gh-4;
+    ctx.strokeStyle='#8b5cf6';ctx.lineWidth=1.5;
+    const p0x=toX(x0),p1x=toX(x4);
+    ctx.beginPath();ctx.moveTo(p0x,by+4);ctx.lineTo(p0x,by+12);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(p1x,by+4);ctx.lineTo(p1x,by+12);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(p0x,by+8);ctx.lineTo(p1x,by+8);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(p0x,by+12);ctx.lineTo(p0x+4,by+8);ctx.lineTo(p0x,by+4);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(p1x,by+12);ctx.lineTo(p1x-4,by+8);ctx.lineTo(p1x,by+4);ctx.stroke();
+    ctx.fillStyle='#8b5cf6';ctx.font='11px "Microsoft YaHei",sans-serif';ctx.textAlign='center';
+    ctx.fillText(`T=2π/${w.toFixed(1)}≈${Tval.toFixed(2)}`,(p0x+p1x)/2,by+24);
+  }
+
+  // label
+  ctx.fillStyle=sinC;ctx.font='bold 13px "Cambria Math","Microsoft YaHei",sans-serif';ctx.textAlign='left';
+  ctx.fillText(`y = ${A.toFixed(1)} sin(${w.toFixed(1)}x ${phi>=0?'+':'-'} ${Math.abs(phi).toFixed(2)})`,W-pad.r-220,pad.t+16);
+}
+
+function updateAll(){
+  draw();updatePanel();
+  document.getElementById('valA').textContent=A.toFixed(1);
+  document.getElementById('valW').textContent=w.toFixed(1);
+  document.getElementById('valPhi').textContent=phi.toFixed(2);
+}
+
+document.getElementById('sliderA').addEventListener('input',function(){A=parseFloat(this.value);updateAll();});
+document.getElementById('sliderW').addEventListener('input',function(){w=parseFloat(this.value);updateAll();});
+document.getElementById('sliderPhi').addEventListener('input',function(){phi=parseFloat(this.value);updateAll();});
+document.getElementById('resetBtn').addEventListener('click',()=>{
+  A=1;w=1;phi=0;
+  document.getElementById('sliderA').value=1;document.getElementById('sliderW').value=1;document.getElementById('sliderPhi').value=0;
+  updateAll();
+});
+updateAll();
+</script>
+</body>
+</html>

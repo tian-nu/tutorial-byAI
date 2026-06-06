@@ -337,6 +337,23 @@
 }
 
 /* ===================================================
+   10b. 全局内容区宽度 — 放宽以提升阅读体验
+   =================================================== */
+.md-grid {
+  max-width: 90rem;
+}
+
+.md-content {
+  max-width: none;
+}
+
+.md-content__inner {
+  max-width: 75rem;
+  margin: 0 auto;
+  padding: 1.2rem 1.5rem;
+}
+
+/* ===================================================
    11. 右侧目录栏
    =================================================== */
 .md-sidebar--secondary .md-nav__link {
@@ -429,14 +446,27 @@
    15. 返回顶部按钮
    =================================================== */
 .md-top {
-  background: var(--accent);
-  color: #fff;
-  border-radius: 50%;
-  box-shadow: 0 2px 8px rgba(13, 148, 136, 0.3);
+  background: rgba(13, 148, 136, 0.08);
+  color: var(--accent);
+  border-radius: 8px;
+  box-shadow: none;
+  padding: 4px 10px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  border: 1px solid var(--border-subtle);
+  transition: all var(--t);
+  bottom: 16px;
+  right: 16px;
 }
 
 .md-top:hover {
-  background: var(--accent-strong);
+  background: rgba(13, 148, 136, 0.15);
+  color: var(--accent-strong);
+  box-shadow: 0 2px 8px rgba(13, 148, 136, 0.15);
+}
+
+.md-top svg {
+  display: none;
 }
 
 /* ===================================================
@@ -596,6 +626,7 @@
   transition: all var(--t);
   text-decoration: none;
   font-weight: 500;
+  user-select: none;
 }
 
 .home-sidebar .sb-item:hover {
@@ -1311,4 +1342,15 @@
 /* 暗色模式下颜色覆盖保持一致性 */
 [data-md-color-scheme="slate"] .md-nav__title {
   color: var(--text-1);
+}
+
+/* 暗色模式返回顶部按钮 */
+[data-md-color-scheme="slate"] .md-top {
+  background: rgba(94, 234, 212, 0.1);
+  color: var(--md-accent-fg-color, #5eead4);
+  border-color: var(--border);
+}
+
+[data-md-color-scheme="slate"] .md-top:hover {
+  background: rgba(94, 234, 212, 0.18);
 }

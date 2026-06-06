@@ -1,4 +1,4 @@
-# 附录C · Redis常用命令速查
+﻿# 附录C · Redis常用命令速查
 
 > "Redis是你的高速缓存引擎——它把数据存在内存里，读写速度比MySQL快100倍以上。本附录覆盖5种数据类型的常用命令和运维命令，是你操作Redis时的快速参考。"
 
@@ -258,4 +258,4 @@ result, _ := rdb.Eval(ctx, luaScript, []string{key}, arg).Result()
 Redis五种数据类型各有适用场景：String做缓存和计数，Hash存对象，List做消息队列，Set做标签和共同好友，Sorted Set做排行榜。掌握这五种类型，就能应对90%的缓存场景。
 
 ---
-[← 上一章：附录B-MySQL常用命令速查.md](附录B-MySQL常用命令速查.md) | [下一章：附录D-Docker命令速查.md →](附录D-Docker命令速查.md)
+[← 上一章：附录B-MySQL常用命令速查.md](附录B-MySQL常用命令速查/) | [下一章：附录D-Docker命令速查.md →](附录D-Docker命令速查/)

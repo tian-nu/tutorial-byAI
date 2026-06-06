@@ -1,4 +1,4 @@
-# Git到GitHub
+﻿# Git到GitHub
 
 <span class="t-tag t-tag-beginner">零基础</span> · 9 章
 
@@ -9,20 +9,20 @@
 ## 基础操作
 
 <div class="ch-grid">
-<a class="ch-link" href="00-电脑基础准备.md">00-电脑基础准备</a>
-<a class="ch-link" href="01-环境准备与SSH.md">01-环境准备与SSH</a>
-<a class="ch-link" href="02-创建GitHub仓库.md">02-创建GitHub仓库</a>
-<a class="ch-link" href="03-推送项目上线.md">03-推送项目上线</a>
+<a class="ch-link" href="00-电脑基础准备/">00-电脑基础准备</a>
+<a class="ch-link" href="01-环境准备与SSH/">01-环境准备与SSH</a>
+<a class="ch-link" href="02-创建GitHub仓库/">02-创建GitHub仓库</a>
+<a class="ch-link" href="03-推送项目上线/">03-推送项目上线</a>
 </div>
 
 ## 协作与自动化
 
 <div class="ch-grid">
-<a class="ch-link" href="04-Pull_Request流程.md">04-Pull Request流程</a>
-<a class="ch-link" href="05-Issue与项目管理.md">05-Issue与项目管理</a>
-<a class="ch-link" href="06-Fork参与开源.md">06-Fork参与开源</a>
-<a class="ch-link" href="07-GitHub_Actions入门.md">07-GitHub Actions入门</a>
-<a class="ch-link" href="08-GitHub_Pages.md">08-GitHub Pages</a>
+<a class="ch-link" href="04-Pull_Request流程/">04-Pull Request流程</a>
+<a class="ch-link" href="05-Issue与项目管理/">05-Issue与项目管理</a>
+<a class="ch-link" href="06-Fork参与开源/">06-Fork参与开源</a>
+<a class="ch-link" href="07-GitHub_Actions入门/">07-GitHub Actions入门</a>
+<a class="ch-link" href="08-GitHub_Pages/">08-GitHub Pages</a>
 </div>
 
 ---

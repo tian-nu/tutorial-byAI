@@ -17,28 +17,78 @@
 {{ super() }}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+  // 侧边栏搜索按钮 - 点击打开 MkDocs 搜索
   var searchTrigger = document.querySelector('.sb-search');
   if (searchTrigger) {
     searchTrigger.addEventListener('click', function() {
-      var searchInput = document.querySelector('.md-search__input');
-      if (searchInput) searchInput.focus();
+      var searchButton = document.querySelector('.md-search__open');
+      if (searchButton) {
+        searchButton.click();
+      } else {
+        var searchInput = document.querySelector('.md-search__input');
+        if (searchInput) searchInput.focus();
+      }
     });
   }
+
+  // Ctrl+K 快捷键打开搜索
   document.addEventListener('keydown', function(e) {
     if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
       e.preventDefault();
-      var searchInput = document.querySelector('.md-search__input');
-      if (searchInput) searchInput.focus();
+      var searchButton = document.querySelector('.md-search__open');
+      if (searchButton) {
+        searchButton.click();
+      } else {
+        var searchInput = document.querySelector('.md-search__input');
+        if (searchInput) searchInput.focus();
+      }
     }
   });
 
-  // 首页隐藏 MkDocs 默认侧栏（:has() fallback）
+  // 首页分类筛选
+  var filterItems = document.querySelectorAll('.home-sidebar .sb-item:not(.active):not(a)');
+  filterItems.forEach(function(item) {
+    item.addEventListener('click', function() {
+      document.querySelectorAll('.home-sidebar .sb-item').forEach(function(i) {
+        i.classList.remove('active');
+      });
+      this.classList.add('active');
+
+      var filter = this.textContent.trim();
+      var cards = document.querySelectorAll('.t-card');
+      var dividers = document.querySelectorAll('.divider');
+
+      if (filter === '全部教程') {
+        cards.forEach(function(c) { c.style.display = ''; });
+        dividers.forEach(function(d) { d.style.display = ''; });
+      } else {
+        cards.forEach(function(c) { c.style.display = 'none'; });
+        dividers.forEach(function(d) { d.style.display = 'none'; });
+
+        var catLabel = filter.replace(/\\d+/, '').trim();
+        dividers.forEach(function(div) {
+          var label = div.querySelector('.divider-label');
+          if (label && label.textContent.trim() === catLabel) {
+            div.style.display = '';
+            var next = div.nextElementSibling;
+            while (next && !next.classList.contains('divider')) {
+              if (next.classList.contains('t-list')) {
+                next.querySelectorAll('.t-card').forEach(function(c) { c.style.display = ''; });
+              }
+              next = next.nextElementSibling;
+            }
+          }
+        });
+      }
+    });
+  });
+
+  // 首页隐藏 MkDocs 默认侧栏
   var homeContent = document.querySelector('.md-content--home');
   if (homeContent) {
     var mainInner = homeContent.closest('.md-main__inner');
     if (mainInner) {
-      var sidebars = mainInner.querySelectorAll(':scope > .md-sidebar');
-      sidebars.forEach(function(sb) { sb.style.display = 'none'; });
+      mainInner.querySelectorAll(':scope > .md-sidebar').forEach(function(sb) { sb.style.display = 'none'; });
       mainInner.style.maxWidth = 'none';
       homeContent.style.maxWidth = 'none';
       homeContent.style.width = '100%';
@@ -49,6 +99,15 @@ document.addEventListener('DOMContentLoaded', function() {
         inner.style.margin = '0';
       }
     }
+  }
+
+  // 教程子首页（章节列表 ch-grid）：铺满宽度
+  var hasChGrid = document.querySelector('.ch-grid');
+  if (hasChGrid) {
+    var contentArea = document.querySelector('.md-content');
+    var typeset = document.querySelector('.md-typeset');
+    if (contentArea) contentArea.style.maxWidth = 'none';
+    if (typeset) typeset.style.maxWidth = 'none';
   }
 });
 </script>

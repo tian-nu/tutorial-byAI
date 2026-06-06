@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>正切函数图象与性质</title>
+<style>
+:root{--bg:#fff;--fg:#1a1a2e;--card:#f8faf9;--bdr:#d1d5db;--accent:#059669;--accent2:#10B981;--accent3:#ECFDF5;--accent4:#064E3B;--shadow:0 2px 8px rgba(0,0,0,.08)}
+@media(prefers-color-scheme:dark){:root{--bg:#0f172a;--fg:#e2e8f0;--card:#1e293b;--bdr:#334155;--accent3:#0d2b1b;--shadow:0 2px 8px rgba(0,0,0,.3)}}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,"Microsoft YaHei",sans-serif;background:var(--bg);color:var(--fg);min-height:100vh;padding:12px;display:flex;flex-direction:column;align-items:center;gap:10px;transition:background .3s,color .3s}
+header{text-align:center;max-width:900px;width:100%}
+h1{font-size:1.5rem;color:var(--accent);margin-bottom:4px}
+.desc{font-size:.85rem;color:var(--fg);opacity:.7}
+.controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center;font-size:.85rem}
+.btn{background:var(--accent);color:#fff;border:none;padding:5px 12px;border-radius:4px;cursor:pointer;font-size:.78rem;transition:opacity .2s}
+.btn:hover{opacity:.85}
+.btn-outline{background:transparent;color:var(--accent);border:1px solid var(--accent)}
+.main{display:flex;flex-wrap:wrap;gap:12px;max-width:1100px;width:100%;justify-content:center;align-items:flex-start}
+canvas{border:1px solid var(--bdr);border-radius:8px;background:var(--card);max-width:100%}
+.panel{background:var(--card);border:1px solid var(--bdr);border-radius:8px;padding:12px 14px;min-width:220px;max-width:300px;box-shadow:var(--shadow);font-size:.82rem;line-height:1.6}
+.panel h2{font-size:1rem;color:var(--accent);margin-bottom:6px;border-bottom:1px solid var(--bdr);padding-bottom:4px}
+.panel .hl{color:var(--accent);font-weight:600}
+footer{font-size:.7rem;color:var(--fg);opacity:.5;text-align:center;margin-top:8px}
+</style>
+</head>
+<body>
+<header>
+<h1>📉 y = tan x 的图象与性质</h1>
+<p class="desc">展示正切函数的渐近线、周期与对称中心</p>
+</header>
+<div class="controls">
+  <button class="btn" id="playBtn">▶ 播放描点动画</button>
+  <button class="btn btn-outline" id="resetBtn">↺ 重置</button>
+</div>
+<div class="main">
+  <canvas id="c" width="700" height="460"></canvas>
+  <div class="panel">
+    <h2>性质总结</h2>
+    <p>定义域：{x | x ≠ π/2 + kπ, k∈Z}</p>
+    <p>值域：<b>R</b></p>
+    <p>周期：<b style="color:#8b5cf6">T=π</b></p>
+    <p>奇函数：tan(-x) = -tan x</p>
+    <p>对称中心：(kπ/2, 0) k∈Z</p>
+    <p style="margin-top:6px">渐近线：<b style="color:#ef4444">x=π/2+kπ</b></p>
+    <p>增区间：(kπ-π/2, kπ+π/2)</p>
+    <p style="color:var(--accent);font-size:.75rem;margin-top:8px">💡 每个分支在各自区间内单调递增</p>
+  </div>
+</div>
+<footer>数据来源：基于人教版高中数学必修第一册（2019版） · 对应教程 25-正切函数的图象与性质</footer>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const W=canvas.width,H=canvas.height;
+const pad={l:55,r:20,t:30,b:35},gw=W-pad.l-pad.r,gh=H-pad.t-pad.b;
+const xMin=-Math.PI,xMax=Math.PI;
+const toX=v=>pad.l+(v-xMin)/(xMax-xMin)*gw;
+const toY=v=>pad.t+gh/2-v*(gh/2-20)/4; // scale y to [-4,4] range
+let animStep=0,animId=null;
+
+function draw(stepOverride){
+  const step=stepOverride!==undefined?stepOverride:animStep;
+  ctx.clearRect(0,0,W,H);
+  const style=getComputedStyle(document.body);
+  const fg=style.getPropertyValue('--fg'),bdr=style.getPropertyValue('--bdr');
+  // axes
+  ctx.strokeStyle=bdr;ctx.lineWidth=.7;
+  ctx.beginPath();ctx.moveTo(pad.l,pad.t+gh/2);ctx.lineTo(W-pad.r,pad.t+gh/2);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(pad.l,pad.t);ctx.lineTo(pad.l,pad.t+gh);ctx.stroke();
+  // x ticks
+  ctx.fillStyle=fg;ctx.font='11px "Microsoft YaHei",sans-serif';ctx.textAlign='center';
+  const ticks=[-Math.PI,-Math.PI/2,0,Math.PI/2,Math.PI];
+  const tickLabels=['-π','-π/2','0','π/2','π'];
+  ticks.forEach((v,i)=>{
+    const tx=toX(v);
+    ctx.beginPath();ctx.moveTo(tx,pad.t+gh/2-3);ctx.lineTo(tx,pad.t+gh/2+3);ctx.stroke();
+    ctx.fillText(tickLabels[i],tx,pad.t+gh/2+16);
+  });
+  // y ticks
+  ctx.textAlign='right';
+  for(let i=-4;i<=4;i++){
+    const ty=toY(i);
+    ctx.beginPath();ctx.moveTo(pad.l-3,ty);ctx.lineTo(pad.l+3,ty);ctx.stroke();
+    ctx.fillText(i,pad.l-6,ty+4);
+  }
+  // grid
+  ctx.strokeStyle=bdr;ctx.globalAlpha=.25;ctx.setLineDash([3,5]);
+  ticks.forEach(v=>{ctx.beginPath();ctx.moveTo(toX(v),pad.t);ctx.lineTo(toX(v),pad.t+gh);ctx.stroke();});
+  for(let i=-4;i<=4;i++){ctx.beginPath();ctx.moveTo(pad.l,toY(i));ctx.lineTo(W-pad.r,toY(i));ctx.stroke();}
+  ctx.globalAlpha=1;ctx.setLineDash([]);
+
+  // asymptotes
+  [-Math.PI/2,Math.PI/2].forEach(x=>{
+    const ax=toX(x);
+    ctx.setLineDash([6,4]);ctx.strokeStyle='#ef4444';ctx.lineWidth=1.2;
+    ctx.beginPath();ctx.moveTo(ax,pad.t);ctx.lineTo(ax,pad.t+gh);ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle='#ef4444';ctx.font='10px "Microsoft YaHei",sans-serif';ctx.textAlign='center';
+    ctx.fillText(x<0?'x=-π/2':'x=π/2',ax,pad.t-6);
+  });
+
+  // symmetry centers
+  [-Math.PI,-Math.PI/2,0,Math.PI/2,Math.PI].forEach(x=>{
+    const sx=toX(x),sy=pad.t+gh/2;
+    ctx.fillStyle='#8b5cf6';ctx.beginPath();
+    ctx.arc(sx,sy,4,0,2*Math.PI);ctx.fill();
+    ctx.fillStyle=fg;ctx.font='9px "Microsoft YaHei",sans-serif';ctx.textAlign='center';
+    if(x!==-Math.PI/2&&x!==Math.PI/2)ctx.fillText('('+(x===0?'0':x===Math.PI?'π':'-π')+',0)',sx,sy-10);
+  });
+
+  // tan curve - draw each branch separately
+  const branches=[[xMin,-Math.PI/2],[-Math.PI/2,Math.PI/2],[Math.PI/2,xMax]];
+  ctx.strokeStyle='#059669';ctx.lineWidth=2;
+  const yMax=4,yMin=-4;
+  branches.forEach(([start,end])=>{
+    ctx.beginPath();
+    const n=200;
+    const drawLimit=Math.floor(step*n);
+    let first=true;
+    for(let i=0;i<=Math.min(drawLimit,n);i++){
+      const x=start+(i+0.5)*(end-start)/n;
+      const tanVal=Math.tan(x);
+      const inRange=tanVal>=yMin&&tanVal<=yMax;
+      const px=toX(x),py=toY(Math.max(yMin,Math.min(yMax,tanVal)));
+      if(inRange){
+        if(first){ctx.moveTo(px,py);first=false;}
+        else ctx.lineTo(px,py);
+      }else{first=true;}
+    }
+    ctx.stroke();
+  });
+
+  // period bracket
+  const by=pad.t+gh-4;
+  ctx.strokeStyle='#8b5cf6';ctx.lineWidth=1.5;
+  const pStart=toX(-Math.PI/2),pEnd=toX(Math.PI/2);
+  ctx.beginPath();ctx.moveTo(pStart,by+4);ctx.lineTo(pStart,by+12);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(pEnd,by+4);ctx.lineTo(pEnd,by+12);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(pStart,by+8);ctx.lineTo(pEnd,by+8);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(pStart,by+12);ctx.lineTo(pStart+4,by+8);ctx.lineTo(pStart,by+4);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(pEnd,by+12);ctx.lineTo(pEnd-4,by+8);ctx.lineTo(pEnd,by+4);ctx.stroke();
+  ctx.fillStyle='#8b5cf6';ctx.font='11px "Microsoft YaHei",sans-serif';ctx.textAlign='center';
+  ctx.fillText('T=π',(pStart+pEnd)/2,by+24);
+
+  // label
+  ctx.fillStyle='#059669';ctx.font='bold 13px "Cambria Math","Microsoft YaHei",sans-serif';ctx.textAlign='left';
+  ctx.fillText('y = tan x',W-pad.r-80,pad.t+16);
+}
+
+function animate(){
+  if(animStep<1){animStep=Math.min(1,animStep+0.015);draw();}
+  else{clearInterval(animId);animId=null;document.getElementById('playBtn').textContent='▶ 播放描点动画';}
+}
+
+document.getElementById('playBtn').addEventListener('click',function(){
+  if(animId){clearInterval(animId);animId=null;this.textContent='▶ 播放描点动画';return;}
+  this.textContent='⏸ 停止';animStep=0;draw(0);
+  animId=setInterval(animate,25);
+});
+document.getElementById('resetBtn').addEventListener('click',()=>{if(animId){clearInterval(animId);animId=null;document.getElementById('playBtn').textContent='▶ 播放描点动画';}animStep=1;draw(1);});
+draw(1);
+</script>
+</body>
+</html>

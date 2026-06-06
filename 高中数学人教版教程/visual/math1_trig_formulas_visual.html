@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>三角函数公式推导全景图</title>
+<!-- 自包含单文件，可离线运行。CDN: D3.js v7 -->
+<!-- 备用离线：下载 d3.min.js 放在同目录 -->
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+  :root {
+    --bg: #ffffff;
+    --text: #1a1a2e;
+    --node-bg: #e8f4fd;
+    --node-border: #4a90d9;
+    --node-text: #1a1a2e;
+    --edge: #888;
+    --edge-label: #555;
+    --highlight: #ff6b35;
+    --highlight-bg: #fff3e0;
+    --btn-bg: #4a90d9;
+    --btn-text: #fff;
+    --btn-hover: #357abd;
+    --panel-bg: #f8f9fa;
+    --panel-border: #dee2e6;
+    --chapter-tag: #6c757d;
+    --step-current: #ff6b35;
+    --step-done: #28a745;
+    --step-pending: #adb5bd;
+    --shadow: 0 2px 8px rgba(0,0,0,0.1);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1a1a2e;
+      --text: #e0e0e0;
+      --node-bg: #2a2a4a;
+      --node-border: #5a9fd4;
+      --node-text: #e0e0e0;
+      --edge: #6a6a8a;
+      --edge-label: #aaa;
+      --highlight: #ff8c5a;
+      --highlight-bg: #3a2a1a;
+      --btn-bg: #5a9fd4;
+      --btn-text: #1a1a2e;
+      --btn-hover: #4a8fc4;
+      --panel-bg: #252540;
+      --panel-border: #3a3a5a;
+      --chapter-tag: #999;
+      --step-current: #ff8c5a;
+      --step-done: #4caf50;
+      --step-pending: #555;
+      --shadow: 0 2px 8px rgba(0,0,0,0.4);
+    }
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--panel-border);
+    background: var(--panel-bg);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  header h1 {
+    font-size: 1.3rem;
+    font-weight: 600;
+  }
+  header .subtitle {
+    font-size: 0.85rem;
+    color: var(--chapter-tag);
+  }
+  .controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .controls button {
+    padding: 6px 14px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 500;
+    background: var(--btn-bg);
+    color: var(--btn-text);
+    transition: all 0.2s;
+  }
+  .controls button:hover {
+    background: var(--btn-hover);
+    transform: translateY(-1px);
+  }
+  .controls button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .step-indicator {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+  }
+  .step-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--step-pending);
+    transition: all 0.3s;
+  }
+  .step-dot.done { background: var(--step-done); }
+  .step-dot.current { background: var(--step-current); transform: scale(1.4); }
+  main {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+  }
+  svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+  .node rect {
+    fill: var(--node-bg);
+    stroke: var(--node-border);
+    stroke-width: 2;
+    rx: 8;
+    ry: 8;
+    transition: all 0.4s ease;
+  }
+  .node text {
+    fill: var(--node-text);
+    font-size: 12px;
+    text-anchor: middle;
+    dominant-baseline: central;
+    pointer-events: none;
+  }
+  .node .formula {
+    font-family: "Georgia", "Times New Roman", serif;
+    font-style: italic;
+    font-size: 13px;
+  }
+  .edge {
+    stroke: var(--edge);
+    stroke-width: 2;
+    fill: none;
+    marker-end: url(#arrowhead);
+    transition: all 0.4s ease;
+  }
+  .edge.highlight {
+    stroke: var(--highlight);
+    stroke-width: 3;
+  }
+  .edge-label {
+    font-size: 10px;
+    fill: var(--edge-label);
+    text-anchor: middle;
+  }
+  .node.highlight rect {
+    fill: var(--highlight-bg);
+    stroke: var(--highlight);
+    stroke-width: 3;
+    filter: drop-shadow(0 0 6px rgba(255,107,53,0.3));
+  }
+  .chapter-line {
+    stroke: var(--panel-border);
+    stroke-width: 1;
+    stroke-dasharray: 6 4;
+  }
+  .chapter-label {
+    font-size: 11px;
+    fill: var(--chapter-tag);
+    font-weight: 600;
+    text-anchor: start;
+  }
+  footer {
+    padding: 10px 24px;
+    border-top: 1px solid var(--panel-border);
+    background: var(--panel-bg);
+    font-size: 0.75rem;
+    color: var(--chapter-tag);
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  footer a {
+    color: var(--node-border);
+    text-decoration: none;
+  }
+  footer a:hover { text-decoration: underline; }
+  .info-panel {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 0.8rem;
+    max-width: 280px;
+    box-shadow: var(--shadow);
+    opacity: 0;
+    transform: translateY(-8px);
+    transition: all 0.3s;
+    pointer-events: none;
+  }
+  .info-panel.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .info-panel h3 {
+    font-size: 0.9rem;
+    margin-bottom: 4px;
+    color: var(--highlight);
+  }
+  .info-panel .formula-detail {
+    font-family: "Georgia", "Times New Roman", serif;
+    font-style: italic;
+    font-size: 0.95rem;
+    margin: 6px 0;
+    color: var(--text);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>📊 三角函数公式推导全景图</h1>
+    <div class="subtitle">从 C(α−β) 到万能公式的完整推导链路</div>
+  </div>
+  <div class="controls">
+    <span class="step-indicator" id="stepDots"></span>
+    <button id="btnPrev" disabled>◀ 上一步</button>
+    <button id="btnNext">下一步 ▶</button>
+    <button id="btnReset">↺ 重置</button>
+    <button id="btnAll">全部显示</button>
+  </div>
+</header>
+
+<main>
+  <svg id="graph"></svg>
+  <div class="info-panel" id="infoPanel"></div>
+</main>
+
+<footer>
+  <span>数据来源：第26章 &amp; 第27章，基于人教版高中数学必修第一册 §5.5</span>
+  <span>
+    本可视化对应 <a href="../26-两角和与差的正弦余弦正切公式.md">教程第26章</a> 步骤 26.3~26.6 和
+    <a href="../27-二倍角公式与半角公式.md">教程第27章</a> 步骤 27.3~27.6
+  </span>
+</footer>
+
+<script>
+// ========== 数据定义 ==========
+const steps = [
+  {
+    id: "C_ab",
+    label: "C(α−β)",
+    formula: "cos(α−β) = cosα cosβ + sinα sinβ",
+    chapter: "第26章 §26.3",
+    method: "几何推导：单位圆旋转变换 + 距离公式",
+    x: 160, y: 60, w: 280, h: 50,
+    children: ["C_pb", "S_pb", "T_pb"]
+  },
+  {
+    id: "C_pb",
+    label: "C(α+β)",
+    formula: "cos(α+β) = cosα cosβ − sinα sinβ",
+    chapter: "第26章 §26.4",
+    method: "用 −β 替换 β",
+    x: 60, y: 180, w: 280, h: 50,
+    children: ["sin2a", "cos2a_C"]
+  },
+  {
+    id: "S_pb",
+    label: "S(α+β)",
+    formula: "sin(α+β) = sinα cosβ + cosα sinβ",
+    chapter: "第26章 §26.5",
+    method: "诱导公式 cos(π/2−θ) 转换",
+    x: 350, y: 180, w: 280, h: 50,
+    children: ["S_mb", "sin2a_S"]
+  },
+  {
+    id: "S_mb",
+    label: "S(α−β)",
+    formula: "sin(α−β) = sinα cosβ − cosα sinβ",
+    chapter: "第26章 §26.5",
+    method: "用 −β 替换 β",
+    x: 350, y: 280, w: 280, h: 44,
+    children: []
+  },
+  {
+    id: "T_pb",
+    label: "T(α+β)",
+    formula: "tan(α+β) = (tanα+tanβ)/(1−tanα tanβ)",
+    chapter: "第26章 §26.6",
+    method: "T = sin/cos，分子分母同除 cosα cosβ",
+    x: 700, y: 180, w: 320, h: 50,
+    children: ["T_mb", "tan2a_T"]
+  },
+  {
+    id: "T_mb",
+    label: "T(α−β)",
+    formula: "tan(α−β) = (tanα−tanβ)/(1+tanα tanβ)",
+    chapter: "第26章 §26.6",
+    method: "用 −β 替换 β",
+    x: 700, y: 280, w: 320, h: 44,
+    children: []
+  },
+  // 第27章：二倍角
+  {
+    id: "sin2a",
+    label: "sin 2α",
+    formula: "sin 2α = 2 sinα cosα",
+    chapter: "第27章 §27.3",
+    method: "由 S(α+β)/C(α+β) 令 β=α",
+    x: 60, y: 300, w: 280, h: 44,
+    children: ["wanneng_sin", "half_tan"]
+  },
+  {
+    id: "cos2a",
+    label: "cos 2α (三种形式)",
+    formula: "cos 2α = cos²α−sin²α = 2cos²α−1 = 1−2sin²α",
+    chapter: "第27章 §27.3",
+    method: "由 C(α+β) 令 β=α",
+    x: 60, y: 380, w: 280, h: 50,
+    children: ["jiangmi_sin", "jiangmi_cos", "wanneng_cos"]
+  },
+  {
+    id: "tan2a",
+    label: "tan 2α",
+    formula: "tan 2α = 2tanα/(1−tan²α)",
+    chapter: "第27章 §27.3",
+    method: "由 T(α+β) 令 β=α",
+    x: 700, y: 380, w: 320, h: 44,
+    children: ["wanneng_tan"]
+  },
+  // 降幂公式
+  {
+    id: "jiangmi_sin",
+    label: "降幂公式 (sin²)",
+    formula: "sin²α = (1−cos 2α)/2",
+    chapter: "第27章 §27.4",
+    method: "由 cos 2α = 1−2sin²α 解出 sin²α",
+    x: 60, y: 500, w: 280, h: 50,
+    children: ["half_sin"]
+  },
+  {
+    id: "jiangmi_cos",
+    label: "降幂公式 (cos²)",
+    formula: "cos²α = (1+cos 2α)/2",
+    chapter: "第27章 §27.4",
+    method: "由 cos 2α = 2cos²α−1 解出 cos²α",
+    x: 60, y: 590, w: 280, h: 50,
+    children: ["half_cos"]
+  },
+  // 半角公式
+  {
+    id: "half_sin",
+    label: "sin(α/2)",
+    formula: "sin(α/2) = ±√((1−cosα)/2)",
+    chapter: "第27章 §27.5",
+    method: "α→α/2 代入降幂公式，开方。±号由 α/2 象限定",
+    x: 60, y: 690, w: 280, h: 50,
+    children: []
+  },
+  {
+    id: "half_cos",
+    label: "cos(α/2)",
+    formula: "cos(α/2) = ±√((1+cosα)/2)",
+    chapter: "第27章 §27.5",
+    method: "α→α/2 代入降幂公式，开方。±号由 α/2 象限定",
+    x: 60, y: 780, w: 280, h: 50,
+    children: []
+  },
+  {
+    id: "half_tan",
+    label: "tan(α/2)",
+    formula: "tan(α/2) = sinα/(1+cosα) = (1−cosα)/sinα",
+    chapter: "第27章 §27.5",
+    method: "用二倍角公式分子分母同乘共轭",
+    x: 400, y: 690, w: 340, h: 50,
+    children: []
+  },
+  // 万能公式
+  {
+    id: "wanneng_sin",
+    label: "万能公式 sinα",
+    formula: "sinα = 2t/(1+t²), t=tan(α/2)",
+    chapter: "第27章 §27.6",
+    method: "sinα = 2sin(α/2)cos(α/2)，除以 cos²(α/2)",
+    x: 400, y: 500, w: 340, h: 50,
+    children: []
+  },
+  {
+    id: "wanneng_cos",
+    label: "万能公式 cosα",
+    formula: "cosα = (1−t²)/(1+t²), t=tan(α/2)",
+    chapter: "第27章 §27.6",
+    method: "cosα = cos²(α/2)−sin²(α/2)，除以 cos²(α/2)",
+    x: 400, y: 590, w: 340, h: 50,
+    children: []
+  },
+  {
+    id: "wanneng_tan",
+    label: "万能公式 tanα",
+    formula: "tanα = 2t/(1−t²), t=tan(α/2)",
+    chapter: "第27章 §27.6",
+    method: "tanα = sinα/cosα，代入万能公式 sinα 和 cosα",
+    x: 400, y: 780, w: 340, h: 50,
+    children: []
+  }
+];
+
+// 边定义
+const edges = [
+  { from: "C_ab", to: "C_pb", label: "−β 替换 β" },
+  { from: "C_ab", to: "S_pb", label: "诱导公式\ncos(π/2−θ)" },
+  { from: "C_ab", to: "T_pb", label: "T = sin/cos\n÷ cosα cosβ" },
+  { from: "S_pb", to: "S_mb", label: "−β 替换 β" },
+  { from: "T_pb", to: "T_mb", label: "−β 替换 β" },
+  { from: "C_pb", to: "sin2a", label: "β=α" },
+  { from: "S_pb", to: "sin2a", label: "β=α" },
+  { from: "C_pb", to: "cos2a", label: "β=α" },
+  { from: "T_pb", to: "tan2a", label: "β=α" },
+  { from: "cos2a", to: "jiangmi_sin", label: "解出 sin²α" },
+  { from: "cos2a", to: "jiangmi_cos", label: "解出 cos²α" },
+  { from: "jiangmi_sin", to: "half_sin", label: "α→α/2\n开方" },
+  { from: "jiangmi_cos", to: "half_cos", label: "α→α/2\n开方" },
+  { from: "sin2a", to: "half_tan", label: "分子分母\n同乘共轭" },
+  { from: "sin2a", to: "wanneng_sin", label: "α→α/2\n÷cos²(α/2)" },
+  { from: "cos2a", to: "wanneng_cos", label: "α→α/2\n÷cos²(α/2)" },
+  { from: "tan2a", to: "wanneng_tan", label: "α→α/2\n÷cos²(α/2)" },
+];
+
+// 步骤分组：每个"步骤"揭示一组节点
+// 我们按推导顺序分为 12 个步骤
+const stepGroups = [
+  { name: "源头：C(α−β)", nodes: ["C_ab"], desc: "几何推导：在单位圆上画角 α 和 β，利用旋转变换不改变距离，列距离等式展开化简，得到 C(α−β)。这是所有公式的源头。" },
+  { name: "C(α+β)", nodes: ["C_pb"], desc: "把 C(α−β) 中的 β 替换为 −β，利用 cos(−β)=cosβ、sin(−β)=−sinβ，得到 C(α+β)。口诀：余余正正，符号反。" },
+  { name: "S(α+β)", nodes: ["S_pb"], desc: "利用诱导公式 sinθ=cos(π/2−θ)，把 sin(α+β) 转化为 cos 的差角形式，套用 C(α−β)，得到 S(α+β)。口诀：正余余正，符号同。" },
+  { name: "S(α−β)", nodes: ["S_mb"], desc: "把 S(α+β) 中的 β 替换为 −β，得到 S(α−β)。" },
+  { name: "T(α+β)", nodes: ["T_pb"], desc: "由 tan=sin/cos，分子分母同除以 cosα cosβ，得到 T(α+β)。口诀：子上同号，母下反号。" },
+  { name: "T(α−β)", nodes: ["T_mb"], desc: "把 T(α+β) 中的 β 替换为 −β，得到 T(α−β)。" },
+  { name: "二倍角 sin 2α", nodes: ["sin2a"], desc: "在 S(α+β) 中令 β=α：sin 2α = 2 sinα cosα。" },
+  { name: "二倍角 cos 2α", nodes: ["cos2a"], desc: "在 C(α+β) 中令 β=α：cos 2α = cos²α−sin²α。利用 sin²α+cos²α=1 推出另外两种等价形式：2cos²α−1 和 1−2sin²α。" },
+  { name: "二倍角 tan 2α", nodes: ["tan2a"], desc: "在 T(α+β) 中令 β=α：tan 2α = 2tanα/(1−tan²α)。" },
+  { name: "降幂公式", nodes: ["jiangmi_sin","jiangmi_cos"], desc: "从 cos 2α 的两种形式分别解出 sin²α 和 cos²α：sin²α=(1−cos2α)/2，cos²α=(1+cos2α)/2。将二次降为一次。" },
+  { name: "半角公式", nodes: ["half_sin","half_cos","half_tan"], desc: "把降幂公式中的 α 换成 α/2，开方得 sin(α/2) 和 cos(α/2)（带 ± 号）。tan(α/2) 用有理式表达：sinα/(1+cosα) = (1−cosα)/sinα。" },
+  { name: "万能公式", nodes: ["wanneng_sin","wanneng_cos","wanneng_tan"], desc: "利用二倍角公式，将 sinα、cosα、tanα 全部用 t=tan(α/2) 的有理式表示。统一变量，将三角问题转化为代数问题。" },
+];
+
+let currentStep = -1;
+const totalSteps = stepGroups.length;
+
+// ========== SVG 初始化 ==========
+const svg = d3.select("#graph");
+const width = () => svg.node().clientWidth;
+const height = () => svg.node().clientHeight;
+
+// 定义箭头标记
+svg.append("defs").append("marker")
+  .attr("id", "arrowhead")
+  .attr("viewBox", "0 0 10 7")
+  .attr("refX", 10).attr("refY", 3.5)
+  .attr("markerWidth", 8).attr("markerHeight", 6)
+  .attr("orient", "auto")
+  .append("polygon")
+  .attr("points", "0 0, 10 3.5, 0 7")
+  .attr("fill", "var(--edge)");
+
+const g = svg.append("g");
+
+// 章节分隔线
+const ch26Line = 430;
+const ch27Line = 460;
+
+// ========== 渲染 ==========
+function render() {
+  const w = width();
+  const h = Math.max(920, height());
+
+  svg.attr("viewBox", `0 0 ${w} ${h}`);
+
+  g.selectAll("*").remove();
+
+  // 章节分隔线和标签
+  g.append("line")
+    .attr("class", "chapter-line")
+    .attr("x1", 0).attr("y1", ch26Line).attr("x2", w).attr("y2", ch26Line);
+  g.append("text")
+    .attr("class", "chapter-label")
+    .attr("x", w - 200).attr("y", ch26Line - 8)
+    .text("— 第26章：和差公式 —");
+
+  g.append("line")
+    .attr("class", "chapter-line")
+    .attr("x1", 0).attr("y1", ch27Line).attr("x2", w).attr("y2", ch27Line);
+  g.append("text")
+    .attr("class", "chapter-label")
+    .attr("x", w - 200).attr("y", ch27Line - 8)
+    .text("— 第27章：二倍角/降幂/半角/万能 —");
+
+  // 绘制边
+  edges.forEach(e => {
+    const from = steps.find(s => s.id === e.from);
+    const to = steps.find(s => s.id === e.to);
+    if (!from || !to) return;
+
+    const fx = from.x + from.w / 2;
+    const fy = from.y + from.h;
+    const tx = to.x + to.w / 2;
+    const ty = to.y;
+
+    const midY = (fy + ty) / 2;
+
+    const path = d3.path();
+    path.moveTo(fx, fy);
+    path.lineTo(fx, midY);
+    path.lineTo(tx, midY);
+    path.lineTo(tx, ty);
+
+    g.append("path")
+      .attr("class", "edge")
+      .attr("d", path.toString())
+      .attr("data-from", e.from)
+      .attr("data-to", e.to);
+
+    if (e.label) {
+      const lines = e.label.split("\n");
+      lines.forEach((line, i) => {
+        g.append("text")
+          .attr("class", "edge-label")
+          .attr("x", (fx + tx) / 2)
+          .attr("y", midY - (lines.length - 1) * 6 + i * 12)
+          .text(line);
+      });
+    }
+  });
+
+  // 绘制节点
+  steps.forEach(s => {
+    const group = g.append("g")
+      .attr("class", "node")
+      .attr("data-id", s.id)
+      .attr("transform", `translate(${s.x}, ${s.y})`)
+      .style("cursor", "pointer")
+      .on("click", () => showInfo(s))
+      .on("mouseenter", function() { d3.select(this).select("rect").style("filter", "drop-shadow(0 0 6px rgba(74,144,217,0.4))"); })
+      .on("mouseleave", function() { if (!d3.select(this).classed("highlight")) d3.select(this).select("rect").style("filter", null); });
+
+    group.append("rect")
+      .attr("width", s.w)
+      .attr("height", s.h);
+
+    group.append("text")
+      .attr("x", s.w / 2)
+      .attr("y", s.h * 0.33)
+      .style("font-weight", "700")
+      .style("font-size", "13px")
+      .text(s.label);
+
+    group.append("text")
+      .attr("class", "formula")
+      .attr("x", s.w / 2)
+      .attr("y", s.h * 0.7)
+      .style("font-size", "11px")
+      .text(s.formula);
+  });
+}
+
+// ========== 步骤控制 ==========
+function showStep(n) {
+  currentStep = Math.max(-1, Math.min(totalSteps - 1, n));
+
+  // 重置所有节点
+  g.selectAll(".node").classed("highlight", false);
+  g.selectAll(".edge").classed("highlight", false);
+
+  if (currentStep >= 0) {
+    const group = stepGroups[currentStep];
+    group.nodes.forEach(id => {
+      g.select(`.node[data-id="${id}"]`).classed("highlight", true);
+    });
+    // 高亮从已显示节点出发的边
+    const allVisible = new Set();
+    for (let i = 0; i <= currentStep; i++) {
+      stepGroups[i].nodes.forEach(id => allVisible.add(id));
+    }
+    edges.forEach(e => {
+      if (allVisible.has(e.from) && allVisible.has(e.to)) {
+        g.select(`.edge[data-from="${e.from}"][data-to="${e.to}"]`).classed("highlight", true);
+      }
+    });
+    showInfoPanel(group.name, group.desc);
+  } else {
+    hideInfoPanel();
+  }
+
+  updateControls();
+  updateStepDots();
+}
+
+function updateControls() {
+  document.getElementById("btnPrev").disabled = currentStep <= 0;
+  document.getElementById("btnNext").disabled = currentStep >= totalSteps - 1;
+}
+
+function updateStepDots() {
+  const container = document.getElementById("stepDots");
+  container.innerHTML = "";
+  for (let i = 0; i < totalSteps; i++) {
+    const dot = document.createElement("span");
+    dot.className = "step-dot";
+    if (i < currentStep) dot.classList.add("done");
+    if (i === currentStep) dot.classList.add("current");
+    dot.title = stepGroups[i].name;
+    container.appendChild(dot);
+  }
+  document.getElementById("stepDots").querySelector(".current")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+function showInfoPanel(title, desc) {
+  const panel = document.getElementById("infoPanel");
+  panel.innerHTML = `<h3>${title}</h3><p>${desc}</p>`;
+  panel.classList.add("visible");
+}
+
+function hideInfoPanel() {
+  document.getElementById("infoPanel").classList.remove("visible");
+}
+
+function showInfo(s) {
+  showInfoPanel(s.label, `<div class="formula-detail">${s.formula}</div><p style="margin-top:4px;">📖 ${s.chapter}</p><p style="color:var(--chapter-tag);margin-top:2px;">推导方法：${s.method}</p>`);
+}
+
+// ========== 按钮事件 ==========
+document.getElementById("btnPrev").addEventListener("click", () => {
+  if (currentStep > 0) showStep(currentStep - 1);
+});
+document.getElementById("btnNext").addEventListener("click", () => {
+  if (currentStep < totalSteps - 1) showStep(currentStep + 1);
+});
+document.getElementById("btnReset").addEventListener("click", () => showStep(-1));
+document.getElementById("btnAll").addEventListener("click", () => {
+  showStep(-1);
+  g.selectAll(".node").classed("highlight", true);
+  g.selectAll(".edge").classed("highlight", true);
+  const panel = document.getElementById("infoPanel");
+  panel.innerHTML = `<h3>全部公式全景图</h3><p>展示了从 C(α−β) 到万能公式的完整推导链路。单击任意节点查看详情。</p>`;
+  panel.classList.add("visible");
+  currentStep = -1;
+  updateControls();
+  updateStepDots();
+});
+
+// ========== 响应式 ==========
+window.addEventListener("resize", () => {
+  render();
+  if (currentStep >= 0) {
+    // 重新高亮
+    const group = stepGroups[currentStep];
+    group.nodes.forEach(id => {
+      g.select(`.node[data-id="${id}"]`).classed("highlight", true);
+    });
+    const allVisible = new Set();
+    for (let i = 0; i <= currentStep; i++) {
+      stepGroups[i].nodes.forEach(id => allVisible.add(id));
+    }
+    edges.forEach(e => {
+      if (allVisible.has(e.from) && allVisible.has(e.to)) {
+        g.select(`.edge[data-from="${e.from}"][data-to="${e.to}"]`).classed("highlight", true);
+      }
+    });
+  }
+});
+
+// ========== 初始渲染 ==========
+render();
+updateStepDots();
+updateControls();
+</script>
+</body>
+</html>

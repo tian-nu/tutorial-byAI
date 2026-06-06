@@ -1,4 +1,4 @@
-# 第88章 · Kafka入门
+﻿# 第88章 · Kafka入门
 
 > "如果RabbitMQ是一辆精致可靠的日本皮卡，Kafka就是一辆在高速公路上飙到200码的重型卡车——不是为了拉灵活的散货，而是为了在数据高速公路上以百万条/秒的速度狂奔。本章带你理解Kafka的核心概念、搞懂它为什么这么快、然后用Docker启动第一个Kafka实例。"
 
@@ -339,4 +339,4 @@ kafka-topics --bootstrap-server localhost:9092 --delete --topic order-events
 > 🚀 下一章：Kafka的进阶话题——分区策略怎么选？acks=all到底有多可靠？消费者Rebalance是什么？高水位HW和LEO是怎么回事？这些是Kafka面试的核心考点。
 
 ---
-[← 上一章：87-RabbitMQ进阶.md](87-RabbitMQ进阶.md) | [下一章：89-Kafka进阶.md →](89-Kafka进阶.md)
+[← 上一章：87-RabbitMQ进阶.md](87-RabbitMQ进阶/) | [下一章：89-Kafka进阶.md →](89-Kafka进阶/)

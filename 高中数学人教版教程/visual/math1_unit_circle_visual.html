@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>单位圆与三角函数可视化</title>
+<style>
+:root{--bg:#fff;--text:#1f2937;--border:#e5e7eb;--green:#059669;--green-light:#10B981;--green-bg:#ECFDF5;--green-dark:#064E3B;--canvas-bg:#fefefe;--grid:#e5e7eb;--axis:#6b7280}
+.dark{--bg:#111827;--text:#e5e7eb;--border:#374151;--canvas-bg:#1a1a2e;--grid:#2d3748;--axis:#9ca3af}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:16px;transition:background .3s,color .3s}
+h1{font-size:1.4rem;color:var(--green-dark);margin-bottom:4px}
+.subtitle{font-size:.85rem;color:var(--axis);margin-bottom:12px}
+.theme-btn{position:absolute;top:12px;right:16px;background:none;border:1px solid var(--border);border-radius:6px;padding:4px 10px;cursor:pointer;font-size:.85rem;color:var(--text)}
+canvas{border:1px solid var(--border);border-radius:8px;background:var(--canvas-bg);max-width:100%;height:auto}
+.info{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin:10px 0;max-width:600px}
+.card{padding:8px 16px;border-radius:6px;background:var(--green-bg);border:1px solid var(--green-light);font-size:.82rem;font-weight:500;text-align:center}
+.card strong{display:block;color:var(--green-dark);font-size:.75rem;margin-bottom:2px}
+.card .sin{color:#EF4444}
+.card .cos{color:#3B82F6}
+.card .tan{color:#10B981}
+.quadrant{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:4px;max-width:600px}
+.quadrant span{padding:4px 10px;border-radius:4px;font-size:.75rem;background:var(--border);font-weight:600}
+.q-active{background:var(--green)!important;color:#fff}
+.footer{margin-top:auto;padding:12px 0;font-size:.75rem;color:var(--axis);text-align:center}
+</style>
+</head>
+<body>
+<button class="theme-btn" id="themeBtn" title="切换暗色/亮色模式">🌓</button>
+<h1>单位圆与三角函数可视化</h1>
+<p class="subtitle">拖拽圆上红点改变角度，或拖动滑块 | 对应教程 22-三角函数的概念</p>
+<canvas id="canvas" width="600" height="500"></canvas>
+<div class="info" id="info"></div>
+<div class="quadrant" id="quadrant"></div>
+<div class="footer">数据来源：基于人教版高中数学必修第一册（2019版）</div>
+
+<script>
+(function(){
+const canvas=document.getElementById('canvas'),ctx=canvas.getContext('2d');
+const W=600,H=500;
+const cx=200,cy=250,R=140;
+const tanAxisX=cx+R+20;
+let angle=Math.PI/4,isDragging=false;
+
+function toDeg(rad){return rad*180/Math.PI}
+function normalizeAngle(a){let r=a%(2*Math.PI);if(r<0)r+=2*Math.PI;return r}
+
+function getQuadrant(a){
+  const n=normalizeAngle(a);
+  if(n<Math.PI/2)return 1;if(n<Math.PI)return 2;
+  if(n<3*Math.PI/2)return 3;return 4;
+}
+
+function getSigns(a){
+  const q=getQuadrant(a);
+  return{sin:q===1||q===2?'+':'−',cos:q===1||q===4?'+':'−',tan:q===1||q===3?'+':'−'};
+}
+
+function drawGrid(){
+  const axisColor=getComputedStyle(document.body).getPropertyValue('--axis').trim()||'#6b7280';
+  const gridColor=getComputedStyle(document.body).getPropertyValue('--grid').trim()||'#e5e7eb';
+  ctx.strokeStyle=gridColor;ctx.lineWidth=.5;
+  for(let i=0;i<=W;i+=50){ctx.beginPath();ctx.moveTo(i,0);ctx.lineTo(i,H);ctx.stroke()}
+  for(let i=0;i<=H;i+=50){ctx.beginPath();ctx.moveTo(0,i);ctx.lineTo(W,i);ctx.stroke()}
+  ctx.strokeStyle=axisColor;ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.moveTo(cx-180,cy);ctx.lineTo(cx+180,cy);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(cx,cy-180);ctx.lineTo(cx,cy+180);ctx.stroke();
+  ctx.fillStyle=axisColor;ctx.font='11px sans-serif';ctx.textAlign='center';
+  ctx.fillText('x',cx+180,cy+14);ctx.fillText('y',cx-12,cy-180);
+  ctx.fillText('1',cx+R+8,cy-4);ctx.fillText('1',cx-4,cy-R-6);
+  ctx.fillText('-1',cx-R-18,cy-4);ctx.fillText('-1',cx-4,cy+R+14);
+  ctx.fillText('O',cx-12,cy+14);
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  const axisColor=getComputedStyle(document.body).getPropertyValue('--axis').trim()||'#6b7280';
+  drawGrid();
+
+  // Unit circle
+  ctx.strokeStyle=axisColor;ctx.lineWidth=2;
+  ctx.beginPath();ctx.arc(cx,cy,R,0,Math.PI*2);ctx.stroke();
+
+  const px=cx+R*Math.cos(angle),py=cy-R*Math.sin(angle);
+  const sinVal=Math.sin(angle),cosVal=Math.cos(angle),tanVal=Math.tan(angle);
+
+  // Radius line
+  ctx.strokeStyle='#059669';ctx.lineWidth=2;
+  ctx.setLineDash([5,3]);
+  ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(px,py);ctx.stroke();
+  ctx.setLineDash([]);
+
+  // sin line (vertical red)
+  ctx.strokeStyle='#EF4444';ctx.lineWidth=2.5;
+  ctx.beginPath();ctx.moveTo(px,cy);ctx.lineTo(px,py);ctx.stroke();
+  ctx.fillStyle='#EF4444';ctx.font='bold 12px sans-serif';
+  ctx.fillText('sin',px+6,(cy+py)/2);
+
+  // cos line (horizontal blue)
+  ctx.strokeStyle='#3B82F6';ctx.lineWidth=2.5;
+  ctx.beginPath();ctx.moveTo(cx,py);ctx.lineTo(px,py);ctx.stroke();
+  ctx.fillStyle='#3B82F6';
+  ctx.fillText('cos',(cx+px)/2-22,py-6);
+
+  // tan line (green tangent)
+  if(Math.abs(cosVal)>0.001){
+    const tanY=cy-R*tanVal;
+    ctx.strokeStyle='#10B981';ctx.lineWidth=2.5;
+    ctx.setLineDash([4,3]);
+    ctx.beginPath();ctx.moveTo(cx,tanY);ctx.lineTo(px,py);ctx.stroke();
+    ctx.setLineDash([]);
+    // Tangent axis line
+    ctx.strokeStyle='#10B981';ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(tanAxisX,cy-R*1.5);ctx.lineTo(tanAxisX,cy+R*1.5);ctx.stroke();
+    ctx.fillStyle='#10B981';ctx.font='italic 11px sans-serif';
+    ctx.fillText('tan',tanAxisX+4,tanY);
+    // Point on tan axis
+    ctx.fillStyle='#10B981';ctx.beginPath();ctx.arc(tanAxisX,tanY,4,0,Math.PI*2);ctx.fill();
+  }
+
+  // Point P
+  ctx.fillStyle='#EF4444';ctx.beginPath();ctx.arc(px,py,7,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(px,py,3,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#EF4444';ctx.font='bold 13px sans-serif';
+  ctx.fillText('P',px+12,py-8);
+
+  // Arc indicator
+  if(angle>0.05){
+    ctx.strokeStyle='#F59E0B';ctx.lineWidth=2;
+    ctx.beginPath();ctx.arc(cx,cy,25,0,-angle,true);ctx.stroke();
+  }
+
+  // Angle text
+  const deg=toDeg(angle);
+  ctx.fillStyle='#F59E0B';ctx.font='bold 12px sans-serif';
+  ctx.fillText(deg.toFixed(1)+'°',cx+30,cy-20);
+
+  // Info cards
+  const s=getSigns(angle);
+  document.getElementById('info').innerHTML=
+    `<div class="card"><strong>sin</strong><span class="sin">${sinVal.toFixed(4)}</span><br><small>${s.sin} (纵坐标)</small></div>
+     <div class="card"><strong>cos</strong><span class="cos">${cosVal.toFixed(4)}</span><br><small>${s.cos} (横坐标)</small></div>
+     <div class="card"><strong>tan</strong><span class="tan">${Math.abs(cosVal)>0.001?tanVal.toFixed(4):'∞'}</span><br><small>${s.tan} (斜率)</small></div>
+     <div class="card"><strong>角度</strong>${deg.toFixed(1)}°<br><small>${angle.toFixed(4)} rad</small></div>`;
+
+  const q=getQuadrant(angle);
+  document.getElementById('quadrant').innerHTML=
+    `<span class="${q===1?'q-active':''}">第一象限 sin+ cos+ tan+</span>
+     <span class="${q===2?'q-active':''}">第二象限 sin+ cos− tan−</span>
+     <span class="${q===3?'q-active':''}">第三象限 sin− cos− tan+</span>
+     <span class="${q===4?'q-active':''}">第四象限 sin− cos+ tan−</span>`;
+}
+
+canvas.addEventListener('mousedown',function(e){
+  const rect=canvas.getBoundingClientRect();
+  const mx=(e.clientX-rect.left)*(W/rect.width),my=(e.clientY-rect.top)*(H/rect.height);
+  const dx=mx-cx,dy=my-cy,dist=Math.sqrt(dx*dx+dy*dy);
+  if(dist<R+15&&dist>R-30)isDragging=true;
+});
+
+canvas.addEventListener('mousemove',function(e){
+  if(!isDragging)return;
+  const rect=canvas.getBoundingClientRect();
+  const mx=(e.clientX-rect.left)*(W/rect.width),my=(e.clientY-rect.top)*(H/rect.height);
+  angle=normalizeAngle(Math.atan2(cy-my,mx-cx));
+  draw();
+});
+
+canvas.addEventListener('mouseup',function(){isDragging=false});
+canvas.addEventListener('mouseleave',function(){isDragging=false});
+
+canvas.addEventListener('touchstart',function(e){
+  e.preventDefault();
+  const rect=canvas.getBoundingClientRect();
+  const mx=(e.touches[0].clientX-rect.left)*(W/rect.width),my=(e.touches[0].clientY-rect.top)*(H/rect.height);
+  const dx=mx-cx,dy=my-cy,dist=Math.sqrt(dx*dx+dy*dy);
+  if(dist<R+15&&dist>R-30)isDragging=true;
+},{passive:false});
+
+canvas.addEventListener('touchmove',function(e){
+  e.preventDefault();
+  if(!isDragging)return;
+  const rect=canvas.getBoundingClientRect();
+  const mx=(e.touches[0].clientX-rect.left)*(W/rect.width),my=(e.touches[0].clientY-rect.top)*(H/rect.height);
+  angle=normalizeAngle(Math.atan2(cy-my,mx-cx));
+  draw();
+},{passive:false});
+
+canvas.addEventListener('touchend',function(){isDragging=false});
+
+document.getElementById('themeBtn').addEventListener('click',function(){
+  document.documentElement.classList.toggle('dark');
+  draw();
+});
+
+if(window.matchMedia('(prefers-color-scheme:dark)').matches)document.documentElement.classList.add('dark');
+draw();
+})();
+</script>
+</body>
+</html>

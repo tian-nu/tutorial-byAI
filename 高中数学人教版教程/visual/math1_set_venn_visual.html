@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>集合运算 - 韦恩图交互演示</title>
+<style>
+:root {
+  --bg: #f8fafc;
+  --text: #1e293b;
+  --card: #ffffff;
+  --shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+  --a-fill: rgba(16, 185, 129, 0.3);
+  --a-stroke: #059669;
+  --b-fill: rgba(59, 130, 246, 0.3);
+  --b-stroke: #2563eb;
+  --intersection-fill: rgba(5, 150, 105, 0.6);
+  --union-fill: rgba(16, 185, 129, 0.4);
+  --complement-fill: rgba(148, 163, 184, 0.3);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f172a;
+    --text: #f1f5f9;
+    --card: #1e293b;
+    --shadow: 0 4px 6px -1px rgba(0,0,0,0.4);
+  }
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.container {
+  max-width: 800px;
+  width: 100%;
+  background: var(--card);
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: var(--shadow);
+}
+
+h1 {
+  text-align: center;
+  color: var(--a-stroke);
+  margin-bottom: 8px;
+  font-size: 1.8rem;
+}
+
+.description {
+  text-align: center;
+  margin-bottom: 20px;
+  opacity: 0.8;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+button {
+  padding: 10px 16px;
+  border: 2px solid var(--a-stroke);
+  background: transparent;
+  color: var(--text);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 0.9rem;
+}
+
+button:hover, button.active {
+  background: var(--a-stroke);
+  color: white;
+}
+
+#canvas-container {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+canvas {
+  border: 2px solid var(--a-stroke);
+  border-radius: 8px;
+  cursor: move;
+  background: var(--bg);
+  max-width: 100%;
+}
+
+.legend {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+}
+
+.color-box {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  border: 2px solid;
+}
+
+.instructions {
+  background: var(--intersection-fill);
+  padding: 12px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  opacity: 0.8;
+}
+
+footer {
+  text-align: center;
+  opacity: 0.7;
+  font-size: 0.85rem;
+  margin-top: auto;
+}
+
+.theme-toggle {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+}
+</style>
+</head>
+<body>
+<button class="theme-toggle" id="themeToggle" aria-label="切换主题">🌓</button>
+
+<div class="container">
+  <h1>集合基本运算</h1>
+  <p class="description">拖拽两个圆改变位置，点击按钮切换显示不同的集合运算</p>
+
+  <div class="controls">
+    <button class="mode-btn active" data-mode="intersection">A∩B (交集)</button>
+    <button class="mode-btn" data-mode="union">A∪B (并集)</button>
+    <button class="mode-btn" data-mode="complement-a">∁UA (A的补集)</button>
+    <button class="mode-btn" data-mode="complement-b">∁UB (B的补集)</button>
+  </div>
+
+  <div id="canvas-container">
+    <canvas id="canvas" width="600" height="400"></canvas>
+  </div>
+
+  <div class="legend">
+    <div class="legend-item">
+      <span class="color-box" style="background: var(--a-fill); border-color: var(--a-stroke)"></span>
+      <span>集合 A</span>
+    </div>
+    <div class="legend-item">
+      <span class="color-box" style="background: var(--b-fill); border-color: var(--b-stroke)"></span>
+      <span>集合 B</span>
+    </div>
+    <div class="legend-item">
+      <span class="color-box" id="legend-highlight"></span>
+      <span id="legend-text">当前高亮：A∩B (交集)</span>
+    </div>
+  </div>
+
+  <div class="instructions">
+    <strong>操作说明：</strong>鼠标按住圆可以拖拽移动，观察不同位置下集合运算区域的变化。
+  </div>
+
+  <footer>
+    <p>基于人教版高中数学必修第一册（2019版）</p>
+    <p>对应教程 03-集合的基本运算</p>
+  </footer>
+</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+let mode = 'intersection';
+let dragging = null;
+
+// 圆的初始位置
+let circles = {
+  A: { x: 200, y: 200, r: 120, label: 'A' },
+  B: { x: 350, y: 200, r: 120, label: 'B' }
+};
+
+// 主题切换
+const themeToggle = document.getElementById('themeToggle');
+let isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+themeToggle.addEventListener('click', () => {
+  isDark = !isDark;
+  if (isDark) {
+    document.documentElement.style.setProperty('--bg', '#0f172a');
+    document.documentElement.style.setProperty('--text', '#f1f5f9');
+    document.documentElement.style.setProperty('--card', '#1e293b');
+  } else {
+    document.documentElement.style.setProperty('--bg', '#f8fafc');
+    document.documentElement.style.setProperty('--text', '#1e293b');
+    document.documentElement.style.setProperty('--card', '#ffffff');
+  }
+  draw();
+});
+
+// 模式切换
+document.querySelectorAll('.mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelector('.mode-btn.active').classList.remove('active');
+    btn.classList.add('active');
+    mode = btn.dataset.mode;
+    updateLegend();
+    draw();
+  });
+});
+
+function updateLegend() {
+  const legendText = document.getElementById('legend-text');
+  const legendBox = document.getElementById('legend-highlight');
+  const labels = {
+    intersection: 'A∩B (交集)',
+    union: 'A∪B (并集)',
+    'complement-a': '∁UA (A的补集)',
+    'complement-b': '∁UB (B的补集)'
+  };
+  legendText.textContent = `当前高亮：${labels[mode]}`;
+  legendBox.style.backgroundColor = 'var(--intersection-fill)';
+  legendBox.style.borderColor = 'var(--a-stroke)';
+}
+
+// 鼠标事件
+canvas.addEventListener('mousedown', e => {
+  const rect = canvas.getBoundingClientRect();
+  const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+  const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+  for (const key in circles) {
+    const c = circles[key];
+    const dist = Math.hypot(x - c.x, y - c.y);
+    if (dist <= c.r) {
+      dragging = key;
+      break;
+    }
+  }
+});
+
+canvas.addEventListener('mousemove', e => {
+  if (!dragging) return;
+  const rect = canvas.getBoundingClientRect();
+  const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+  const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+  circles[dragging].x = x;
+  circles[dragging].y = y;
+  draw();
+});
+
+canvas.addEventListener('mouseup', () => dragging = null);
+canvas.addEventListener('mouseleave', () => dragging = null);
+
+// 触摸支持
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const touch = e.touches[0];
+  const x = (touch.clientX - rect.left) * (canvas.width / rect.width);
+  const y = (touch.clientY - rect.top) * (canvas.height / rect.height);
+  for (const key in circles) {
+    const c = circles[key];
+    const dist = Math.hypot(x - c.x, y - c.y);
+    if (dist <= c.r) {
+      dragging = key;
+      break;
+    }
+  }
+});
+
+canvas.addEventListener('touchmove', e => {
+  if (!dragging) return;
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const touch = e.touches[0];
+  const x = (touch.clientX - rect.left) * (canvas.width / rect.width);
+  const y = (touch.clientY - rect.top) * (canvas.height / rect.height);
+  circles[dragging].x = x;
+  circles[dragging].y = y;
+  draw();
+});
+
+canvas.addEventListener('touchend', () => dragging = null);
+
+function drawCircle(c, fill, stroke) {
+  ctx.beginPath();
+  ctx.arc(c.x, c.y, c.r, 0, Math.PI * 2);
+  ctx.fillStyle = fill;
+  ctx.fill();
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth = 3;
+  ctx.stroke();
+  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--text');
+  ctx.font = 'bold 24px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(c.label, c.x, c.y);
+}
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // 绘制全集矩形边框
+  ctx.strokeStyle = '#64748b';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(10, 10, canvas.width - 20, canvas.height - 20);
+
+  const A = circles.A;
+  const B = circles.B;
+
+  if (mode === 'intersection') {
+    // 先画背景圆
+    drawCircle(A, 'var(--a-fill)', 'var(--a-stroke)');
+    drawCircle(B, 'var(--b-fill)', 'var(--b-stroke)');
+    // 高亮交集
+    ctx.beginPath();
+    ctx.arc(A.x, A.y, A.r, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.beginPath();
+    ctx.arc(B.x, B.y, B.r, 0, Math.PI * 2);
+    ctx.fillStyle = 'var(--intersection-fill)';
+    ctx.fill();
+  } else if (mode === 'union') {
+    ctx.beginPath();
+    ctx.arc(A.x, A.y, A.r, 0, Math.PI * 2);
+    ctx.arc(B.x, B.y, B.r, 0, Math.PI * 2);
+    ctx.fillStyle = 'var(--union-fill)';
+    ctx.fill();
+    ctx.strokeStyle = 'var(--a-stroke)';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    // 标签
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--text');
+    ctx.font = 'bold 24px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(A.label, A.x, A.y);
+    ctx.fillText(B.label, B.x, B.y);
+  } else if (mode === 'complement-a') {
+    // 补集：矩形减去A
+    ctx.fillStyle = 'var(--complement-fill)';
+    ctx.fillRect(10, 10, canvas.width - 20, canvas.height - 20);
+    drawCircle(A, 'var(--a-fill)', 'var(--a-stroke)');
+    drawCircle(B, 'var(--b-fill)', 'var(--b-stroke)');
+  } else if (mode === 'complement-b') {
+    ctx.fillStyle = 'var(--complement-fill)';
+    ctx.fillRect(10, 10, canvas.width - 20, canvas.height - 20);
+    drawCircle(A, 'var(--a-fill)', 'var(--a-stroke)');
+    drawCircle(B, 'var(--b-fill)', 'var(--b-stroke)');
+  }
+}
+
+draw();
+updateLegend();
+</script>
+</body>
+</html>

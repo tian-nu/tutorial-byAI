@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>函数的奇偶性 - 交互演示</title>
+<style>
+:root {
+  --bg: #f8fafc;
+  --text: #1e293b;
+  --card: #ffffff;
+  --shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+  --green: #059669;
+  --green-light: #10B981;
+  --green-bg: #ECFDF5;
+  --dark-green: #064E3B;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f172a;
+    --text: #f1f5f9;
+    --card: #1e293b;
+    --shadow: 0 4px 6px -1px rgba(0,0,0,0.4);
+  }
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.container {
+  max-width: 950px;
+  width: 100%;
+  background: var(--card);
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: var(--shadow);
+}
+
+h1 { text-align: center; color: var(--green); margin-bottom: 8px; font-size: 1.8rem; }
+.description { text-align: center; margin-bottom: 16px; opacity: 0.8; }
+
+.panels {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+@media (max-width: 700px) {
+  .panels { grid-template-columns: 1fr; }
+}
+
+.panel {
+  background: var(--bg);
+  border: 2px solid var(--green);
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.panel h2 {
+  color: var(--green);
+  font-size: 1.2rem;
+  margin-bottom: 6px;
+}
+
+.panel canvas {
+  border-radius: 4px;
+  background: var(--bg);
+  max-width: 100%;
+  cursor: pointer;
+}
+
+.eq-info {
+  background: var(--green-bg);
+  padding: 10px;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  text-align: center;
+  font-size: 0.9rem;
+}
+
+.eq-info strong {
+  display: block;
+  color: var(--green);
+  font-size: 1.1rem;
+  margin-bottom: 2px;
+}
+
+.instructions {
+  background: var(--green-bg);
+  padding: 12px;
+  border-radius: 8px;
+  opacity: 0.8;
+}
+
+footer {
+  text-align: center;
+  opacity: 0.7;
+  font-size: 0.85rem;
+  margin-top: 16px;
+}
+
+.theme-toggle {
+  position: fixed; top: 16px; right: 16px;
+  width: 40px; height: 40px; border-radius: 50%;
+  padding: 0; display: flex; align-items: center; justify-content: center; font-size: 1.2rem;
+  border: 2px solid var(--green);
+}
+</style>
+</head>
+<body>
+<button class="theme-toggle" id="themeToggle" aria-label="切换主题">🌓</button>
+
+<div class="container">
+  <h1>函数的奇偶性</h1>
+  <p class="description">拖拽点 P 观察对称点 P'，直观理解奇函数与偶函数</p>
+
+  <div class="panels">
+    <div class="panel" id="evenPanel">
+      <h2>偶函数：f(x) = x²</h2>
+      <canvas id="canvasEven" width="380" height="380"></canvas>
+      <div class="eq-info">
+        <strong id="evenInfo">f(-x) = f(x)</strong>
+        <span id="evenDetail">P(x, x²) ↔ P'(-x, x²)</span>
+      </div>
+    </div>
+    <div class="panel" id="oddPanel">
+      <h2>奇函数：f(x) = x³</h2>
+      <canvas id="canvasOdd" width="380" height="380"></canvas>
+      <div class="eq-info">
+        <strong id="oddInfo">f(-x) = -f(x)</strong>
+        <span id="oddDetail">P(x, x³) ↔ P'(-x, -x³)</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="instructions">
+    <strong>操作说明：</strong>在左侧（偶函数）和右侧（奇函数）的图上拖拽蓝色点 P，绿色点 P' 会自动移动到对称位置。观察 f(-x) 与 f(x) 的关系。
+  </div>
+
+  <footer>
+    <p>基于人教版高中数学必修第一册（2019版）</p>
+    <p>对应教程 13-函数的奇偶性</p>
+  </footer>
+</div>
+
+<script>
+function setupCanvas(canvasId, f, isEven) {
+  const canvas = document.getElementById(canvasId);
+  const ctx = canvas.getContext('2d');
+  const MARGIN = 40;
+  const XMIN = -3, XMAX = 3;
+  let YMIN = -9, YMAX = 9;
+
+  let xP = 1.5;
+  let dragging = false;
+
+  function toScreenX(x) { return MARGIN + (x - XMIN) / (XMAX - XMIN) * (canvas.width - 2 * MARGIN); }
+  function toScreenY(y) { return MARGIN + (YMAX - y) / (YMAX - YMIN) * (canvas.height - 2 * MARGIN); }
+  function toWorldX(px) { return XMIN + (px - MARGIN) / (canvas.width - 2 * MARGIN) * (XMAX - XMIN); }
+
+  function computeYRange() {
+    let minY = Infinity, maxY = -Infinity;
+    for (let i = 0; i <= 200; i++) {
+      const x = XMIN + (XMAX - XMIN) * i / 200;
+      const y = f(x);
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+    const pad = Math.max(1.5, (maxY - minY) * 0.2);
+    YMIN = Math.floor(minY - pad);
+    YMAX = Math.ceil(maxY + pad);
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    computeYRange();
+
+    const textColor = getComputedStyle(document.documentElement).getPropertyValue('--text');
+    const axisColor = '#64748b';
+    const gridColor = '#e2e8f0';
+
+    // 网格
+    ctx.strokeStyle = gridColor;
+    ctx.lineWidth = 1;
+    for (let x = Math.ceil(XMIN); x <= XMAX; x++) {
+      const sx = toScreenX(x);
+      ctx.beginPath(); ctx.moveTo(sx, MARGIN); ctx.lineTo(sx, canvas.height - MARGIN); ctx.stroke();
+    }
+    for (let y = Math.ceil(YMIN); y <= YMAX; y++) {
+      const sy = toScreenY(y);
+      ctx.beginPath(); ctx.moveTo(MARGIN, sy); ctx.lineTo(canvas.width - MARGIN, sy); ctx.stroke();
+    }
+
+    const sx0 = toScreenX(0), sy0 = toScreenY(0);
+
+    ctx.strokeStyle = axisColor;
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(MARGIN, sy0); ctx.lineTo(canvas.width - MARGIN, sy0); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(sx0, MARGIN); ctx.lineTo(sx0, canvas.height - MARGIN); ctx.stroke();
+
+    ctx.fillStyle = textColor;
+    ctx.font = '10px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    for (let x = Math.ceil(XMIN); x <= XMAX; x++) {
+      if (x === 0) continue;
+      ctx.fillText(x, toScreenX(x), sy0 + 4);
+    }
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    for (let y = Math.ceil(YMIN); y <= YMAX; y++) {
+      if (y === 0) continue;
+      ctx.fillText(y, sx0 - 4, toScreenY(y));
+    }
+    ctx.fillText('O', sx0 - 10, sy0 + 10);
+
+    // 函数曲线
+    ctx.strokeStyle = '#10B981';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    const step = (XMAX - XMIN) / 300;
+    let first = true;
+    for (let x = XMIN; x <= XMAX; x += step) {
+      const y = f(x);
+      const sx = toScreenX(x), sy = toScreenY(y);
+      if (first) { ctx.moveTo(sx, sy); first = false; }
+      else { ctx.lineTo(sx, sy); }
+    }
+    ctx.stroke();
+
+    // 点 P
+    const xPval = xP;
+    const xPneg = -xP;
+    const yP = f(xP);
+    const yPneg = f(xPneg);
+
+    // 连接线 P-P'
+    ctx.strokeStyle = '#f59e0b';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 4]);
+    ctx.beginPath();
+    ctx.moveTo(toScreenX(xP), toScreenY(yP));
+    ctx.lineTo(toScreenX(xPneg), toScreenY(yPneg));
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // 点 P (蓝色)
+    drawPoint(ctx, xP, yP, '#2563eb', 'P', toScreenX, toScreenY, textColor);
+    // 点 P' (绿色)
+    drawPoint(ctx, xPneg, yPneg, '#10B981', "P'", toScreenX, toScreenY, textColor);
+
+    return { xP, f, toScreenX, toScreenY };
+  }
+
+  function drawPoint(ctx, x, y, color, label, tsx, tsy, textColor) {
+    const px = tsx(x), py = tsy(y);
+    ctx.fillStyle = color;
+    ctx.beginPath(); ctx.arc(px, py, 7, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = 'white';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = textColor;
+    ctx.font = 'bold 12px sans-serif';
+    ctx.textAlign = 'left';
+    const lx = px + (label === 'P' ? 10 : -70);
+    ctx.fillText(`${label}(${x.toFixed(2)},${y.toFixed(2)})`, lx, py - 12);
+  }
+
+  function updateInfo() {
+    const yP = f(xP);
+    const yPneg = f(-xP);
+    const infoId = isEven ? 'evenInfo' : 'oddInfo';
+    const detailId = isEven ? 'evenDetail' : 'oddDetail';
+    const infoEl = document.getElementById(infoId);
+    const detailEl = document.getElementById(detailId);
+
+    if (isEven) {
+      infoEl.textContent = `f(${(-xP).toFixed(2)}) = ${yPneg.toFixed(2)} = f(${xP.toFixed(2)}) = ${yP.toFixed(2)}`;
+      detailEl.textContent = `P(${xP.toFixed(2)}, ${yP.toFixed(2)}) ↔ P'(${(-xP).toFixed(2)}, ${yPneg.toFixed(2)}) — 关于 y 轴对称`;
+    } else {
+      infoEl.textContent = `f(${(-xP).toFixed(2)}) = ${yPneg.toFixed(2)} = -f(${xP.toFixed(2)}) = ${-yP.toFixed(2)}`;
+      detailEl.textContent = `P(${xP.toFixed(2)}, ${yP.toFixed(2)}) ↔ P'(${(-xP).toFixed(2)}, ${yPneg.toFixed(2)}) — 关于原点对称`;
+    }
+  }
+
+  canvas.addEventListener('mousedown', e => {
+    const rect = canvas.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) * (canvas.width / rect.width);
+    const my = (e.clientY - rect.top) * (canvas.height / rect.height);
+    const wx = toWorldX(mx);
+    const wy = toWorldY(my);
+    const dist = Math.hypot(mx - toScreenX(xP), my - toScreenY(f(xP)));
+    if (dist < 35) dragging = true;
+  });
+
+  canvas.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    const rect = canvas.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) * (canvas.width / rect.width);
+    let wx = toWorldX(mx);
+    wx = Math.max(XMIN, Math.min(XMAX, wx));
+    if (Math.abs(wx) < 0.15) wx = 0.15; // 避免在0处
+    xP = wx;
+    draw();
+    updateInfo();
+  });
+
+  canvas.addEventListener('mouseup', () => dragging = false);
+  canvas.addEventListener('mouseleave', () => dragging = false);
+
+  canvas.addEventListener('touchstart', e => {
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const touch = e.touches[0];
+    const mx = (touch.clientX - rect.left) * (canvas.width / rect.width);
+    const my = (touch.clientY - rect.top) * (canvas.height / rect.height);
+    const dist = Math.hypot(mx - toScreenX(xP), my - toScreenY(f(xP)));
+    if (dist < 35) dragging = true;
+  });
+
+  canvas.addEventListener('touchmove', e => {
+    if (!dragging) return;
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const mx = (e.touches[0].clientX - rect.left) * (canvas.width / rect.width);
+    let wx = toWorldX(mx);
+    wx = Math.max(XMIN, Math.min(XMAX, wx));
+    if (Math.abs(wx) < 0.15) wx = 0.15;
+    xP = wx;
+    draw();
+    updateInfo();
+  });
+
+  canvas.addEventListener('touchend', () => dragging = false);
+
+  return { draw, updateInfo };
+}
+
+const even = setupCanvas('canvasEven', x => x * x, true);
+const odd = setupCanvas('canvasOdd', x => x * x * x, false);
+
+even.draw();
+even.updateInfo();
+odd.draw();
+odd.updateInfo();
+
+// Theme toggle
+let isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+document.getElementById('themeToggle').addEventListener('click', () => {
+  isDark = !isDark;
+  if (isDark) {
+    document.documentElement.style.setProperty('--bg', '#0f172a');
+    document.documentElement.style.setProperty('--text', '#f1f5f9');
+    document.documentElement.style.setProperty('--card', '#1e293b');
+    document.documentElement.style.setProperty('--green-bg', '#064e3b');
+  } else {
+    document.documentElement.style.setProperty('--bg', '#f8fafc');
+    document.documentElement.style.setProperty('--text', '#1e293b');
+    document.documentElement.style.setProperty('--card', '#ffffff');
+    document.documentElement.style.setProperty('--green-bg', '#ECFDF5');
+  }
+  even.draw();
+  even.updateInfo();
+  odd.draw();
+  odd.updateInfo();
+});
+</script>
+</body>
+</html>

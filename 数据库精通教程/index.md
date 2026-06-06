@@ -1,85 +1,99 @@
 # 数据库精通
 
-<span class="difficulty-tag intermediate">有基础</span> · 37+ 章
+<span class="t-tag t-tag-intermediate">有基础</span> · 37+ 章
 
-从SQL入门到索引优化，系统掌握数据库核心技能
-
----
-
-## 章节目录
-
-### SQL入门
-
-1. [01-数据库是什么](01-数据库是什么.md)
-2. [02-核心概念上](02-核心概念上.md)
-3. [02b-核心概念下](02b-核心概念下.md)
-4. [03-安装MySQL](03-安装MySQL.md)
-5. [04-数据库与表的创建](04-数据库与表的创建.md)
-6. [05-增删改数据](05-增删改数据.md)
-7. [06-查询数据](06-查询数据.md)
-8. [07-条件查询](07-条件查询.md)
-9. [08-排序与分页](08-排序与分页.md)
-
-### 查询进阶
-
-10. [09-聚合函数与分组](09-聚合函数与分组.md)
-11. [10a-子查询上](10a-子查询上.md)
-12. [10b-子查询下](10b-子查询下.md)
-13. [11-JOIN多表查询](11-JOIN多表查询.md)
-
-### 设计与优化
-
-14. [12-数据类型深入](12-数据类型深入.md)
-15. [13-内置函数](13-内置函数.md)
-16. [14-范式与反范式](14-范式与反范式.md)
-17. [15-ER图建模](15-ER图建模.md)
-18. [16-约束与完整性](16-约束与完整性.md)
-19. [17-B+树索引原理](17-B+树索引原理.md)
-20. [18-查询优化-EXPLAIN](18-查询优化-EXPLAIN.md)
-21. [19-索引实战](19-索引实战.md)
-22. [20-SQL优化](20-SQL优化.md)
-
-### 事务与锁
-
-23. [21-事务基础](21-事务基础.md)
-24. [22-事务隔离级别](22-事务隔离级别.md)
-25. [23-锁机制](23-锁机制.md)
-26. [24-存储引擎](24-存储引擎.md)
-
-### 高可用架构
-
-27. [25-备份与恢复](25-备份与恢复.md)
-28. [26-主从复制](26-主从复制.md)
-29. [27-读写分离](27-读写分离.md)
-30. [28-分库分表](28-分库分表.md)
-31. [29-高可用架构](29-高可用架构.md)
-
-### 多数据库对比
-
-32. [30-PostgreSQL对比](30-PostgreSQL对比.md)
-33. [31-Redis入门](31-Redis入门.md)
-34. [32-Redis进阶](32-Redis进阶.md)
-35. [33-MongoDB入门](33-MongoDB入门.md)
-36. [34-选型决策指南](34-选型决策指南.md)
-
-### 实战项目
-
-37. [35-实战-电商订单](35-实战-电商订单.md)
-38. [36-实战-博客系统](36-实战-博客系统.md)
-39. [37-实战-秒杀系统](37-实战-秒杀系统.md)
-
-### 附录
-
-1. [附录A-MySQL命令速查](附录A-MySQL命令速查.md)
-2. [附录B-SQL语法速查](附录B-SQL语法速查.md)
-3. [附录C-EXPLAIN速查](附录C-EXPLAIN速查.md)
-4. [附录D-错误排查](附录D-错误排查.md)
-5. [附录E-术语表](附录E-术语表.md)
-6. [附录F-学习资源](附录F-学习资源.md)
+从SQL入门到索引原理、事务隔离、高可用架构，系统掌握数据库核心技能。需要基本编程基础。
 
 ---
 
-<div class="nav-prev-next">
+## SQL入门
+
+<div class="ch-grid">
+<a class="ch-link" href="01-数据库是什么.md">01-数据库是什么</a>
+<a class="ch-link" href="02-核心概念上.md">02-核心概念上</a>
+<a class="ch-link" href="02b-核心概念下.md">02b-核心概念下</a>
+<a class="ch-link" href="03-安装MySQL.md">03-安装MySQL</a>
+<a class="ch-link" href="04-数据库与表的创建.md">04-数据库与表的创建</a>
+<a class="ch-link" href="05-增删改数据.md">05-增删改数据</a>
+<a class="ch-link" href="06-查询数据.md">06-查询数据</a>
+<a class="ch-link" href="07-条件查询.md">07-条件查询</a>
+<a class="ch-link" href="08-排序与分页.md">08-排序与分页</a>
+</div>
+
+## 查询进阶
+
+<div class="ch-grid">
+<a class="ch-link" href="09-聚合函数与分组.md">09-聚合函数与分组</a>
+<a class="ch-link" href="10a-子查询上.md">10a-子查询上</a>
+<a class="ch-link" href="10b-子查询下.md">10b-子查询下</a>
+<a class="ch-link" href="11-JOIN多表查询.md">11-JOIN多表查询</a>
+</div>
+
+## 设计与优化
+
+<div class="ch-grid">
+<a class="ch-link" href="12-数据类型深入.md">12-数据类型深入</a>
+<a class="ch-link" href="13-内置函数.md">13-内置函数</a>
+<a class="ch-link" href="14-范式与反范式.md">14-范式与反范式</a>
+<a class="ch-link" href="15-ER图建模.md">15-ER图建模</a>
+<a class="ch-link" href="16-约束与完整性.md">16-约束与完整性</a>
+<a class="ch-link" href="17-B+树索引原理.md">17-B+树索引原理</a>
+<a class="ch-link" href="18-查询优化-EXPLAIN.md">18-查询优化-EXPLAIN</a>
+<a class="ch-link" href="19-索引实战.md">19-索引实战</a>
+<a class="ch-link" href="20-SQL优化.md">20-SQL优化</a>
+</div>
+
+## 事务与锁
+
+<div class="ch-grid">
+<a class="ch-link" href="21-事务基础.md">21-事务基础</a>
+<a class="ch-link" href="22-事务隔离级别.md">22-事务隔离级别</a>
+<a class="ch-link" href="23-锁机制.md">23-锁机制</a>
+<a class="ch-link" href="24-存储引擎.md">24-存储引擎</a>
+</div>
+
+## 高可用架构
+
+<div class="ch-grid">
+<a class="ch-link" href="25-备份与恢复.md">25-备份与恢复</a>
+<a class="ch-link" href="26-主从复制.md">26-主从复制</a>
+<a class="ch-link" href="27-读写分离.md">27-读写分离</a>
+<a class="ch-link" href="28-分库分表.md">28-分库分表</a>
+<a class="ch-link" href="29-高可用架构.md">29-高可用架构</a>
+</div>
+
+## 多数据库对比
+
+<div class="ch-grid">
+<a class="ch-link" href="30-PostgreSQL对比.md">30-PostgreSQL对比</a>
+<a class="ch-link" href="31-Redis入门.md">31-Redis入门</a>
+<a class="ch-link" href="32-Redis进阶.md">32-Redis进阶</a>
+<a class="ch-link" href="33-MongoDB入门.md">33-MongoDB入门</a>
+<a class="ch-link" href="34-选型决策指南.md">34-选型决策指南</a>
+</div>
+
+## 实战项目
+
+<div class="ch-grid">
+<a class="ch-link" href="35-实战-电商订单.md">35-实战-电商订单</a>
+<a class="ch-link" href="36-实战-博客系统.md">36-实战-博客系统</a>
+<a class="ch-link" href="37-实战-秒杀系统.md">37-实战-秒杀系统</a>
+</div>
+
+## 附录
+
+<div class="ch-grid">
+<a class="ch-link" href="附录A-MySQL命令速查.md">附录A-MySQL命令速查</a>
+<a class="ch-link" href="附录B-SQL语法速查.md">附录B-SQL语法速查</a>
+<a class="ch-link" href="附录C-EXPLAIN速查.md">附录C-EXPLAIN速查</a>
+<a class="ch-link" href="附录D-错误排查.md">附录D-错误排查</a>
+<a class="ch-link" href="附录E-术语表.md">附录E-术语表</a>
+<a class="ch-link" href="附录F-学习资源.md">附录F-学习资源</a>
+</div>
+
+---
+
+<div class="d-nav">
 <a href="/vue/">← Vue速成前端</a>
 <a href="/docker/">Docker教程 →</a>
 </div>

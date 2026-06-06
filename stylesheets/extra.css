@@ -250,6 +250,22 @@
 /* ===================================================
    13. 首页侧栏布局
    =================================================== */
+
+/* 首页：移除 MkDocs 默认宽度限制，让自定义布局占满宽度 */
+.md-content.home-content {
+  max-width: none !important;
+}
+
+.md-typeset.home-page {
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.md-typeset.home-page .home-layout {
+  margin: 0;
+}
+
 .home-layout {
   display: flex;
   gap: 0;

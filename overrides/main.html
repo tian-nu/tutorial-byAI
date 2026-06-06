@@ -2,8 +2,8 @@
 
 {% block content %}
   {% if page.url == "" or page.url == "/" or page.url == "index.html" %}
-  {# 首页：移除宽度限制，让自定义布局生效 #}
-  <div class="md-content" data-md-component="content">
+  {# 首页：自定义布局，移除宽度限制 #}
+  <div class="md-content home-content" data-md-component="content">
     <article class="md-content__inner md-typeset home-page">
       {{ page.content }}
     </article>

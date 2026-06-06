@@ -12,6 +12,7 @@ site_dir: site
 theme:
   name: material
   language: zh
+  custom_dir: overrides
   features:
     - navigation.instant
     - navigation.tracking
@@ -106,6 +107,7 @@ extra_css:
 
 nav:
   - 首页: index.md
+  - 学习路径: paths.md
   - Go后端: go/
   - Python后端: python/
   - Java后端: java/

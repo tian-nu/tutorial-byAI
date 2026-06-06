@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block content %}
+  {% if page.url == "" or page.url == "/" or page.url == "index.html" %}
+  {# 首页：移除宽度限制，让自定义布局生效 #}
+  <div class="md-content" data-md-component="content">
+    <article class="md-content__inner md-typeset home-page">
+      {{ page.content }}
+    </article>
+  </div>
+  {% else %}
+  {{ super() }}
+  {% endif %}
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  // 侧栏搜索框
+  var searchTrigger = document.querySelector('.sb-search');
+  if (searchTrigger) {
+    searchTrigger.addEventListener('click', function() {
+      var searchInput = document.querySelector('.md-search__input');
+      if (searchInput) searchInput.focus();
+    });
+  }
+  // Ctrl+K
+  document.addEventListener('keydown', function(e) {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault();
+      var searchInput = document.querySelector('.md-search__input');
+      if (searchInput) searchInput.focus();
+    }
+  });
+});
+</script>
+{% endblock %}

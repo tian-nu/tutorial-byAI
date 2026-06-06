@@ -16,24 +16,18 @@ theme:
   features:
     - navigation.instant
     - navigation.tracking
-    - navigation.tabs
-    - navigation.sections
-    - navigation.expand
-    - navigation.indexes
     - navigation.top
+    - navigation.footer
+    - navigation.path
     - search.suggest
     - search.highlight
     - search.share
     - content.code.copy
     - content.code.annotate
-    - content.tabs.link
-    - toc.follow
-    - navigation.footer
-    - navigation.path
     - content.tooltips
-    - announce.dismiss
     - header.autohide
     - content.code.select
+    - toc.follow
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
@@ -104,16 +98,3 @@ extra:
 
 extra_css:
   - stylesheets/extra.css
-
-nav:
-  - 首页: index.md
-  - 学习路径: paths.md
-  - Go后端: go/
-  - Python后端: python/
-  - Java后端: java/
-  - Vue前端: vue/
-  - 数据库: database/
-  - Docker: docker/
-  - Git: git/
-  - AI编程: ai-coding/
-  - 创业指南: startup/

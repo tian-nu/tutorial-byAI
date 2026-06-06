@@ -14,7 +14,7 @@ TUTORIALS = {
     "java从零到spring boot后端教程": "java",
     "Vue速成前端教程": "vue",
     "数据库精通教程": "database",
-    "Docker教程": "docker",
+    "Docker精通教程": "docker",
     "Git到GitHub教程": "git",
     "AIcoding从零到精通": "ai-coding",
     "初创互联网团队": "startup",
@@ -60,6 +60,18 @@ def main():
     root_index = ROOT / "index.md"
     if root_index.exists():
         shutil.copy2(root_index, DOCS / "index.md")
+
+    # 复制 paths.md
+    root_paths = ROOT / "paths.md"
+    if root_paths.exists():
+        shutil.copy2(root_paths, DOCS / "paths.md")
+
+    # 复制 overrides 目录
+    overrides_src = ROOT / "overrides"
+    if overrides_src.exists():
+        overrides_dest = DOCS / "overrides"
+        # 不需要复制到 docs，MkDocs 直接从根目录 overrides/ 读取
+        pass
 
     root_css = ROOT / "stylesheets" / "extra.css"
     if root_css.exists():

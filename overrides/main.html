@@ -2,11 +2,11 @@
 
 {% block content %}
   {% if page.url == "" or page.url == "/" or page.url == "index.html" %}
-  {# 首页：自定义布局，移除宽度限制 #}
-  <div class="md-content home-content" data-md-component="content">
-    <article class="md-content__inner md-typeset home-page">
+  {# 首页：完全自定义布局，替换 MkDocs 默认内容区 #}
+  <div class="md-content__inner">
+    <div class="home-page">
       {{ page.content }}
-    </article>
+    </div>
   </div>
   {% else %}
   {{ super() }}
@@ -17,7 +17,6 @@
 {{ super() }}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-  // 侧栏搜索框
   var searchTrigger = document.querySelector('.sb-search');
   if (searchTrigger) {
     searchTrigger.addEventListener('click', function() {
@@ -25,7 +24,6 @@ document.addEventListener('DOMContentLoaded', function() {
       if (searchInput) searchInput.focus();
     });
   }
-  // Ctrl+K
   document.addEventListener('keydown', function(e) {
     if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
       e.preventDefault();

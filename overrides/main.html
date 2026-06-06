@@ -46,40 +46,53 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 
   // 首页分类筛选
-  var filterItems = document.querySelectorAll('.home-sidebar .sb-item:not(.active):not(a)');
+  var filterItems = document.querySelectorAll('.home-sidebar .sb-item:not(a)');
   filterItems.forEach(function(item) {
+    // 不使用 addEventListener，避免重复绑定。用 onclick 覆盖。
+    // 但 addEventListener 也可能重复绑定，这里用闭包确保只绑定一次
     item.addEventListener('click', function() {
+      var filter = this.textContent.trim();
+      // 去掉末尾的数字（如"后端3" → "后端"）
+      filter = filter.replace(/\d+\s*$/, '').trim();
+
+      var cards = document.querySelectorAll('.t-card');
+      var dividers = document.querySelectorAll('.divider');
+
+      if (filter === '全部教程') {
+        // 重置：显示全部
+        document.querySelectorAll('.home-sidebar .sb-item').forEach(function(i) {
+          i.classList.remove('active');
+        });
+        this.classList.add('active');
+        cards.forEach(function(c) { c.style.display = ''; });
+        dividers.forEach(function(d) { d.style.display = ''; });
+        return;
+      }
+
+      // 更新 active 状态
       document.querySelectorAll('.home-sidebar .sb-item').forEach(function(i) {
         i.classList.remove('active');
       });
       this.classList.add('active');
 
-      var filter = this.textContent.trim();
-      var cards = document.querySelectorAll('.t-card');
-      var dividers = document.querySelectorAll('.divider');
+      // 隐藏全部
+      cards.forEach(function(c) { c.style.display = 'none'; });
+      dividers.forEach(function(d) { d.style.display = 'none'; });
 
-      if (filter === '全部教程') {
-        cards.forEach(function(c) { c.style.display = ''; });
-        dividers.forEach(function(d) { d.style.display = ''; });
-      } else {
-        cards.forEach(function(c) { c.style.display = 'none'; });
-        dividers.forEach(function(d) { d.style.display = 'none'; });
-
-        var catLabel = filter.replace(/\\d+/, '').trim();
-        dividers.forEach(function(div) {
-          var label = div.querySelector('.divider-label');
-          if (label && label.textContent.trim() === catLabel) {
-            div.style.display = '';
-            var next = div.nextElementSibling;
-            while (next && !next.classList.contains('divider')) {
-              if (next.classList.contains('t-list')) {
-                next.querySelectorAll('.t-card').forEach(function(c) { c.style.display = ''; });
-              }
-              next = next.nextElementSibling;
+      // 只显示匹配分类
+      dividers.forEach(function(div) {
+        var label = div.querySelector('.divider-label');
+        if (label && label.textContent.trim() === filter) {
+          div.style.display = '';
+          var next = div.nextElementSibling;
+          while (next && !next.classList.contains('divider')) {
+            if (next.classList.contains('t-list')) {
+              next.querySelectorAll('.t-card').forEach(function(c) { c.style.display = ''; });
             }
+            next = next.nextElementSibling;
           }
-        });
-      }
+        }
+      });
     });
   });
 

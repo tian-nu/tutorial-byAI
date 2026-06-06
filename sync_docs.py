@@ -26,7 +26,7 @@ EXCLUDE_PATTERNS = {"mkdocs.yml", "site", ".gitignore", "build_log.txt", "change
 
 
 def sync_tutorial(src_dir: Path, dest_dir: Path):
-    """将 src_dir 下的 .md 文件复制到 dest_dir/"""
+    """将 src_dir 下的 .md 和 .pages 文件复制到 dest_dir/"""
     if dest_dir.exists():
         shutil.rmtree(dest_dir)
     dest_dir.mkdir(parents=True, exist_ok=True)
@@ -37,6 +37,12 @@ def sync_tutorial(src_dir: Path, dest_dir: Path):
             continue
         shutil.copy2(f, dest_dir / f.name)
         count += 1
+
+    # 复制 .pages 文件（导航排序配置）
+    pages_file = src_dir / ".pages"
+    if pages_file.exists():
+        shutil.copy2(pages_file, dest_dir / ".pages")
+        print(f"    + .pages")
 
     # 复制 stylesheets 子目录（如果存在）
     styles_src = src_dir / "stylesheets"

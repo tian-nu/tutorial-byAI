@@ -9,6 +9,8 @@ repo_url: https://github.com/tian-nu/tutorial-byAI
 docs_dir: docs
 site_dir: site
 
+use_directory_urls: true
+
 theme:
   name: material
   language: zh
@@ -25,7 +27,6 @@ theme:
     - content.code.copy
     - content.code.annotate
     - content.tooltips
-    - header.autohide
     - content.code.select
     - toc.follow
   palette:

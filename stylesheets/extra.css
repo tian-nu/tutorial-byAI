@@ -632,13 +632,15 @@
   background: var(--accent-soft);
   color: var(--accent);
   cursor: pointer;
-  transition: background var(--t), color var(--t);
+  transition: background var(--t), color var(--t), border-color var(--t);
   text-decoration: none;
+  border: 1px solid transparent;
 }
 
 .p-step:hover {
-  background: var(--accent);
-  color: #fff;
+  background: var(--accent-hover);
+  color: var(--accent);
+  border: 1px solid var(--accent);
 }
 
 .p-arrow {
@@ -647,8 +649,18 @@
 }
 
 /* ===================================================
-   17. 教程详情页
+   17. 教程详情页（子首页：章节列表）
    =================================================== */
+
+/* 子首页：包含 ch-grid 的页面放宽内容区 */
+.md-typeset:has(.ch-grid) {
+  max-width: 100% !important;
+}
+
+.md-content:has(.ch-grid) {
+  max-width: 100% !important;
+}
+
 .ch-group {
   margin-bottom: 24px;
 }
@@ -902,8 +914,9 @@
 }
 
 [data-md-color-scheme="slate"] .p-step:hover {
-  background: var(--md-accent-fg-color, #6bc4c1);
-  color: #1a1f2e;
+  background: var(--accent-hover);
+  color: var(--md-accent-fg-color, #6bc4c1);
+  border-color: var(--md-accent-fg-color, #6bc4c1);
 }
 
 [data-md-color-scheme="slate"] .ch-link {

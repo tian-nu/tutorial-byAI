@@ -16,112 +16,133 @@
 {% block scripts %}
 {{ super() }}
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-  // 侧边栏搜索按钮 - 点击打开 MkDocs 搜索
-  var searchTrigger = document.querySelector('.sb-search');
-  if (searchTrigger) {
-    searchTrigger.addEventListener('click', function() {
-      var searchButton = document.querySelector('.md-search__open');
-      if (searchButton) {
-        searchButton.click();
-      } else {
-        var searchInput = document.querySelector('.md-search__input');
-        if (searchInput) searchInput.focus();
-      }
-    });
-  }
+(function() {
+  // ============================================================
+  // 事件委托：绑定在 document 上，不受 MkDocs instant loading
+  // DOM 替换影响，只绑定一次，永久有效
+  // ============================================================
 
-  // Ctrl+K 快捷键打开搜索
-  document.addEventListener('keydown', function(e) {
-    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-      e.preventDefault();
-      var searchButton = document.querySelector('.md-search__open');
-      if (searchButton) {
-        searchButton.click();
+  // 搜索按钮（委托）
+  document.addEventListener('click', function(e) {
+    if (e.target.closest('.sb-search')) {
+      var searchBtn = document.querySelector('.md-search__open');
+      if (searchBtn) {
+        searchBtn.click();
       } else {
-        var searchInput = document.querySelector('.md-search__input');
-        if (searchInput) searchInput.focus();
+        var si = document.querySelector('.md-search__input');
+        if (si) si.focus();
       }
     }
   });
 
-  // 首页分类筛选
-  var filterItems = document.querySelectorAll('.home-sidebar .sb-item:not(a)');
-  filterItems.forEach(function(item) {
-    // 不使用 addEventListener，避免重复绑定。用 onclick 覆盖。
-    // 但 addEventListener 也可能重复绑定，这里用闭包确保只绑定一次
-    item.addEventListener('click', function() {
-      var filter = this.textContent.trim();
-      // 去掉末尾的数字（如"后端3" → "后端"）
-      filter = filter.replace(/\d+\s*$/, '').trim();
+  // 侧边栏分类筛选（委托）
+  document.addEventListener('click', function(e) {
+    var item = e.target.closest('.home-sidebar .sb-item');
+    if (!item) return;
+    // 跳过带 <a> 标签的导航项（如"学习路径"）
+    if (item.querySelector('a')) return;
 
-      var cards = document.querySelectorAll('.t-card');
-      var dividers = document.querySelectorAll('.divider');
+    var filter = item.textContent.trim();
+    filter = filter.replace(/\d+\s*$/, '').trim();
 
-      if (filter === '全部教程') {
-        // 重置：显示全部
-        document.querySelectorAll('.home-sidebar .sb-item').forEach(function(i) {
-          i.classList.remove('active');
-        });
-        this.classList.add('active');
-        cards.forEach(function(c) { c.style.display = ''; });
-        dividers.forEach(function(d) { d.style.display = ''; });
-        return;
-      }
+    var cards = document.querySelectorAll('.t-card');
+    var dividers = document.querySelectorAll('.divider');
 
-      // 更新 active 状态
+    if (filter === '全部教程') {
       document.querySelectorAll('.home-sidebar .sb-item').forEach(function(i) {
         i.classList.remove('active');
       });
-      this.classList.add('active');
+      item.classList.add('active');
+      cards.forEach(function(c) { c.style.display = ''; });
+      dividers.forEach(function(d) { d.style.display = ''; });
+      return;
+    }
 
-      // 隐藏全部
-      cards.forEach(function(c) { c.style.display = 'none'; });
-      dividers.forEach(function(d) { d.style.display = 'none'; });
+    document.querySelectorAll('.home-sidebar .sb-item').forEach(function(i) {
+      i.classList.remove('active');
+    });
+    item.classList.add('active');
 
-      // 只显示匹配分类
-      dividers.forEach(function(div) {
-        var label = div.querySelector('.divider-label');
-        if (label && label.textContent.trim() === filter) {
-          div.style.display = '';
-          var next = div.nextElementSibling;
-          while (next && !next.classList.contains('divider')) {
-            if (next.classList.contains('t-list')) {
-              next.querySelectorAll('.t-card').forEach(function(c) { c.style.display = ''; });
-            }
-            next = next.nextElementSibling;
+    cards.forEach(function(c) { c.style.display = 'none'; });
+    dividers.forEach(function(d) { d.style.display = 'none'; });
+
+    dividers.forEach(function(div) {
+      var label = div.querySelector('.divider-label');
+      if (label && label.textContent.trim() === filter) {
+        div.style.display = '';
+        var next = div.nextElementSibling;
+        while (next && !next.classList.contains('divider')) {
+          if (next.classList.contains('t-list')) {
+            next.querySelectorAll('.t-card').forEach(function(c) { c.style.display = ''; });
           }
+          next = next.nextElementSibling;
         }
-      });
+      }
     });
   });
 
-  // 首页隐藏 MkDocs 默认侧栏
-  var homeContent = document.querySelector('.md-content--home');
-  if (homeContent) {
-    var mainInner = homeContent.closest('.md-main__inner');
-    if (mainInner) {
-      mainInner.querySelectorAll(':scope > .md-sidebar').forEach(function(sb) { sb.style.display = 'none'; });
-      mainInner.style.maxWidth = 'none';
-      homeContent.style.maxWidth = 'none';
-      homeContent.style.width = '100%';
-      var inner = homeContent.querySelector('.md-content__inner');
-      if (inner) {
-        inner.style.maxWidth = 'none';
-        inner.style.padding = '0';
-        inner.style.margin = '0';
+  // Ctrl+K 快捷键
+  document.addEventListener('keydown', function(e) {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault();
+      var searchBtn = document.querySelector('.md-search__open');
+      if (searchBtn) {
+        searchBtn.click();
+      } else {
+        var si = document.querySelector('.md-search__input');
+        if (si) si.focus();
       }
+    }
+  });
+
+  // ============================================================
+  // 布局调整：每次导航（含 instant loading）都需要重新执行
+  // ============================================================
+  function adjustLayout() {
+    // 首页：隐藏 MkDocs 默认侧栏
+    var homeContent = document.querySelector('.md-content--home');
+    if (homeContent) {
+      var mainInner = homeContent.closest('.md-main__inner');
+      if (mainInner) {
+        mainInner.querySelectorAll(':scope > .md-sidebar').forEach(function(sb) { sb.style.display = 'none'; });
+        mainInner.style.maxWidth = 'none';
+        homeContent.style.maxWidth = 'none';
+        homeContent.style.width = '100%';
+        var inner = homeContent.querySelector('.md-content__inner');
+        if (inner) {
+          inner.style.maxWidth = 'none';
+          inner.style.padding = '0';
+          inner.style.margin = '0';
+        }
+      }
+    }
+
+    // 教程子首页（章节列表 ch-grid）：铺满宽度
+    var hasChGrid = document.querySelector('.ch-grid');
+    if (hasChGrid) {
+      var contentArea = document.querySelector('.md-content');
+      var typeset = document.querySelector('.md-typeset');
+      if (contentArea) contentArea.style.maxWidth = 'none';
+      if (typeset) typeset.style.maxWidth = 'none';
     }
   }
 
-  // 教程子首页（章节列表 ch-grid）：铺满宽度
-  var hasChGrid = document.querySelector('.ch-grid');
-  if (hasChGrid) {
-    var contentArea = document.querySelector('.md-content');
-    var typeset = document.querySelector('.md-typeset');
-    if (contentArea) contentArea.style.maxWidth = 'none';
-    if (typeset) typeset.style.maxWidth = 'none';
+  // 初始加载
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', adjustLayout);
+  } else {
+    adjustLayout();
   }
-});
+
+  // MkDocs Material instant loading：每次导航后重新调整布局
+  if (typeof document$ !== 'undefined') {
+    document$.subscribe(function() {
+      // 延迟一帧，确保 MkDocs 完成 DOM 替换
+      requestAnimationFrame(function() {
+        adjustLayout();
+      });
+    });
+  }
+})();
 </script>
 {% endblock %}

@@ -57,8 +57,6 @@ plugins:
         - en
       separator: '[\s\-\.]+'
   - awesome-pages
-  - minify:
-      minify_html: true
 
 markdown_extensions:
   - pymdownx.highlight:

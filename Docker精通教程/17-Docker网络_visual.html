@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Docker Bridge 网络架构可视化</title>
+<!--
+  数据来源：Docker精通教程第17章（网络基础）
+  可视化对应教程步骤 2（bridge 模式原理）
+  依赖：无外部 CDN，纯自包含实现
+  暗色/亮色模式：点击右上角按钮切换
+-->
+<style>
+:root {
+  --bg: #ffffff;
+  --fg: #1a1a2e;
+  --border: #d0d0d0;
+  --card-bg: #f8f9fa;
+  --host-bg: #e8f4f8;
+  --bridge-bg: #fff3cd;
+  --container-bg: #d4edda;
+  --veth-color: #6c757d;
+  --highlight: #ff6b6b;
+  --btn-bg: #e9ecef;
+  --btn-fg: #333;
+  --shadow: 0 2px 8px rgba(0,0,0,0.1);
+  --active-step-bg: #ffe0b2;
+}
+[data-theme="dark"] {
+  --bg: #1a1a2e;
+  --fg: #e0e0e0;
+  --border: #444;
+  --card-bg: #2d2d44;
+  --host-bg: #1a3a4a;
+  --bridge-bg: #4a3a1a;
+  --container-bg: #1a4a2a;
+  --veth-color: #888;
+  --highlight: #ff6b6b;
+  --btn-bg: #3a3a5a;
+  --btn-fg: #ccc;
+  --shadow: 0 2px 8px rgba(0,0,0,0.4);
+  --active-step-bg: #5a4020;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  transition: background 0.3s, color 0.3s;
+  min-height: 100vh;
+}
+.header {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 20px 20px 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.header h1 { font-size: 1.3em; font-weight: 600; }
+.theme-btn {
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  border: 1px solid var(--border);
+  padding: 6px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9em;
+}
+.desc {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 6px 20px 10px;
+  font-size: 0.88em;
+  color: var(--fg);
+  opacity: 0.75;
+}
+.controls {
+  max-width: 900px;
+  margin: 0 auto 10px;
+  padding: 0 20px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.controls button {
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  border: 1px solid var(--border);
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9em;
+  transition: background 0.2s, transform 0.15s;
+}
+.controls button:hover { transform: translateY(-1px); }
+.controls button.active {
+  background: var(--highlight);
+  color: #fff;
+  border-color: var(--highlight);
+}
+.canvas-wrap {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 0 20px 20px;
+}
+canvas {
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card-bg);
+  box-shadow: var(--shadow);
+}
+.step-info {
+  max-width: 900px;
+  margin: 0 auto 20px;
+  padding: 12px 20px;
+  background: var(--card-bg);
+  border-radius: 8px;
+  border-left: 4px solid var(--highlight);
+  font-size: 0.9em;
+  line-height: 1.6;
+  min-height: 48px;
+  transition: background 0.3s;
+}
+.footer {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 10px 20px 20px;
+  font-size: 0.78em;
+  opacity: 0.6;
+  text-align: center;
+}
+.footer a { color: var(--fg); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Docker Bridge 网络架构</h1>
+  <button class="theme-btn" onclick="toggleTheme()" title="切换暗色/亮色模式">🌓 切换主题</button>
+</div>
+<div class="desc">
+  本可视化对应 <a href="17-网络基础.md" style="color:inherit">Docker精通教程第17章</a> 步骤二（bridge 模式原理）。展示 docker0 虚拟网桥如何连接宿主机与容器。
+</div>
+
+<div class="controls">
+  <button id="btn-step0" class="active" onclick="goToStep(0)">步骤 1：初始状态</button>
+  <button id="btn-step1" onclick="goToStep(1)">步骤 2：启动容器 A</button>
+  <button id="btn-step2" onclick="goToStep(2)">步骤 3：启动容器 B</button>
+  <button id="btn-step3" onclick="goToStep(3)">步骤 4：容器间通信</button>
+  <button id="btn-step4" onclick="goToStep(4)">步骤 5：外部访问</button>
+  <button id="btn-reset" onclick="goToStep(0)">⟳ 重置</button>
+</div>
+
+<div class="step-info" id="step-info">
+  <strong>步骤 1：初始状态</strong> — 宿主机上只有 docker0 虚拟网桥（172.17.0.1），等待容器接入。
+</div>
+
+<div class="canvas-wrap">
+  <canvas id="mainCanvas" width="860" height="480"></canvas>
+</div>
+
+<div class="footer">
+  数据来源：Docker精通教程第 17 章（网络基础） | 基于 Docker 官方文档 bridge 网络原理
+</div>
+
+<script>
+let currentStep = 0;
+const totalSteps = 5;
+
+const stepInfo = [
+  `<strong>步骤 1：初始状态</strong> — 宿主机上只有 docker0 虚拟网桥（172.17.0.1），等待容器接入。`,
+  `<strong>步骤 2：启动容器 A</strong> — 执行 <code>docker run -d --name web1 nginx:alpine</code>。<br>Docker 创建一对 veth 虚拟网卡：一端插入容器 A（eth0，172.17.0.2），一端插在 docker0 网桥上。`,
+  `<strong>步骤 3：启动容器 B</strong> — 执行 <code>docker run -d --name web2 nginx:alpine</code>。<br>同样创建一对 veth：容器 B 获得 eth0（172.17.0.3），另一端连 docker0。`,
+  `<strong>步骤 4：容器间通信</strong> — 容器 A ping 容器 B（172.17.0.3）。数据包经过 veth → docker0 网桥转发 → 目标容器的 veth → 到达容器 B。<br>⚠️ 注意：默认 bridge 网络不支持容器名 DNS，只能通过 IP 通信。`,
+  `<strong>步骤 5：外部访问</strong> — 外部流量到达宿主机 eth0（192.168.1.100），通过 NAT + 端口映射（-p 8080:80）转发到容器 A 的 80 端口。`
+];
+
+function toggleTheme() {
+  const html = document.documentElement;
+  const current = html.getAttribute('data-theme');
+  const next = current === 'dark' ? 'light' : 'dark';
+  html.setAttribute('data-theme', next);
+  drawCanvas();
+}
+
+function goToStep(n) {
+  currentStep = n;
+  document.querySelectorAll('.controls button[id^="btn-step"]').forEach((btn, i) => {
+    btn.classList.toggle('active', i === n);
+  });
+  document.getElementById('step-info').innerHTML = stepInfo[n];
+  drawCanvas();
+}
+
+function drawCanvas() {
+  const canvas = document.getElementById('mainCanvas');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width;
+  const H = canvas.height;
+  const theme = document.documentElement.getAttribute('data-theme');
+
+  const colors = theme === 'dark' ? {
+    bg:     '#1a1a2e',
+    hostBg: '#1a3a4a',
+    hostBd: '#3a6a8a',
+    bridgeBg: '#4a3a1a',
+    bridgeBd: '#8a7a3a',
+    ctrBg: '#1a4a2a',
+    ctrBd: '#3a8a4a',
+    ctrABg: '#2a1a3a',
+    ctrABd: '#6a3a8a',
+    vethLine: '#888',
+    activeLine: '#ff6b6b',
+    fg: '#e0e0e0',
+    fgDim: '#999',
+    extBg: '#3a2a1a',
+    extBd: '#8a6a3a',
+    arrow: '#ff6b6b',
+    natBg: '#2a2a4a',
+    natBd: '#5a5a8a',
+  } : {
+    bg:     '#ffffff',
+    hostBg: '#e8f4f8',
+    hostBd: '#4a90d9',
+    bridgeBg: '#fff3cd',
+    bridgeBd: '#d4a017',
+    ctrBg: '#d4edda',
+    ctrBd: '#28a745',
+    ctrABg: '#e8daf0',
+    ctrABd: '#8e44ad',
+    vethLine: '#6c757d',
+    activeLine: '#ff6b6b',
+    fg: '#1a1a2e',
+    fgDim: '#888',
+    extBg: '#fce4d6',
+    extBd: '#e67e22',
+    arrow: '#ff6b6b',
+    natBg: '#e8e8f8',
+    natBd: '#5a5a8a',
+  };
+
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = colors.bg;
+  ctx.fillRect(0, 0, W, H);
+
+  const cx = W / 2;
+  // ── 宿主机区域 ──
+  ctx.fillStyle = colors.hostBg;
+  ctx.strokeStyle = colors.hostBd;
+  ctx.lineWidth = 2;
+  roundRect(ctx, 30, 10, W - 60, H - 20, 12);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = colors.fg;
+  ctx.font = 'bold 13px -apple-system, BlinkMacSystemFont, sans-serif';
+  ctx.fillText('宿主机 (Host)', 50, 35);
+
+  // ── 宿主机 eth0 ──
+  drawLabeledBox(ctx, cx - 40, 28, 80, 26, 'eth0', '192.168.1.100', colors.extBg, colors.extBd, colors.fg, colors.fgDim, 10);
+
+  // ── docker0 网桥 ──
+  drawLabeledBox(ctx, cx - 65, 105, 130, 40, 'docker0', '172.17.0.1 (网关)', colors.bridgeBg, colors.bridgeBd, colors.fg, colors.fgDim, 10);
+
+  // ── 容器 A（步骤 1+） ──
+  if (currentStep >= 1) {
+    const ax = 120, ay = 220, aw = 160, ah = 80;
+    drawLabeledBox(ctx, ax, ay, aw, ah, '容器 A (web1)', 'eth0: 172.17.0.2', colors.ctrBg, colors.ctrBd, colors.fg, colors.fgDim, 10);
+
+    // veth pair A
+    drawVethPair(ctx, cx - 65, 145, 200, 220, colors.vethLine, currentStep >= 1, 'veth-a-host', 'veth-a-ctr');
+
+    // 容器 A 内部小框
+    ctx.fillStyle = colors.ctrBd;
+    ctx.globalAlpha = 0.15;
+    ctx.fillRect(ax + 10, ay + 30, 55, 22);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = colors.fgDim;
+    ctx.font = '10px monospace';
+    ctx.fillText(':80', ax + 16, ay + 46);
+  }
+
+  // ── 容器 B（步骤 2+） ──
+  if (currentStep >= 2) {
+    const bx = 580, by = 220, bw = 160, bh = 80;
+    drawLabeledBox(ctx, bx, by, bw, bh, '容器 B (web2)', 'eth0: 172.17.0.3', colors.ctrABg, colors.ctrABd, colors.fg, colors.fgDim, 10);
+
+    drawVethPair(ctx, cx + 65, 145, 660, 220, colors.vethLine, currentStep >= 2, 'veth-b-host', 'veth-b-ctr');
+
+    ctx.fillStyle = colors.ctrABd;
+    ctx.globalAlpha = 0.15;
+    ctx.fillRect(bx + 10, by + 30, 55, 22);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = colors.fgDim;
+    ctx.font = '10px monospace';
+    ctx.fillText(':80', bx + 16, by + 46);
+  }
+
+  // ── 容器间通信箭头（步骤 3） ──
+  if (currentStep >= 3) {
+    drawArrow(ctx, 240, 260, 580, 260, colors.arrow, 3);
+    ctx.fillStyle = colors.arrow;
+    ctx.font = 'bold 11px sans-serif';
+    ctx.fillText('ping 172.17.0.3', 330, 250);
+    ctx.fillStyle = colors.fgDim;
+    ctx.font = '10px sans-serif';
+    ctx.fillText('（通过 docker0 转发）', 340, 266);
+  }
+
+  // ── 外部访问箭头（步骤 4） ──
+  if (currentStep >= 4) {
+    // NAT 框
+    drawLabeledBox(ctx, cx - 30, 160, 60, 22, '', 'NAT', colors.natBg, colors.natBd, colors.fg, colors.fg, 6);
+
+    // 外部来源
+    ctx.fillStyle = colors.fgDim;
+    ctx.font = '10px sans-serif';
+    ctx.fillText('外部流量', 10, 52);
+
+    drawArrow(ctx, 50, 42, cx - 10, 42, colors.arrow, 2);
+    ctx.fillStyle = colors.arrow;
+    ctx.font = 'bold 10px sans-serif';
+    ctx.fillText('请求 :8080', 200, 38);
+
+    drawArrow(ctx, cx, 52, cx, 100, colors.arrow, 2);
+    drawArrow(ctx, cx, 138, 200, 220, colors.arrow, 2);
+
+    ctx.fillStyle = colors.arrow;
+    ctx.font = 'bold 10px sans-serif';
+    ctx.fillText('转发到 172.17.0.2:80', 310, 120);
+
+    // 端口映射标注
+    ctx.fillStyle = colors.fgDim;
+    ctx.font = '10px sans-serif';
+    ctx.fillText('docker run -p 8080:80', cx - 70, 145);
+  }
+
+  // ── 图例 ──
+  const legendY = H - 42;
+  const items = [
+    { label: 'docker0 网桥', color: colors.bridgeBg, border: colors.bridgeBd },
+    { label: '容器', color: colors.ctrBg, border: colors.ctrBd },
+    { label: 'veth 虚拟网卡', color: 'transparent', border: colors.vethLine, isVeth: true },
+    { label: '数据流', color: 'transparent', border: colors.arrow, isArrow: true },
+  ];
+  let lx = 40;
+  for (const item of items) {
+    if (item.isVeth) {
+      ctx.strokeStyle = item.border;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(lx, legendY + 8);
+      ctx.lineTo(lx + 18, legendY + 8);
+      ctx.stroke();
+      ctx.fillStyle = item.border;
+      ctx.beginPath();
+      ctx.arc(lx + 18, legendY + 8, 3, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (item.isArrow) {
+      drawArrow(ctx, lx, legendY + 8, lx + 24, legendY + 8, item.border, 2);
+    } else {
+      ctx.fillStyle = item.color;
+      ctx.strokeStyle = item.border;
+      ctx.lineWidth = 1.5;
+      ctx.fillRect(lx, legendY, 18, 14);
+      ctx.strokeRect(lx, legendY, 18, 14);
+    }
+    ctx.fillStyle = colors.fgDim;
+    ctx.font = '10px sans-serif';
+    ctx.fillText(item.label, lx + 26, legendY + 12);
+    lx += 100;
+  }
+}
+
+function drawLabeledBox(ctx, x, y, w, h, label, sublabel, bgColor, bdColor, fgColor, subColor, radius) {
+  ctx.fillStyle = bgColor;
+  ctx.strokeStyle = bdColor;
+  ctx.lineWidth = 2;
+  roundRect(ctx, x, y, w, h, radius);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = fgColor;
+  ctx.font = 'bold 12px -apple-system, BlinkMacSystemFont, sans-serif';
+  ctx.fillText(label, x + 10, y + 20);
+
+  if (sublabel) {
+    ctx.fillStyle = subColor;
+    ctx.font = '10px monospace';
+    ctx.fillText(sublabel, x + 10, y + 38);
+  }
+}
+
+function drawVethPair(ctx, x1, y1, x2, y2, color, visible, label1, label2) {
+  if (!visible) return;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.setLineDash([6, 3]);
+  // vertical from bridge
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x1, y1 + 55);
+  ctx.stroke();
+  // horizontal
+  ctx.beginPath();
+  ctx.moveTo(x1, y1 + 55);
+  ctx.lineTo(x2, y1 + 55);
+  ctx.stroke();
+  // vertical down
+  ctx.beginPath();
+  ctx.moveTo(x2, y1 + 55);
+  ctx.lineTo(x2, y2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // endpoint dots
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(x1, y1 + 55, 4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(x2, y1 + 55, 4, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawArrow(ctx, fromX, fromY, toX, toY, color, headSize) {
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = 2;
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  ctx.moveTo(fromX, fromY);
+  ctx.lineTo(toX, toY);
+  ctx.stroke();
+
+  const angle = Math.atan2(toY - fromY, toX - fromX);
+  ctx.beginPath();
+  ctx.moveTo(toX, toY);
+  ctx.lineTo(
+    toX - headSize * Math.cos(angle - Math.PI / 6),
+    toY - headSize * Math.sin(angle - Math.PI / 6)
+  );
+  ctx.lineTo(
+    toX - headSize * Math.cos(angle + Math.PI / 6),
+    toY - headSize * Math.sin(angle + Math.PI / 6)
+  );
+  ctx.closePath();
+  ctx.fill();
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+// initial draw
+drawCanvas();
+</script>
+</body>
+</html>

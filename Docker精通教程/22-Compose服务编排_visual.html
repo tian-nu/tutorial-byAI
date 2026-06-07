@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Compose 服务编排可视化 — WordPress + MySQL</title>
+<!-- 数据来源：Docker精通教程 22-多容器编排.md v1 -->
+<!-- 依赖：无外部依赖，纯前端实现，可离线运行 -->
+<style>
+:root {
+  --bg: #fafafa;
+  --card-bg: #ffffff;
+  --text: #2c3e50;
+  --text2: #5a6c7d;
+  --border: #e0e4e8;
+  --accent: #2563eb;
+  --accent2: #0891b2;
+  --success: #16a34a;
+  --warning: #ea580c;
+  --danger: #dc2626;
+  --gray: #94a3b8;
+  --mysql: #4479a1;
+  --wp: #21759b;
+  --node-bg: #f1f5f9;
+  --tag-bg: #e2e8f0;
+  --shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+[data-theme="dark"] {
+  --bg: #1a1d23;
+  --card-bg: #242830;
+  --text: #e2e8f0;
+  --text2: #94a3b8;
+  --border: #374151;
+  --node-bg: #2d3139;
+  --tag-bg: #374151;
+  --shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+* { box-sizing:border-box; margin:0; padding:0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg); color: var(--text);
+  line-height: 1.6;
+  transition: background 0.3s, color 0.3s;
+  padding: 20px;
+}
+.container { max-width: 900px; margin: 0 auto; }
+
+/* header */
+.header {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  margin-bottom: 24px; flex-wrap: wrap; gap: 12px;
+}
+.header h1 { font-size: 1.5rem; font-weight: 700; color: var(--accent); }
+.header p { color: var(--text2); font-size: 0.9rem; margin-top: 4px; }
+.theme-btn {
+  padding: 6px 14px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--card-bg); color: var(--text); cursor: pointer;
+  font-size: 0.85rem; transition: all 0.2s;
+}
+.theme-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* controls */
+.controls {
+  display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap;
+}
+.controls button {
+  padding: 8px 18px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--card-bg); color: var(--text); cursor: pointer;
+  font-size: 0.9rem; transition: all 0.2s; font-weight: 500;
+}
+.controls button:hover { border-color: var(--accent); color: var(--accent); }
+.controls button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.controls button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* step indicator */
+.step-indicator {
+  display: flex; align-items: center; margin-bottom: 20px; gap: 4px;
+  font-size: 0.85rem; color: var(--text2);
+}
+.step-indicator .step-num {
+  font-weight: 700; color: var(--accent); font-size: 1.1rem;
+}
+
+/* flow area */
+.flow-area {
+  background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px;
+  padding: 28px 20px; margin-bottom: 20px; box-shadow: var(--shadow);
+  display: flex; justify-content: center; align-items: center; gap: 20px;
+  flex-wrap: wrap; min-height: 280px;
+}
+
+/* nodes */
+.node {
+  background: var(--node-bg); border: 2px solid var(--border); border-radius: 12px;
+  padding: 16px 20px; text-align: center; min-width: 140px;
+  transition: all 0.4s ease; position: relative;
+}
+.node.active { border-color: var(--success); background: #e6f7e6; }
+[data-theme="dark"] .node.active { background: #1a2e1a; }
+.node.waiting { border-color: var(--warning); border-style: dashed; }
+.node.error { border-color: var(--danger); }
+.node .name { font-weight: 700; font-size: 1rem; }
+.node .role { font-size: 0.8rem; color: var(--text2); margin-top: 2px; }
+.node .port { font-size: 0.75rem; color: var(--gray); margin-top: 2px; }
+.node .status-tag {
+  display: inline-block; margin-top: 6px; padding: 2px 8px; border-radius: 4px;
+  font-size: 0.75rem; font-weight: 600;
+}
+.node .status-tag.starting { background: #fef3c7; color: #92400e; }
+.node .status-tag.healthy { background: #dcfce7; color: #166534; }
+.node .status-tag.running { background: #dcfce7; color: #166534; }
+.node .status-tag.waiting { background: #f1f5f9; color: #64748b; }
+[data-theme="dark"] .node .status-tag.starting { background: #3b2e0a; color: #fcd34d; }
+[data-theme="dark"] .node .status-tag.healthy { background: #0a2e1a; color: #4ade80; }
+[data-theme="dark"] .node .status-tag.running { background: #0a2e1a; color: #4ade80; }
+[data-theme="dark"] .node .status-tag.waiting { background: #1e293b; color: #94a3b8; }
+
+/* arrows */
+.arrow-section {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+}
+.arrow-line {
+  width: 50px; height: 2px; background: var(--border); position: relative;
+  transition: background 0.4s;
+}
+.arrow-line.active { background: var(--success); }
+.arrow-head {
+  width: 0; height: 0;
+  border-left: 6px solid var(--border);
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  transition: border-left-color 0.4s;
+}
+.arrow-head.active { border-left-color: var(--success); }
+.arrow-label { font-size: 0.7rem; color: var(--text2); margin-top: 2px; white-space: nowrap; }
+
+/* description */
+.desc {
+  background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px;
+  padding: 16px 20px; margin-bottom: 20px; box-shadow: var(--shadow);
+}
+.desc h3 { font-size: 1rem; margin-bottom: 6px; color: var(--accent); }
+.desc p { font-size: 0.9rem; color: var(--text2); }
+
+/* timeline */
+.timeline {
+  background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px;
+  padding: 20px; box-shadow: var(--shadow);
+}
+.timeline h3 { font-size: 0.95rem; margin-bottom: 12px; color: var(--text); }
+.timeline-entry {
+  display: flex; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border);
+  font-size: 0.85rem; transition: all 0.3s;
+}
+.timeline-entry:last-child { border-bottom: none; }
+.timeline-entry .timestamp { color: var(--gray); min-width: 48px; font-family: monospace; }
+.timeline-entry .event { color: var(--text); }
+.timeline-entry.past { opacity: 0.4; }
+.timeline-entry.current { color: var(--accent); font-weight: 600; }
+.timeline-entry.current .event { color: var(--accent); }
+.timeline-entry.future { opacity: 0.25; }
+
+/* footer */
+.footer {
+  margin-top: 20px; font-size: 0.8rem; color: var(--gray); text-align: center;
+}
+.footer a { color: var(--accent); text-decoration: none; }
+.footer a:hover { text-decoration: underline; }
+
+/* progress bar */
+.progress-bar {
+  height: 4px; background: var(--border); border-radius: 2px; margin-bottom: 20px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%; background: var(--accent); border-radius: 2px;
+  transition: width 0.5s ease;
+}
+</style>
+</head>
+<body data-theme="light">
+<div class="container">
+
+<!-- Header -->
+<div class="header">
+  <div>
+    <h1>Compose 服务编排：WordPress + MySQL</h1>
+    <p>展示 WordPress ← MySQL 依赖关系和服务启动流程</p>
+  </div>
+  <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">🌙 暗色模式</button>
+</div>
+
+<!-- Controls -->
+<div class="controls">
+  <button onclick="reset()" id="resetBtn">↺ 重置</button>
+  <button onclick="prevStep()" id="prevBtn" disabled>◀ 上一步</button>
+  <button onclick="nextStep()" id="nextBtn">下一步 ▶</button>
+  <button onclick="autoPlay()" id="autoBtn">▶ 自动播放</button>
+</div>
+
+<!-- Step indicator -->
+<div class="step-indicator">
+  步骤 <span class="step-num" id="stepNum">1</span> / <span id="stepTotal">6</span>
+  &nbsp;&mdash;&nbsp;<span id="stepTitle">初始状态</span>
+</div>
+
+<!-- Progress -->
+<div class="progress-bar"><div class="progress-fill" id="progressFill" style="width: 16.7%"></div></div>
+
+<!-- Flow area -->
+<div class="flow-area" id="flowArea">
+  <!-- WordPress -->
+  <div class="node" id="node-wp">
+    <div class="name">WordPress</div>
+    <div class="role">Web 应用 (Apache + PHP)</div>
+    <div class="port">端口: 80</div>
+    <div class="status-tag waiting" id="wp-status">等待中</div>
+  </div>
+
+  <!-- Arrow -->
+  <div class="arrow-section" id="arrowSection">
+    <span class="arrow-label">depends_on</span>
+    <div class="arrow-line" id="arrowLine"></div>
+    <div class="arrow-head" id="arrowHead"></div>
+    <span class="arrow-label">MySQL 连接</span>
+  </div>
+
+  <!-- MySQL -->
+  <div class="node" id="node-mysql">
+    <div class="name">MySQL</div>
+    <div class="role">数据库 (MySQL 8.0)</div>
+    <div class="port">端口: 3306</div>
+    <div class="status-tag waiting" id="mysql-status">等待中</div>
+  </div>
+</div>
+
+<!-- Description -->
+<div class="desc" id="descBox">
+  <h3 id="descTitle">初始状态</h3>
+  <p id="descText">两个服务都尚未启动。WordPress 依赖 MySQL，在 MySQL 就绪之前不会启动。</p>
+</div>
+
+<!-- Timeline -->
+<div class="timeline">
+  <h3>⏱ 启动时间线</h3>
+  <div id="timelineContent">
+    <div class="timeline-entry past" id="tl-T0"><span class="timestamp">T+0s</span><span class="event">docker compose up -d 执行</span></div>
+    <div class="timeline-entry future" id="tl-T1"><span class="timestamp">T+1s</span><span class="event">MySQL 容器启动</span></div>
+    <div class="timeline-entry future" id="tl-T2"><span class="timestamp">T+5s</span><span class="event">MySQL 开始初始化数据目录</span></div>
+    <div class="timeline-entry future" id="tl-T3"><span class="timestamp">T+30s</span><span class="event">MySQL 初始化完成，healthcheck 通过</span></div>
+    <div class="timeline-entry future" id="tl-T4"><span class="timestamp">T+31s</span><span class="event">WordPress 容器启动</span></div>
+    <div class="timeline-entry future" id="tl-T5"><span class="timestamp">T+35s</span><span class="event">WordPress 连接 MySQL 成功，服务就绪</span></div>
+  </div>
+</div>
+
+<!-- Footer -->
+<div class="footer">
+  <p>本可视化对应 <a href="22-多容器编排.md">Docker 精通教程 第 22 章</a> | 基于教程 v1 | 可离线运行</p>
+</div>
+
+</div>
+
+<script>
+// === State ===
+const steps = [
+  {
+    id: 0,
+    title: "初始状态",
+    desc: "两个服务都尚未启动。WordPress 依赖 MySQL，在 MySQL 就绪之前不会启动。compose.yml 已定义好：depends_on 设置了 condition: service_healthy。",
+    wpClass: "", wpStatus: "等待中", wpTag: "waiting",
+    mysqlClass: "", mysqlStatus: "等待中", mysqlTag: "waiting",
+    arrowActive: false,
+    timeline: ["T0"]
+  },
+  {
+    id: 1,
+    title: "docker compose up -d 执行",
+    desc: "执行 docker compose up -d。Compose 读取 compose.yml，发现 WordPress 依赖 MySQL（depends_on + condition: service_healthy），决定先启动 MySQL。",
+    wpClass: "waiting", wpStatus: "等待 MySQL 就绪", wpTag: "waiting",
+    mysqlClass: "active", mysqlStatus: "启动中", mysqlTag: "starting",
+    arrowActive: false,
+    timeline: ["T0","T1"]
+  },
+  {
+    id: 2,
+    title: "MySQL 容器启动，开始初始化",
+    desc: "MySQL 容器已启动（PID 1: mysqld），但 MySQL 数据库还在初始化中。首次启动需要：创建 InnoDB 系统表空间 → 新建 redo log → 创建 root 用户 → 创建 wordpress 数据库。这个过程需要 20-30 秒。start_period 设为 30s，期间不进行 healthcheck。",
+    wpClass: "waiting", wpStatus: "等待 MySQL 就绪", wpTag: "waiting",
+    mysqlClass: "active", mysqlStatus: "初始化中...", mysqlTag: "starting",
+    arrowActive: false,
+    timeline: ["T0","T1","T2"]
+  },
+  {
+    id: 3,
+    title: "MySQL 初始化完成，healthcheck 通过",
+    desc: "MySQL 初始化完成！mysqladmin ping 返回成功。healthcheck 连续通过，db 服务状态变为 healthy。depends_on 的 condition: service_healthy 条件满足，Compose 现在可以启动 WordPress 了。",
+    wpClass: "waiting", wpStatus: "等待 MySQL 就绪", wpTag: "waiting",
+    mysqlClass: "active", mysqlStatus: "健康 ✓", mysqlTag: "healthy",
+    arrowActive: false,
+    timeline: ["T0","T1","T2","T3"]
+  },
+  {
+    id: 4,
+    title: "WordPress 容器启动",
+    desc: "MySQL 已就绪，WordPress 容器启动。Apache + PHP 开始初始化。WordPress 使用环境变量 WORDPRESS_DB_HOST=db 连接 MySQL（在 Compose 网络中，服务名 db 会被 DNS 解析为 MySQL 容器的 IP 地址）。",
+    wpClass: "active", wpStatus: "启动中", wpTag: "starting",
+    mysqlClass: "active", mysqlStatus: "健康 ✓", mysqlTag: "healthy",
+    arrowActive: false,
+    timeline: ["T0","T1","T2","T3","T4"]
+  },
+  {
+    id: 5,
+    title: "WordPress 连接 MySQL 成功，服务就绪",
+    desc: "WordPress 成功连接 MySQL，创建了数据库表。Apache 开始监听 80 端口。现在可以通过浏览器访问 http://localhost:8080 看到 WordPress 安装页面。所有服务正常运行！",
+    wpClass: "active", wpStatus: "运行中 ✓", wpTag: "running",
+    mysqlClass: "active", mysqlStatus: "健康 ✓", mysqlTag: "healthy",
+    arrowActive: true,
+    timeline: ["T0","T1","T2","T3","T4","T5"]
+  }
+];
+
+let currentStep = 0;
+let autoInterval = null;
+
+// === DOM refs ===
+const $ = (s) => document.querySelector(s);
+const nodeWp = $("#node-wp");
+const nodeMysql = $("#node-mysql");
+const wpStatus = $("#wp-status");
+const mysqlStatus = $("#mysql-status");
+const arrowLine = $("#arrowLine");
+const arrowHead = $("#arrowHead");
+const stepNum = $("#stepNum");
+const stepTotal = $("#stepTotal");
+const stepTitle = $("#stepTitle");
+const descTitle = $("#descTitle");
+const descText = $("#descText");
+const progressFill = $("#progressFill");
+const prevBtn = $("#prevBtn");
+const nextBtn = $("#nextBtn");
+const autoBtn = $("#autoBtn");
+
+stepTotal.textContent = steps.length;
+
+// === Render ===
+function render() {
+  const s = steps[currentStep];
+
+  // Node classes
+  nodeWp.className = "node" + (s.wpClass ? " " + s.wpClass : "");
+  nodeMysql.className = "node" + (s.mysqlClass ? " " + s.mysqlClass : "");
+
+  // Status tags
+  wpStatus.textContent = s.wpStatus;
+  wpStatus.className = "status-tag " + s.wpTag;
+  mysqlStatus.textContent = s.mysqlStatus;
+  mysqlStatus.className = "status-tag " + s.mysqlTag;
+
+  // Arrow
+  if (s.arrowActive) {
+    arrowLine.classList.add("active");
+    arrowHead.classList.add("active");
+  } else {
+    arrowLine.classList.remove("active");
+    arrowHead.classList.remove("active");
+  }
+
+  // Step info
+  stepNum.textContent = currentStep + 1;
+  stepTitle.textContent = s.title;
+  descTitle.textContent = s.title;
+  descText.textContent = s.desc;
+
+  // Progress
+  progressFill.style.width = ((currentStep + 1) / steps.length * 100) + "%";
+
+  // Timeline
+  const allKeys = ["T0","T1","T2","T3","T4","T5"];
+  allKeys.forEach(k => {
+    const el = $("#tl-" + k);
+    if (!el) return;
+    el.classList.remove("past","current","future");
+    if (s.timeline.includes(k)) {
+      if (k === s.timeline[s.timeline.length - 1]) {
+        el.classList.add("current");
+      } else {
+        el.classList.add("past");
+      }
+    } else {
+      el.classList.add("future");
+    }
+  });
+
+  // Buttons
+  prevBtn.disabled = currentStep === 0;
+  nextBtn.disabled = currentStep === steps.length - 1;
+}
+
+// === Actions ===
+function nextStep() {
+  if (currentStep < steps.length - 1) {
+    currentStep++;
+    render();
+    if (currentStep === steps.length - 1) stopAuto();
+  }
+}
+
+function prevStep() {
+  if (currentStep > 0) {
+    currentStep--;
+    render();
+    stopAuto();
+  }
+}
+
+function reset() {
+  stopAuto();
+  currentStep = 0;
+  render();
+}
+
+function autoPlay() {
+  if (autoInterval) {
+    stopAuto();
+    return;
+  }
+  // If at end, reset first
+  if (currentStep === steps.length - 1) {
+    currentStep = 0;
+    render();
+  }
+  autoBtn.textContent = "⏸ 停止播放";
+  autoBtn.classList.add("active");
+  autoInterval = setInterval(() => {
+    if (currentStep < steps.length - 1) {
+      currentStep++;
+      render();
+    } else {
+      stopAuto();
+    }
+  }, 2500);
+}
+
+function stopAuto() {
+  if (autoInterval) {
+    clearInterval(autoInterval);
+    autoInterval = null;
+  }
+  autoBtn.textContent = "▶ 自动播放";
+  autoBtn.classList.remove("active");
+}
+
+// === Theme ===
+function toggleTheme() {
+  const body = document.body;
+  const current = body.getAttribute("data-theme");
+  const next = current === "dark" ? "light" : "dark";
+  body.setAttribute("data-theme", next);
+  $("#themeBtn").textContent = next === "dark" ? "☀️ 亮色模式" : "🌙 暗色模式";
+}
+
+// match system preference
+if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+  toggleTheme();
+}
+
+// === Init ===
+render();
+</script>
+</body>
+</html>

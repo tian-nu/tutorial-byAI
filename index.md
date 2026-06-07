@@ -38,7 +38,7 @@
   <div class="t-list">
 
     <a class="t-card" href="go/">
-      <div class="t-card-head"><h3>Go从零到后端</h3><span class="chapters">115+ 章</span></div>
+      <div class="t-card-head"><h3>Go从零到后端</h3><span class="chapters">135 章</span></div>
       <div class="t-card-desc">从计算机基础讲起，经Go语法、并发、Gin框架，到微服务架构与6个完整实战项目。适合完全零基础，目标是成为Go后端工程师。</div>
       <div class="t-card-foot">
         <span class="t-tag t-tag-beginner">零基础</span>
@@ -47,7 +47,7 @@
     </a>
 
     <a class="t-card" href="python/">
-      <div class="t-card-head"><h3>Python速成后端</h3><span class="chapters">30 章</span></div>
+      <div class="t-card-head"><h3>Python速成后端</h3><span class="chapters">32 章</span></div>
       <div class="t-card-desc">用FastAPI从零搭建博客系统后端，涵盖API设计、数据库、JWT认证、测试与Docker部署。短平快，适合快速上手。</div>
       <div class="t-card-foot">
         <span class="t-tag t-tag-beginner">零基础</span>
@@ -56,7 +56,7 @@
     </a>
 
     <a class="t-card" href="java/">
-      <div class="t-card-head"><h3>Java从零到Spring Boot后端</h3><span class="chapters">124+ 章</span></div>
+      <div class="t-card-head"><h3>Java从零到Spring Boot后端</h3><span class="chapters">132 章</span></div>
       <div class="t-card-desc">从计算机基础到Java核心语法，经Spring Boot、安全认证、消息队列，到微服务架构与实战项目。体系完整，适合想深入Java生态的学习者。</div>
       <div class="t-card-foot">
         <span class="t-tag t-tag-beginner">零基础</span>
@@ -70,7 +70,7 @@
   <div class="t-list">
 
     <a class="t-card" href="vue/">
-      <div class="t-card-head"><h3>Vue速成前端</h3><span class="chapters">29 章</span></div>
+      <div class="t-card-head"><h3>Vue速成前端</h3><span class="chapters">30 章</span></div>
       <div class="t-card-desc">从HTML/CSS/JS基础到Vue3组件化开发，完成博客前端实战并部署上线。适合想快速掌握前端开发的学习者。</div>
       <div class="t-card-foot">
         <span class="t-tag t-tag-beginner">零基础</span>
@@ -84,7 +84,7 @@
   <div class="t-list">
 
     <a class="t-card" href="database/">
-      <div class="t-card-head"><h3>数据库精通</h3><span class="chapters">37+ 章</span></div>
+      <div class="t-card-head"><h3>数据库精通</h3><span class="chapters">45 章</span></div>
       <div class="t-card-desc">从SQL入门到索引原理、事务隔离、高可用架构，系统掌握数据库核心技能。需要基本编程基础。</div>
       <div class="t-card-foot">
         <span class="t-tag t-tag-intermediate">有基础</span>
@@ -92,14 +92,14 @@
       </div>
     </a>
 
-    <div class="t-card" style="opacity:0.5;pointer-events:none">
-      <div class="t-card-head"><h3>Docker教程</h3><span class="chapters">即将推出</span></div>
-      <div class="t-card-desc">容器化入门到实战，学会用Docker打包、部署和管理应用。</div>
+    <a class="t-card" href="docker/">
+      <div class="t-card-head"><h3>Docker精通</h3><span class="chapters">39 章</span></div>
+      <div class="t-card-desc">容器化入门到实战，学会用Docker打包、部署和管理应用。覆盖Dockerfile、Compose编排、多容器网络与CI/CD。</div>
       <div class="t-card-foot">
         <span class="t-tag t-tag-beginner">零基础</span>
-        <span class="t-path">容器化入门到实战</span>
+        <span class="t-path">容器<span class="sep">/</span>Dockerfile<span class="sep">/</span>Compose<span class="sep">/</span>网络<span class="sep">/</span>CI/CD</span>
       </div>
-    </div>
+    </a>
 
     <a class="t-card" href="git/">
       <div class="t-card-head"><h3>Git到GitHub</h3><span class="chapters">9 章</span></div>
@@ -116,7 +116,7 @@
   <div class="t-list">
 
     <a class="t-card" href="ai-coding/">
-      <div class="t-card-head"><h3>AI编程从零到精通</h3><span class="chapters">57 章</span></div>
+      <div class="t-card-head"><h3>AI编程从零到精通</h3><span class="chapters">64 章</span></div>
       <div class="t-card-desc">掌握AI辅助编程全流程：从Prompt工程到Cursor/Trae工具实战，含4个完整项目和常见陷阱防范。</div>
       <div class="t-card-foot">
         <span class="t-tag t-tag-beginner">零基础</span>

@@ -26,7 +26,7 @@ jobs:
           python-version: '3.12'
 
       - name: Install dependencies
-        run: pip install mkdocs mkdocs-material mkdocs-awesome-pages-plugin mkdocs-minify-plugin
+        run: pip install mkdocs mkdocs-material mkdocs-awesome-pages-plugin
 
       - name: Sync docs
         run: python sync_docs.py

@@ -15,7 +15,7 @@
       <div class="sb-item active"><span class="sb-dot" style="background:var(--cat-backend)"></span>全部教程</div>
       <div class="sb-item"><span class="sb-dot" style="background:var(--cat-backend)"></span>后端<span class="sb-count">3</span></div>
       <div class="sb-item"><span class="sb-dot" style="background:var(--cat-frontend)"></span>前端<span class="sb-count">1</span></div>
-      <div class="sb-item"><span class="sb-dot" style="background:var(--cat-tools)"></span>基础与工具<span class="sb-count">3</span></div>
+      <div class="sb-item"><span class="sb-dot" style="background:var(--cat-tools)"></span>基础与工具<span class="sb-count">5</span></div>
       <div class="sb-item"><span class="sb-dot" style="background:var(--cat-ai)"></span>AI与创业<span class="sb-count">2</span></div>
     </div>
     <div class="sb-section" style="margin-top:6px">
@@ -31,7 +31,7 @@
 
   <div class="page-head">
     <h2>全部教程</h2>
-    <p>9 套零基础编程教程，覆盖后端、前端、数据库、DevOps 和 AI</p>
+    <p>11 套AI教程，覆盖后端、前端、基础学科、DevOps 和 AI</p>
   </div>
 
   <div class="divider"><span class="divider-label">后端</span><span class="divider-line"></span></div>
@@ -107,6 +107,24 @@
       <div class="t-card-foot">
         <span class="t-tag t-tag-beginner">零基础</span>
         <span class="t-path">仓库<span class="sep">/</span>推送<span class="sep">/</span>PR<span class="sep">/</span>Actions<span class="sep">/</span>Pages</span>
+      </div>
+    </a>
+
+    <a class="t-card" href="c/">
+      <div class="t-card-head"><h3>C语言精通教程</h3><span class="chapters">67 章</span></div>
+      <div class="t-card-desc">从计算机基础（CPU/内存/硬盘）到C语言核心语法、指针、数据结构、文件操作、网络编程，含3个实战项目。系统掌握C语言底层能力。</div>
+      <div class="t-card-foot">
+        <span class="t-tag t-tag-beginner">零基础</span>
+        <span class="t-path">计算机基础<span class="sep">/</span>指针<span class="sep">/</span>数据结构<span class="sep">/</span>网络编程<span class="sep">/</span>项目实战</span>
+      </div>
+    </a>
+
+    <a class="t-card" href="math/">
+      <div class="t-card-head"><h3>高中数学人教版教程</h3><span class="chapters">35 章</span></div>
+      <div class="t-card-desc">高中数学必修第一册全内容：集合与逻辑、不等式、函数、指数对数、三角函数，含习题与术语附录。AI辅助系统化学习。</div>
+      <div class="t-card-foot">
+        <span class="t-tag t-tag-beginner">零基础</span>
+        <span class="t-path">集合<span class="sep">/</span>函数<span class="sep">/</span>指数对数<span class="sep">/</span>三角函数<span class="sep">/</span>习题</span>
       </div>
     </a>
 

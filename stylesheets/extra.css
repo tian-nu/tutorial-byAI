@@ -73,57 +73,57 @@
    4. 全局排版
    =================================================== */
 .md-typeset {
-  font-size: 0.76rem;
-  line-height: 1.7;
+  font-size: 0.70rem;
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   color: var(--text-1);
 }
 
 .md-typeset h1 {
   font-weight: 800;
-  font-size: 1.4rem;
+  font-size: 1.28rem;
   color: var(--text-1);
   border-bottom: 2px solid var(--border);
   padding-bottom: 0.35em;
   margin-top: 0.5em;
-  margin-bottom: 0.5em;
+  margin-bottom: 0.4em;
   letter-spacing: -0.02em;
 }
 
 .md-typeset h2 {
   font-weight: 700;
-  font-size: 1.05rem;
-  margin-top: 1.8em;
-  margin-bottom: 0.5em;
+  font-size: 0.96rem;
+  margin-top: 1.5em;
+  margin-bottom: 0.4em;
   color: var(--text-1);
   letter-spacing: -0.01em;
 }
 
 .md-typeset h3 {
   font-weight: 600;
-  font-size: 0.9rem;
-  margin-top: 1.5em;
-  margin-bottom: 0.4em;
+  font-size: 0.84rem;
+  margin-top: 1.2em;
+  margin-bottom: 0.3em;
   color: var(--text-1);
 }
 
 .md-typeset h4 {
   font-weight: 600;
-  font-size: 0.84rem;
-  margin-top: 1.3em;
+  font-size: 0.78rem;
+  margin-top: 1.0em;
   color: var(--text-2);
 }
 
 .md-typeset p {
-  margin-bottom: 0.9em;
-  line-height: 1.7;
+  margin-bottom: 0.8em;
+  line-height: 1.6;
 }
 
 /* ===================================================
    5. 代码块
    =================================================== */
 .md-typeset code {
-  font-size: 0.72rem;
+  font-size: 0.66rem;
   word-break: break-word;
   border-radius: 5px;
   padding: 0.15em 0.4em;
@@ -132,7 +132,7 @@
 }
 
 .md-typeset pre {
-  font-size: 0.72rem;
+  font-size: 0.66rem;
   border-radius: var(--radius);
   box-shadow: var(--shadow-card);
   border: 1px solid var(--border-subtle);
@@ -140,7 +140,7 @@
 
 .md-typeset pre > code {
   padding: 0.9em 1.1em;
-  line-height: 1.65;
+  line-height: 1.55;
   border-radius: var(--radius);
 }
 
@@ -156,7 +156,7 @@
 
 /* 代码块标题 */
 .md-typeset .highlight .filename {
-  font-size: 0.68rem;
+  font-size: 0.64rem;
   font-weight: 600;
   color: var(--text-2);
   background: var(--bg);
@@ -173,15 +173,15 @@
   border-width: 0;
   border-left-width: 4px;
   border-radius: 8px;
-  font-size: 0.74rem;
+  font-size: 0.68rem;
   box-shadow: var(--shadow-card);
-  margin: 1em 0;
+  margin: 0.8em 0;
 }
 
 .md-typeset .admonition-title,
 .md-typeset summary {
   font-weight: 700;
-  font-size: 0.72rem;
+  font-size: 0.66rem;
   padding: 0.5em 1em;
 }
 
@@ -237,7 +237,7 @@
    7. 表格
    =================================================== */
 .md-typeset table:not([class]) {
-  font-size: 0.72rem;
+  font-size: 0.66rem;
   border-radius: 8px;
   overflow: hidden;
   box-shadow: var(--shadow-card);
@@ -246,7 +246,7 @@
 
 .md-typeset table:not([class]) th {
   font-weight: 700;
-  font-size: 0.7rem;
+  font-size: 0.64rem;
   background: var(--accent-soft);
   color: var(--accent);
   padding: 0.6em 1em;
@@ -280,13 +280,13 @@
    9. 侧边栏导航
    =================================================== */
 .md-nav {
-  font-size: 0.74rem;
+  font-size: 0.70rem;
 }
 
 .md-nav__title {
   font-weight: 700;
   color: var(--text-1);
-  font-size: 0.7rem;
+  font-size: 0.66rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
@@ -450,13 +450,23 @@
   color: var(--accent);
   border-radius: 8px;
   box-shadow: none;
-  padding: 4px 10px;
-  font-size: 0.66rem;
+  padding: 3px 6px;
+  font-size: 0.6rem;
   font-weight: 600;
   border: 1px solid var(--border-subtle);
   transition: all var(--t);
-  bottom: 16px;
-  right: 16px;
+  bottom: 12px;
+  right: 12px;
+  width: auto !important;
+  height: auto !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  max-width: 56px;
+  max-height: 24px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .md-top:hover {
@@ -466,7 +476,17 @@
 }
 
 .md-top svg {
-  display: none;
+  display: none !important;
+}
+
+.md-top .md-icon {
+  display: none !important;
+}
+
+/* 强制缩小容器 */
+.md-top::after {
+  content: "TOP";
+  display: inline;
 }
 
 /* ===================================================
@@ -1173,11 +1193,11 @@ html {
   }
 
   .md-typeset h1 {
-    font-size: 1.4rem;
+    font-size: 1.28rem;
   }
 
   .md-typeset h2 {
-    font-size: 1.1rem;
+    font-size: 1.0rem;
   }
 
   .path-steps {

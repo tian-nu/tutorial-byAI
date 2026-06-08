@@ -13,9 +13,11 @@ TUTORIALS = {
     "Python速成后端教程": "python",
     "java从零到spring boot后端教程": "java",
     "Vue速成前端教程": "vue",
+    "C语言精通教程": "c",
     "数据库精通教程": "database",
     "Docker精通教程": "docker",
     "Git到GitHub教程": "git",
+    "高中数学人教版教程": "math",
     "AIcoding从零到精通": "ai-coding",
     "初创互联网团队": "startup",
 }
@@ -32,11 +34,29 @@ def sync_tutorial(src_dir: Path, dest_dir: Path):
     dest_dir.mkdir(parents=True, exist_ok=True)
 
     count = 0
-    for f in sorted(src_dir.glob("*.md")):
-        if f.name in EXCLUDE_PATTERNS:
-            continue
-        shutil.copy2(f, dest_dir / f.name)
-        count += 1
+    # 先尝试当前目录的 .md 文件
+    md_files = list(src_dir.glob("*.md"))
+    # 统计递归找到的总 md 数，判断是否用扁平化复制
+    all_md = list(src_dir.rglob("*.md"))
+    # 如果子目录中有 .md 文件（说明文件分散在子目录中），用扁平化复制
+    has_sub_md = any(f.parent != src_dir for f in all_md)
+    if has_sub_md:
+        for f in all_md:
+            if f.parent != src_dir:
+                dest_path = dest_dir / f.name
+                if not dest_path.exists():
+                    shutil.copy2(f, dest_path)
+                    count += 1
+        for f in md_files:
+            if f.name not in EXCLUDE_PATTERNS:
+                shutil.copy2(f, dest_dir / f.name)
+                count += 1
+    else:
+        for f in md_files:
+            if f.name in EXCLUDE_PATTERNS:
+                continue
+            shutil.copy2(f, dest_dir / f.name)
+            count += 1
 
     # 复制 .pages 文件（导航排序配置）
     pages_file = src_dir / ".pages"

@@ -79,8 +79,9 @@ def main():
     # 确保 docs/ 存在
     DOCS.mkdir(parents=True, exist_ok=True)
 
-    # 确保 docs/stylesheets/ 存在
+    # 确保 docs/stylesheets/ 和 docs/javascripts/ 存在
     (DOCS / "stylesheets").mkdir(parents=True, exist_ok=True)
+    (DOCS / "javascripts").mkdir(parents=True, exist_ok=True)
 
     # 复制根目录的 index.md 和 stylesheets/extra.css
     root_index = ROOT / "index.md"
@@ -102,6 +103,13 @@ def main():
     root_css = ROOT / "stylesheets" / "extra.css"
     if root_css.exists():
         shutil.copy2(root_css, DOCS / "stylesheets" / "extra.css")
+
+    # 复制 javascripts/ 目录（MathJax 配置等）
+    js_src = ROOT / "javascripts"
+    if js_src.exists():
+        js_dest = DOCS / "javascripts"
+        for f in js_src.iterdir():
+            shutil.copy2(f, js_dest / f.name)
 
     print("Syncing tutorials:")
     for src_name, dest_name in TUTORIALS.items():

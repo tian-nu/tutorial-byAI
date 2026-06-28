@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Transformer 整体架构 — 数据流可视化</title>
+<style>
+:root {
+  --bg: #f5f5f5; --card: #fff; --text: #333; --sub: #666;
+  --border: #ddd; --blue: #3498db; --blue-light: #ebf5fb;
+  --green: #27ae60; --green-light: #eafaf1;
+  --orange: #f39c12; --orange-light: #fef5e7;
+  --purple: #9b59b6; --purple-light: #f5eef8;
+  --red: #e74c3c; --teal: #1abc9c; --teal-light: #e8f8f5;
+  --pink: #e84393; --pink-light: #fdedf6;
+  --shadow: 0 2px 8px rgba(0,0,0,.06);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1a1a2e; --card: #16213e; --text: #e0e0e0; --sub: #aaa;
+    --border: #333; --blue: #5dade2; --blue-light: rgba(93,173,226,.12);
+    --green: #2ecc71; --green-light: rgba(46,204,113,.12);
+    --orange: #f5b041; --orange-light: rgba(245,176,65,.12);
+    --purple: #bb8fce; --purple-light: rgba(187,143,206,.12);
+    --teal: #48c9b0; --teal-light: rgba(72,201,176,.12);
+    --pink: #f0a; --pink-light: rgba(255,0,170,.12);
+    --shadow: 0 2px 8px rgba(0,0,0,.3);
+  }
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,"PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column;align-items:center;padding:20px 16px;min-height:100vh}
+h1{font-size:1.35em;text-align:center;margin-bottom:4px}
+.desc{font-size:.82em;color:var(--sub);margin-bottom:14px;text-align:center;max-width:960px;line-height:1.6}
+
+.controls{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-bottom:14px;align-items:center}
+.controls button{padding:6px 16px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);cursor:pointer;font-size:.82em;transition:.15s}
+.controls button:hover{opacity:.85}
+.controls button.primary{background:var(--blue);color:#fff;border-color:var(--blue)}
+.controls button:disabled{opacity:.4;cursor:not-allowed}
+.step-indicator{font-size:.78em;color:var(--sub);min-width:90px;text-align:center}
+
+/* 架构图：左右两路 + 中间连接 */
+.arch{display:flex;align-items:flex-start;justify-content:center;gap:0;width:100%;max-width:1080px;margin-bottom:14px;flex-wrap:wrap}
+.column{display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 6px}
+.column.src{border-right:1px dashed var(--border);padding-right:14px}
+.column.dec{padding-left:14px}
+.column.title{font-weight:600;font-size:.82em;margin-bottom:6px;color:var(--sub)}
+.column.src .title{color:var(--blue)}
+.column.dec .title{color:var(--purple)}
+
+.node{background:var(--card);border:2px solid var(--border);border-radius:10px;padding:8px 10px;min-width:160px;text-align:center;transition:all .35s;opacity:.45;position:relative}
+.node.active{opacity:1;transform:translateY(-2px)}
+.node.active.c-emb{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-light)}
+.node.active.c-pe{border-color:var(--teal);box-shadow:0 0 0 3px var(--teal-light)}
+.node.active.c-enc{border-color:var(--green);box-shadow:0 0 0 3px var(--green-light)}
+.node.active.c-dec{border-color:var(--purple);box-shadow:0 0 0 3px var(--purple-light)}
+.node.active.c-out{border-color:var(--orange);box-shadow:0 0 0 3px var(--orange-light)}
+.node.active.c-loss{border-color:var(--red);box-shadow:0 0 0 3px rgba(231,76,60,.15)}
+.node .name{font-weight:600;font-size:.78em;margin-bottom:2px}
+.node .formula{font-size:.66em;color:var(--sub);font-family:"Courier New",monospace;margin-bottom:2px}
+.node .shape{font-size:.62em;color:var(--sub);font-style:italic}
+.node .badge{position:absolute;top:-7px;right:-7px;background:var(--orange);color:#fff;font-size:.55em;padding:1px 5px;border-radius:8px;font-weight:600}
+
+.arrow-v{font-size:1.2em;color:var(--sub);opacity:.4;transition:opacity .35s;line-height:1}
+.arrow-v.active{opacity:1;color:var(--blue)}
+
+/* 跨列连接：encoder -> decoder cross-attn */
+.bridge{display:flex;align-items:center;gap:4px;font-size:.7em;color:var(--green);margin-top:0;padding:0 6px;opacity:.5;transition:opacity .35s}
+.bridge.active{opacity:1;font-weight:600}
+.bridge .line{height:2px;width:40px;background:var(--green);position:relative}
+.bridge .line::after{content:'';position:absolute;right:-1px;top:-3px;border:4px solid transparent;border-left-color:var(--green)}
+
+/* 信息面板 */
+.info-panel{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px 16px;width:100%;max-width:960px;margin-bottom:10px;min-height:90px;transition:all .3s}
+.info-panel .step-title{font-weight:600;font-size:.85em;margin-bottom:6px;color:var(--blue)}
+.info-panel .step-desc{font-size:.78em;color:var(--sub);line-height:1.6}
+.info-panel .step-desc code{font-size:.9em;background:var(--blue-light);padding:1px 5px;border-radius:3px;color:var(--text)}
+.info-panel .shape-table{margin-top:6px;font-size:.74em;font-family:"Courier New",monospace;background:var(--bg);padding:8px;border-radius:5px;border-left:3px solid var(--blue);white-space:pre;color:var(--text)}
+.info-panel .tip{margin-top:6px;font-size:.74em;color:var(--orange);padding:4px 8px;background:var(--orange-light);border-radius:4px}
+
+/* loss 曲线 */
+.loss-curve{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 14px;width:100%;max-width:960px;margin-bottom:10px}
+.loss-curve .ttl{font-size:.82em;font-weight:600;color:var(--blue);margin-bottom:4px}
+.loss-curve .sub{font-size:.7em;color:var(--sub);margin-bottom:6px}
+canvas{display:block;background:var(--bg);border-radius:5px}
+
+footer{margin-top:14px;font-size:.7em;color:var(--sub);text-align:center;line-height:1.6}
+footer a{color:var(--sub)}
+</style>
+</head>
+<body>
+<h1>Transformer 整体架构 — 数据流可视化</h1>
+<p class="desc">
+  完整 Transformer 的数据流：src 经 Embedding+PE 进 Encoder×N，tgt[:-1] 经 Embedding+PE 进 Decoder×N（含 Cross-Attn 看 Encoder 输出），
+  最后 Linear 映射回词表得 logits，CrossEntropy 算 loss。点「下一步」让数据逐步流过各组件。
+  对应教程《35-完整 Transformer 拼装与训练》。
+</p>
+
+<div class="controls">
+  <button id="btn-next" class="primary" onclick="nextStep()">▶ 下一步</button>
+  <button id="btn-auto" onclick="toggleAuto()">⏯ 自动播放</button>
+  <button id="btn-reset" onclick="resetAll()">↺ 重置</button>
+  <span class="step-indicator" id="stepInfo">0 / 8</span>
+</div>
+
+<div class="arch" id="arch">
+  <!-- 源序列（Encoder）路径 -->
+  <div class="column src">
+    <div class="title">Encoder 路径（源序列 src）</div>
+    <div class="node c-emb" id="n-src-emb">
+      <div class="name">src Embedding</div>
+      <div class="formula">nn.Embedding(vocab, d_model)</div>
+      <div class="shape">src (B, T_src) → (B, T_src, d_model)</div>
+    </div>
+    <div class="arrow-v" id="a-se1">↓</div>
+    <div class="node c-pe" id="n-src-pe">
+      <div class="name">+ Positional Encoding</div>
+      <div class="formula">x = x + PE</div>
+      <div class="shape">(B, T_src, d_model)</div>
+    </div>
+    <div class="arrow-v" id="a-se2">↓</div>
+    <div class="node c-enc" id="n-enc">
+      <div class="name">Encoder × N</div>
+      <div class="formula">[Self-Attn + Add&Norm] × N<br>[FFN + Add&Norm] × N</div>
+      <div class="shape">(B, T_src, d_model)</div>
+      <div class="badge">N=2</div>
+    </div>
+    <div class="bridge" id="bridge">
+      <span>enc_out</span>
+      <div class="line"></div>
+      <span>→ Cross-Attn K,V</span>
+    </div>
+  </div>
+
+  <!-- 目标序列（Decoder）路径 -->
+  <div class="column dec">
+    <div class="title">Decoder 路径（目标序列 tgt[:-1]）</div>
+    <div class="node c-emb" id="n-tgt-emb">
+      <div class="name">tgt Embedding</div>
+      <div class="formula">nn.Embedding(vocab, d_model)</div>
+      <div class="shape">tgt[:, :-1] (B, T_tgt-1) → (B, T_tgt-1, d_model)</div>
+    </div>
+    <div class="arrow-v" id="a-de1">↓</div>
+    <div class="node c-pe" id="n-tgt-pe">
+      <div class="name">+ Positional Encoding</div>
+      <div class="formula">x = x + PE</div>
+      <div class="shape">(B, T_tgt-1, d_model)</div>
+    </div>
+    <div class="arrow-v" id="a-de2">↓</div>
+    <div class="node c-dec" id="n-dec">
+      <div class="name">Decoder × N</div>
+      <div class="formula">[Masked Self-Attn + Add&Norm]<br>[Cross-Attn(K,V=enc_out) + Add&Norm]<br>[FFN + Add&Norm] × N</div>
+      <div class="shape">(B, T_tgt-1, d_model)</div>
+      <div class="badge">N=2</div>
+    </div>
+    <div class="arrow-v" id="a-de3">↓</div>
+    <div class="node c-out" id="n-linear">
+      <div class="name">Linear 输出层</div>
+      <div class="formula">nn.Linear(d_model, vocab)</div>
+      <div class="shape">(B, T_tgt-1, d_model) → (B, T_tgt-1, vocab)</div>
+    </div>
+    <div class="arrow-v" id="a-de4">↓</div>
+    <div class="node c-loss" id="n-loss">
+      <div class="name">CrossEntropy Loss</div>
+      <div class="formula">loss = CE(logits, tgt[:, 1:])</div>
+      <div class="shape">初始 ≈ ln(vocab) ≈ 4.6</div>
+    </div>
+  </div>
+</div>
+
+<div class="info-panel" id="info">
+  <div class="step-title">点击「下一步」让数据从输入流向输出</div>
+  <div class="step-desc">配置：<code>vocab=100, d_model=64, n_heads=4, N=2, d_ff=128, B=8, T_src=T_tgt=6</code>。teacher forcing：输入 <code>tgt[:, :-1]</code>，目标是 <code>tgt[:, 1:]</code>。</div>
+</div>
+
+<div class="loss-curve">
+  <div class="ttl">训练 loss 曲线（复制序列任务，来自教程 ch35_full_transformer.py）</div>
+  <div class="sub">初始 loss ≈ ln(100) ≈ 4.6（模型随机初始化，预测接近均匀分布）。训练 200 步后降到 ~0.07。</div>
+  <canvas id="lossCanvas" width="940" height="140"></canvas>
+</div>
+
+<footer>
+  数据来源：35-完整Transformer拼装与训练.md（数值小例子 + 训练 loss）｜
+  本可视化对应 <a href="35-完整Transformer拼装与训练.md">Ch35 · 完整 Transformer 拼装与训练</a>
+</footer>
+
+<script>
+// === 步骤定义 ===
+const steps = [
+  {title:"第 0 步：src 进入 Embedding", desc:"源序列 src（token id 整数序列）先过 <code>nn.Embedding(vocab, d_model)</code>，把每个整数变成 d_model 维向量。这是「离散→连续」的一步。", tip:null,
+   active:['n-src-emb'], arrows:[], bridge:false,
+   shape:"src: shape (B=8, T_src=6)  例如 [[5,12,8,1,7,3], ...]\n→ src_emb: shape (8, 6, 64)"},
+  {title:"第 1 步：src 加位置编码 PE", desc:"Self-Attention 对顺序置换不变，必须显式加位置信息。<code>src_emb + PE</code>，PE 用 sin/cos 公式生成（无参数、可外推）。相加不改变维度。", tip:"❌ PE 用乘法 → 破坏嵌入语义。必须相加。",
+   active:['n-src-emb','n-src-pe'], arrows:['a-se1'], bridge:false,
+   shape:"src_emb + PE → src_repr: shape (8, 6, 64)\nPE 由 sin(pos/10000^(2i/d_model)) 生成"},
+  {title:"第 2 步：Encoder × N 处理 src", desc:"N 个 EncoderBlock 堆叠。每块 = [Multi-Head Self-Attn + Add&Norm] + [FFN + Add&Norm]。Encoder 输出 enc_out 形状不变，但每个位置已融合了全局信息。", tip:null,
+   active:['n-src-emb','n-src-pe','n-enc'], arrows:['a-se1','a-se2'], bridge:false,
+   shape:"enc_out = Encoder×N(src_repr)\n→ enc_out: shape (8, 6, 64)\n每个位置已吸收全句信息（Self-Attn）"},
+  {title:"第 3 步：tgt[:-1] 进入 Embedding", desc:"<strong>teacher forcing</strong>：训练时 Decoder 输入 <code>tgt[:, :-1]</code>（去掉最后一个词），目标是 <code>tgt[:, 1:]</code>（去掉第一个词）。这样第 i 位预测第 i+1 位。", tip:"❌ 输入完整 tgt 而非 tgt[:, :-1] → 模型「看到答案再预测答案」，训练推理不一致。",
+   active:['n-src-emb','n-src-pe','n-enc','n-tgt-emb'], arrows:['a-se1','a-se2'], bridge:false,
+   shape:"tgt: shape (8, 6)  例如 [[2,7,3,9,4,5], ...]\ntgt[:, :-1]: shape (8, 5)  去掉最后一位\n→ tgt_emb: shape (8, 5, 64)"},
+  {title:"第 4 步：tgt 加位置编码 PE", desc:"和 src 一样，tgt 也要加 PE。Decoder 同样需要位置信息。", tip:null,
+   active:['n-src-emb','n-src-pe','n-enc','n-tgt-emb','n-tgt-pe'], arrows:['a-se1','a-se2','a-de1'], bridge:false,
+   shape:"tgt_emb + PE → tgt_repr: shape (8, 5, 64)"},
+  {title:"第 5 步：Decoder × N（含 Cross-Attn）", desc:"N 个 DecoderBlock 堆叠。每块三步：① <strong>Masked Self-Attn</strong>（因果 mask，只看过去）+ Add&Norm；② <strong>Cross-Attn</strong>（Q 来自 Decoder，K/V 来自 Encoder 输出 enc_out）+ Add&Norm；③ FFN + Add&Norm。", tip:"❌ 忘记 tgt_mask → 训练时 Decoder 看到了未来的词，信息泄露。必须用三角上三角 -inf 的因果 mask。",
+   active:['n-src-emb','n-src-pe','n-enc','n-tgt-emb','n-tgt-pe','n-dec'], arrows:['a-se1','a-se2','a-de1','a-de2'], bridge:true,
+   shape:"dec_out = Decoder×N(tgt_repr, enc_out, tgt_mask)\n→ dec_out: shape (8, 5, 64)\nCross-Attn: Q=tgt, K=V=enc_out"},
+  {title:"第 6 步：Linear 映射回词表", desc:"<code>nn.Linear(d_model, vocab)</code> 把 64 维映射回 100 维（词表大小），得到 logits。注意：softmax 由 CrossEntropyLoss 内部做，不用显式调用。", tip:"❌ 手动 softmax 后再喂给 CrossEntropyLoss → 算了两遍，结果错。CrossEntropyLoss 接受 logits。",
+   active:['n-tgt-emb','n-tgt-pe','n-dec','n-linear'], arrows:['a-de1','a-de2','a-de3'], bridge:false,
+   shape:"logits = Linear(dec_out)\n→ logits: shape (8, 5, 100)\nreshape: (40, 100) 喂给 loss"},
+  {title:"第 7 步：CrossEntropy Loss + 反向", desc:"<code>loss = CE(logits.reshape(-1,vocab), tgt[:,1:].reshape(-1))</code>。初始 loss ≈ <code>ln(vocab) = ln(100) ≈ 4.6</code>（均匀分布的交叉熵）。偏离太多说明有 bug。然后 <code>loss.backward()</code> + <code>opt.step()</code> 更新参数。", tip:"✅ 训练 200 步后 loss 从 4.73 降到 0.07（见下方曲线）。",
+   active:['n-tgt-emb','n-tgt-pe','n-dec','n-linear','n-loss'], arrows:['a-de1','a-de2','a-de3','a-de4'], bridge:false,
+   shape:"loss = CrossEntropy(logits, tgt[:,1:])\n初始 loss ≈ ln(100) = 4.605\nloss.backward(); opt.step(); opt.zero_grad()"}
+];
+
+// === 状态机 ===
+let cur = -1;
+let autoTimer = null;
+
+function renderStep(){
+  // 重置所有
+  document.querySelectorAll('.node').forEach(n=>n.classList.remove('active'));
+  document.querySelectorAll('.arrow-v').forEach(a=>a.classList.remove('active'));
+  document.getElementById('bridge').classList.remove('active');
+
+  if(cur>=0){
+    steps[cur].active.forEach(id=>document.getElementById(id).classList.add('active'));
+    steps[cur].arrows.forEach(id=>document.getElementById(id).classList.add('active'));
+    if(steps[cur].bridge) document.getElementById('bridge').classList.add('active');
+  }
+
+  // 信息面板
+  const info = document.getElementById('info');
+  if(cur<0){
+    info.innerHTML = '<div class="step-title">点击「下一步」让数据从输入流向输出</div>'+
+      '<div class="step-desc">配置：<code>vocab=100, d_model=64, n_heads=4, N=2, d_ff=128, B=8, T_src=T_tgt=6</code>。teacher forcing：输入 <code>tgt[:, :-1]</code>，目标是 <code>tgt[:, 1:]</code>。</div>';
+  } else {
+    let html = `<div class="step-title">${steps[cur].title}</div>`;
+    html += `<div class="step-desc">${steps[cur].desc}</div>`;
+    if(steps[cur].shape){
+      html += `<div class="shape-table">${steps[cur].shape}</div>`;
+    }
+    if(steps[cur].tip){
+      html += `<div class="tip">${steps[cur].tip}</div>`;
+    }
+    info.innerHTML = html;
+  }
+
+  document.getElementById('stepInfo').textContent = (cur+1) + ' / ' + steps.length;
+  document.getElementById('btn-next').disabled = (cur >= steps.length-1);
+}
+
+function nextStep(){
+  if(cur < steps.length-1){ cur++; renderStep(); }
+  else if(autoTimer){ toggleAuto(); }
+}
+
+function toggleAuto(){
+  if(autoTimer){
+    clearInterval(autoTimer); autoTimer=null;
+    document.getElementById('btn-auto').textContent='⏯ 自动播放';
+  } else {
+    if(cur >= steps.length-1) resetAll();
+    autoTimer = setInterval(()=>{
+      if(cur >= steps.length-1){
+        clearInterval(autoTimer); autoTimer=null;
+        document.getElementById('btn-auto').textContent='⏯ 自动播放';
+      } else nextStep();
+    }, 2000);
+    document.getElementById('btn-auto').textContent='⏸ 暂停';
+  }
+}
+
+function resetAll(){
+  if(autoTimer){ clearInterval(autoTimer); autoTimer=null; document.getElementById('btn-auto').textContent='⏯ 自动播放'; }
+  cur = -1; renderStep();
+}
+
+// === 绘制 loss 曲线 ===
+function drawLossCurve(){
+  // 来自教程的 loss 数据点
+  const pts = [
+    [0,4.73],[20,4.17],[40,2.77],[60,1.94],[80,0.99],
+    [100,0.57],[120,0.30],[140,0.09],[160,0.23],[180,0.21],[199,0.07]
+  ];
+  const canvas = document.getElementById('lossCanvas');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle = getCss('--bg');
+  ctx.fillRect(0,0,W,H);
+
+  const padL=36, padR=10, padT=10, padB=24;
+  const pw = W-padL-padR, ph = H-padT-padB;
+
+  // 网格
+  ctx.strokeStyle = getCss('--border');
+  ctx.globalAlpha = 0.4;
+  ctx.lineWidth = 1;
+  for(let y=0; y<=5; y++){
+    const yp = padT + (y/5)*ph;
+    ctx.beginPath(); ctx.moveTo(padL,yp); ctx.lineTo(W-padR,yp); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+
+  // 坐标轴
+  ctx.strokeStyle = getCss('--sub');
+  ctx.beginPath();
+  ctx.moveTo(padL,padT); ctx.lineTo(padL,H-padB); ctx.lineTo(W-padR,H-padB);
+  ctx.stroke();
+
+  // y 轴刻度
+  ctx.fillStyle = getCss('--sub');
+  ctx.font = '10px monospace';
+  ctx.textAlign = 'right';
+  for(let y=0; y<=5; y++){
+    const v = 5 - y;
+    const yp = padT + (y/5)*ph;
+    ctx.fillText(v.toFixed(1), padL-4, yp+3);
+  }
+  // x 轴刻度
+  ctx.textAlign = 'center';
+  for(let x=0; x<=200; x+=40){
+    const xp = padL + (x/200)*pw;
+    ctx.fillText(x, xp, H-padB+12);
+  }
+  // 轴标签
+  ctx.textAlign = 'left';
+  ctx.fillText('loss', padL+4, padT-2);
+  ctx.textAlign = 'right';
+  ctx.fillText('step', W-padR, H-padB+12);
+
+  // 初始 loss 参考线 ln(100)≈4.6
+  const refY = padT + ((5-4.6)/5)*ph;
+  ctx.strokeStyle = getCss('--red');
+  ctx.globalAlpha = 0.6;
+  ctx.setLineDash([4,3]);
+  ctx.beginPath();
+  ctx.moveTo(padL, refY); ctx.lineTo(W-padR, refY);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = getCss('--red');
+  ctx.textAlign = 'left';
+  ctx.font = '9px monospace';
+  ctx.fillText('ln(100)≈4.6 (初始参考)', padL+4, refY-3);
+
+  // loss 曲线
+  ctx.strokeStyle = getCss('--blue');
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  pts.forEach((p,i)=>{
+    const x = padL + (p[0]/200)*pw;
+    const y = padT + ((5-p[1])/5)*ph;
+    if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  });
+  ctx.stroke();
+  // 点
+  ctx.fillStyle = getCss('--blue');
+  pts.forEach(p=>{
+    const x = padL + (p[0]/200)*pw;
+    const y = padT + ((5-p[1])/5)*ph;
+    ctx.beginPath();
+    ctx.arc(x,y,2.5,0,Math.PI*2);
+    ctx.fill();
+  });
+}
+
+function getCss(name){
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#888';
+}
+
+resetAll();
+drawLossCurve();
+</script>
+</body>
+</html>

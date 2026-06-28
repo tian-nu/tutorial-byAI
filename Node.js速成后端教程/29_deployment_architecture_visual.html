@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>博客系统 — 生产环境部署架构</title>
+<!-- 基于 Node.js 后端速成教程 第29章细纲 -->
+<!-- 自包含单文件，纯前端实现，可离线运行 -->
+<style>
+:root {
+  --bg: #f8f9fa;
+  --card-bg: #ffffff;
+  --text: #2c3e50;
+  --text2: #5a6c7d;
+  --border: #dee2e6;
+  --accent: #2563eb;
+  --accent2: #0891b2;
+  --success: #16a34a;
+  --api-color: #2563eb;
+  --static-color: #ea580c;
+  --node-bg: #f1f5f9;
+  --tag-bg: #e2e8f0;
+  --shadow: 0 1px 3px rgba(0,0,0,0.08);
+  --docker-border: #94a3b8;
+}
+[data-theme="dark"] {
+  --bg: #1a1d23;
+  --card-bg: #242830;
+  --text: #e2e8f0;
+  --text2: #94a3b8;
+  --border: #374151;
+  --node-bg: #2d3139;
+  --tag-bg: #374151;
+  --shadow: 0 1px 3px rgba(0,0,0,0.3);
+  --docker-border: #4b5563;
+}
+* { box-sizing:border-box; margin:0; padding:0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg); color: var(--text);
+  line-height:1.6; padding:20px; transition: background 0.3s, color 0.3s;
+}
+.container { max-width:960px; margin:0 auto; }
+
+.header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px; flex-wrap:wrap; gap:12px; }
+.header h1 { font-size:1.5rem; font-weight:700; color:var(--accent); }
+.header p { color:var(--text2); font-size:0.9rem; margin-top:4px; }
+.theme-btn { padding:6px 14px; border:1px solid var(--border); border-radius:8px; background:var(--card-bg); color:var(--text); cursor:pointer; font-size:0.85rem; transition:all 0.2s; }
+.theme-btn:hover { border-color:var(--accent); color:var(--accent); }
+
+.controls { display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; }
+.controls button { padding:8px 18px; border:1px solid var(--border); border-radius:8px; background:var(--card-bg); color:var(--text); cursor:pointer; font-size:0.9rem; transition:all 0.2s; font-weight:500; }
+.controls button:hover { border-color:var(--accent); color:var(--accent); }
+.controls button.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+.controls button:disabled { opacity:0.4; cursor:not-allowed; }
+
+.step-indicator { display:flex; align-items:center; margin-bottom:14px; gap:4px; font-size:0.85rem; color:var(--text2); }
+.step-indicator .step-num { font-weight:700; color:var(--accent); font-size:1.1rem; }
+.progress-bar { height:4px; background:var(--border); border-radius:2px; margin-bottom:20px; overflow:hidden; }
+.progress-fill { height:100%; background:var(--accent); border-radius:2px; transition:width 0.5s ease; }
+
+/* Architecture area */
+.arch-area {
+  background:var(--card-bg); border:1px solid var(--border); border-radius:12px;
+  padding:24px 16px; margin-bottom:20px; box-shadow:var(--shadow);
+  min-height:360px;
+  display:flex; flex-direction:column; align-items:center; gap:8px;
+}
+
+/* Row layout */
+.arch-row { display:flex; justify-content:center; align-items:center; gap:8px; flex-wrap:wrap; width:100%; }
+.arch-col { display:flex; flex-direction:column; align-items:center; gap:4px; }
+
+/* Node cards */
+.node { background:var(--node-bg); border:2px solid var(--border); border-radius:10px; padding:11px 16px; text-align:center; min-width:130px; transition:all 0.5s ease; }
+.node .name { font-weight:700; font-size:0.95rem; }
+.node .port { font-size:0.75rem; color:var(--text2); margin-top:1px; }
+.node .tag { display:inline-block; margin-top:4px; padding:2px 7px; border-radius:4px; font-size:0.72rem; font-weight:600; }
+.node .tag.api { background:#dbeafe; color:#1e40af; }
+.node .tag.static { background:#ffedd5; color:#9a3412; }
+.node .tag.proxy { background:#dcfce7; color:#166534; }
+.node .tag.pm { background:#f3e8ff; color:#6b21a8; }
+[data-theme="dark"] .node .tag.api { background:#1e3a5f; color:#93c5fd; }
+[data-theme="dark"] .node .tag.static { background:#3b2200; color:#fdba74; }
+[data-theme="dark"] .node .tag.proxy { background:#0a2e1a; color:#86efac; }
+[data-theme="dark"] .node .tag.pm { background:#2e1065; color:#d8b4fe; }
+
+.node.active-api { border-color:var(--api-color); box-shadow:0 0 0 3px rgba(37,99,235,0.15); }
+.node.active-static { border-color:var(--static-color); box-shadow:0 0 0 3px rgba(234,88,12,0.15); }
+.node.dim { opacity:0.35; }
+
+/* Docker container */
+.docker-box {
+  border:2px dashed var(--docker-border); border-radius:14px; padding:14px 12px 12px;
+  position:relative; margin-top:2px;
+  display:flex; flex-wrap:wrap; justify-content:center; align-items:center; gap:10px;
+}
+.docker-box::before {
+  content:"Docker 容器"; position:absolute; top:-12px; left:14px;
+  background:var(--card-bg); padding:0 8px; font-size:0.75rem; font-weight:600;
+  color:var(--docker-border); border-radius:4px;
+}
+.docker-box.active-api { border-color:var(--api-color); }
+.docker-box.active-api::before { color:var(--api-color); }
+.docker-box.dim { opacity:0.35; }
+
+/* Arrows */
+.arrow-down { display:flex; flex-direction:column; align-items:center; }
+.arrow-down .line { width:2px; height:18px; background:var(--border); transition:background 0.5s; }
+.arrow-down .head { width:0; height:0; border-left:5px solid transparent; border-right:5px solid transparent; border-top:6px solid var(--border); transition:border-top-color 0.5s; }
+.arrow-down .line.api-active, .arrow-down .head.api-active { background:var(--api-color); border-top-color:var(--api-color); }
+.arrow-down .line.static-active, .arrow-down .head.static-active { background:var(--static-color); border-top-color:var(--static-color); }
+
+.arrow-right { display:flex; align-items:center; }
+.arrow-right .line { width:28px; height:2px; background:var(--border); transition:background 0.5s; }
+.arrow-right .head { width:0; height:0; border-top:5px solid transparent; border-bottom:5px solid transparent; border-left:6px solid var(--border); transition:border-left-color 0.5s; }
+.arrow-right .line.api-active, .arrow-right .head.api-active { background:var(--api-color); border-left-color:var(--api-color); }
+.arrow-right .line.static-active, .arrow-right .head.static-active { background:var(--static-color); border-left-color:var(--static-color); }
+
+/* Path label */
+.path-label { font-size:0.72rem; font-weight:600; padding:2px 8px; border-radius:4px; }
+.path-label.api { color:var(--api-color); background:#dbeafe; }
+.path-label.static { color:var(--static-color); background:#ffedd5; }
+[data-theme="dark"] .path-label.api { background:#1e3a5f; color:#93c5fd; }
+[data-theme="dark"] .path-label.static { background:#3b2200; color:#fdba74; }
+
+/* Split area */
+.split-area { display:flex; justify-content:center; gap:36px; flex-wrap:wrap; width:100%; margin-top:4px; }
+.split-col { display:flex; flex-direction:column; align-items:center; gap:6px; }
+
+/* Description */
+.desc { background:var(--card-bg); border:1px solid var(--border); border-radius:12px; padding:16px 20px; margin-bottom:20px; box-shadow:var(--shadow); }
+.desc h3 { font-size:1rem; margin-bottom:6px; color:var(--accent); }
+.desc p { font-size:0.9rem; color:var(--text2); }
+
+/* Legend */
+.legend { display:flex; gap:16px; flex-wrap:wrap; margin-bottom:14px; font-size:0.82rem; color:var(--text2); }
+.legend-item { display:flex; align-items:center; gap:5px; }
+.legend-dot { width:10px; height:10px; border-radius:50%; }
+.legend-dot.api { background:var(--api-color); }
+.legend-dot.static { background:var(--static-color); }
+
+.footer { margin-top:20px; font-size:0.8rem; color:var(--text2); text-align:center; }
+.footer a { color:var(--accent); text-decoration:none; }
+.footer a:hover { text-decoration:underline; }
+</style>
+</head>
+<body data-theme="light">
+<div class="container">
+
+<div class="header">
+  <div>
+    <h1>博客系统 — 生产环境部署架构</h1>
+    <p>展示请求从客户端到服务器、经 Nginx 反向代理到达 Node.js 与数据库的完整路径</p>
+  </div>
+  <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">🌙 暗色模式</button>
+</div>
+
+<div class="controls">
+  <button onclick="reset()" id="resetBtn">↺ 重置</button>
+  <button onclick="prevStep()" id="prevBtn" disabled>◀ 上一步</button>
+  <button onclick="nextStep()" id="nextBtn">下一步 ▶</button>
+  <button onclick="autoPlay()" id="autoBtn">▶ 自动播放</button>
+</div>
+
+<div class="step-indicator">
+  步骤 <span class="step-num" id="stepNum">1</span> / <span id="stepTotal">6</span>
+  &nbsp;&mdash;&nbsp;<span id="stepTitle">初始概览</span>
+</div>
+
+<div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:16.7%"></div></div>
+
+<div class="legend">
+  <div class="legend-item"><span class="legend-dot api"></span> API 请求路径 (/api/*)</div>
+  <div class="legend-item"><span class="legend-dot static"></span> 静态文件路径 (/uploads/*)</div>
+</div>
+
+<div class="arch-area" id="archArea">
+
+  <!-- Row 1: 客户端 -->
+  <div class="arch-row">
+    <div class="node" id="node-client">
+      <div class="name">🌐 浏览器 / 客户端</div>
+      <div class="port">HTTPS 请求</div>
+    </div>
+  </div>
+
+  <div class="arrow-down" id="arr-c2d">
+    <div class="line" id="line-c2d"></div><div class="head" id="head-c2d"></div>
+  </div>
+
+  <!-- Row 2: DNS -->
+  <div class="arch-row">
+    <div class="node" id="node-dns">
+      <div class="name">🔍 DNS 解析</div>
+      <div class="port">域名 → IP 地址</div>
+      <div class="tag proxy">A 记录</div>
+    </div>
+  </div>
+
+  <div class="arrow-down" id="arr-d2n">
+    <div class="line" id="line-d2n"></div><div class="head" id="head-d2n"></div>
+  </div>
+
+  <!-- Row 3: Nginx -->
+  <div class="arch-row">
+    <div class="node" id="node-nginx">
+      <div class="name">🔄 Nginx 反向代理</div>
+      <div class="port">端口 80 / 443</div>
+      <div style="display:flex;gap:4px;justify-content:center;margin-top:4px;flex-wrap:wrap;">
+        <span class="tag proxy">SSL 终止</span>
+        <span class="tag proxy">路由分发</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Split: two paths -->
+  <div class="split-area">
+    <!-- Left: API path -->
+    <div class="split-col">
+      <div class="path-label api" id="pathLabelApi">API 请求 /api/*</div>
+      <div class="arrow-down" id="arr-n2node">
+        <div class="line" id="line-n2node"></div><div class="head" id="head-n2node"></div>
+      </div>
+      <!-- Docker box -->
+      <div class="docker-box" id="dockerBox">
+        <div class="node" id="node-nodejs">
+          <div class="name">🟢 Node.js + Express</div>
+          <div class="port">端口 3000</div>
+          <div class="tag pm">PM2 进程守护</div>
+        </div>
+        <div class="arrow-right" id="arr-n2p">
+          <div class="line" id="line-n2p"></div><div class="head" id="head-n2p"></div>
+        </div>
+        <div class="node" id="node-pg">
+          <div class="name">🗄️ PostgreSQL</div>
+          <div class="port">端口 5432</div>
+          <div class="tag api">数据持久化</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Static file path -->
+    <div class="split-col">
+      <div class="path-label static" id="pathLabelStatic">静态文件 /uploads/*</div>
+      <div class="arrow-down" id="arr-n2static">
+        <div class="line" id="line-n2static"></div><div class="head" id="head-n2static"></div>
+      </div>
+      <div class="node" id="node-static">
+        <div class="name">📁 静态文件</div>
+        <div class="port">/uploads/ 目录</div>
+        <div class="tag static">Nginx 直接服务</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="desc" id="descBox">
+  <h3 id="descTitle">初始概览</h3>
+  <p id="descText">生产环境中，用户通过 HTTPS 访问博客。Nginx 作为反向代理接收所有请求——API 请求转发给 Node.js（PM2 守护），Node.js 再查询 PostgreSQL；静态文件（如图片）由 Nginx 直接返回，不经过 Node.js。Node.js 和 PostgreSQL 运行在 Docker 容器中。</p>
+</div>
+
+<div class="footer">
+  <p>本可视化对应 <a href="29-Nginx反向代理+HTTPS.md">Node.js 速成后端教程 第29章</a> — Nginx 反向代理 + HTTPS | 基于 Node.js 后端速成教程 第29章细纲 | 可离线运行</p>
+</div>
+
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+
+// Node refs
+const nodeClient = $("#node-client");
+const nodeDns = $("#node-dns");
+const nodeNginx = $("#node-nginx");
+const nodeNodejs = $("#node-nodejs");
+const nodePg = $("#node-pg");
+const nodeStatic = $("#node-static");
+const dockerBox = $("#dockerBox");
+
+// Arrow refs
+const lineC2d = $("#line-c2d"); const headC2d = $("#head-c2d");
+const lineD2n = $("#line-d2n"); const headD2n = $("#head-d2n");
+const lineN2node = $("#line-n2node"); const headN2node = $("#head-n2node");
+const lineN2p = $("#line-n2p"); const headN2p = $("#head-n2p");
+const lineN2static = $("#line-n2static"); const headN2static = $("#head-n2static");
+
+// Label refs
+const pathLabelApi = $("#pathLabelApi");
+const pathLabelStatic = $("#pathLabelStatic");
+
+// Other
+const stepNum = $("#stepNum"); const stepTotal = $("#stepTotal");
+const stepTitle = $("#stepTitle"); const descTitle = $("#descTitle");
+const descText = $("#descText"); const progressFill = $("#progressFill");
+const prevBtn = $("#prevBtn"); const nextBtn = $("#nextBtn");
+const autoBtn = $("#autoBtn");
+
+stepTotal.textContent = "6";
+
+function clearAll() {
+  [nodeClient,nodeDns,nodeNginx,nodeNodejs,nodePg,nodeStatic].forEach(n=>{n.classList.remove("active-api","active-static","dim");});
+  dockerBox.classList.remove("active-api","dim");
+  pathLabelApi.classList.remove("dim"); pathLabelStatic.classList.remove("dim");
+  const lines = [lineC2d,lineD2n,lineN2node,lineN2p,lineN2static];
+  const heads = [headC2d,headD2n,headN2node,headN2p,headN2static];
+  lines.forEach(l=>l.classList.remove("api-active","static-active"));
+  heads.forEach(h=>h.classList.remove("api-active","static-active"));
+}
+
+function setApiActive(els) {
+  els.forEach(e=>e.classList.add("api-active"));
+}
+function setStaticActive(els) {
+  els.forEach(e=>e.classList.add("static-active"));
+}
+
+const steps = [
+  {
+    id:0, title:"初始概览",
+    text:"生产环境中，用户通过 HTTPS 访问博客。请求先经 DNS 将域名解析为服务器 IP，到达 Nginx（端口 80/443）。Nginx 做 SSL 终止和路由判断——/api/* 转发给 Node.js:3000（PM2 守护），Node.js 再查询 PostgreSQL:5432；/uploads/* 等静态文件由 Nginx 直接返回，不经过 Node.js。Node.js 和 PostgreSQL 均运行在 Docker 容器中。",
+    apply(){ clearAll(); }
+  },
+  {
+    id:1, title:"步骤 1：客户端发起 HTTPS 请求",
+    text:"用户在浏览器中输入 https://your-blog.com，浏览器发起 HTTPS 请求。此时浏览器需要先通过 DNS 查询域名对应的服务器 IP 地址。",
+    apply(){ clearAll(); nodeClient.classList.add("active-api"); }
+  },
+  {
+    id:2, title:"步骤 2：DNS 解析域名 → IP",
+    text:"DNS 服务器将域名 your-blog.com 解析为服务器的公网 IP 地址。域名提供商的 A 记录将域名指向服务器 IP。HTTPS 请求随后被路由到该 IP 的 443 端口。",
+    apply(){ clearAll(); nodeClient.classList.add("active-api"); nodeDns.classList.add("active-api"); setApiActive([lineC2d,headC2d]); }
+  },
+  {
+    id:3, title:"步骤 3：Nginx 接收请求 — SSL 终止 + 路由判断",
+    text:"请求到达服务器的 443 端口，Nginx 执行 SSL 终止（用 Let's Encrypt 证书解密 HTTPS）。解密后 Nginx 检查 URL 路径：/api/* 转发给上游 Node.js；/uploads/* 等静态路径直接读取文件返回。",
+    apply(){
+      clearAll();
+      [nodeClient,nodeDns,nodeNginx].forEach(n=>n.classList.add("active-api"));
+      setApiActive([lineC2d,headC2d,lineD2n,headD2n]);
+    }
+  },
+  {
+    id:4, title:"步骤 4：API 路径 — Nginx → Node.js → PostgreSQL",
+    text:"Nginx 将 /api/* 请求通过 proxy_pass http://localhost:3000 转发给 Node.js + Express 应用。Node.js（由 PM2 进程守护管理）处理业务逻辑，需要数据时查询 PostgreSQL（端口 5432）。Node.js 和 PostgreSQL 都运行在 Docker 容器中，通过 Docker 内部网络互联。",
+    apply(){
+      clearAll();
+      [nodeClient,nodeDns,nodeNginx,nodeNodejs,nodePg].forEach(n=>n.classList.add("active-api"));
+      dockerBox.classList.add("active-api");
+      setApiActive([lineC2d,headC2d,lineD2n,headD2n,lineN2node,headN2node,lineN2p,headN2p]);
+      pathLabelApi.classList.remove("dim");
+      pathLabelStatic.classList.add("dim");
+    }
+  },
+  {
+    id:5, title:"步骤 5：静态文件路径 — Nginx 直接返回",
+    text:"对于 /uploads/* 等静态文件请求，Nginx 直接从服务器磁盘读取文件并返回，完全不经过 Node.js。这大幅减轻了 Node.js 的负担——图片、CSS、JS 等静态资源由 Nginx 高效处理。",
+    apply(){
+      clearAll();
+      [nodeClient,nodeDns,nodeNginx,nodeStatic].forEach(n=>n.classList.add("active-static"));
+      setStaticActive([lineC2d,headC2d,lineD2n,headD2n,lineN2static,headN2static]);
+      pathLabelStatic.classList.remove("dim");
+      pathLabelApi.classList.add("dim");
+    }
+  }
+];
+
+let currentStep = 0;
+let autoInterval = null;
+
+function render() {
+  const s = steps[currentStep];
+  s.apply();
+  stepNum.textContent = currentStep + 1;
+  stepTitle.textContent = s.title;
+  descTitle.textContent = s.title;
+  descText.textContent = s.text;
+  progressFill.style.width = ((currentStep + 1) / steps.length * 100) + "%";
+  prevBtn.disabled = currentStep === 0;
+  nextBtn.disabled = currentStep === steps.length - 1;
+}
+
+function nextStep() {
+  if (currentStep < steps.length - 1) { currentStep++; render(); if (currentStep === steps.length - 1) stopAuto(); }
+}
+function prevStep() {
+  if (currentStep > 0) { currentStep--; render(); stopAuto(); }
+}
+function reset() { stopAuto(); currentStep = 0; render(); }
+
+function autoPlay() {
+  if (autoInterval) { stopAuto(); return; }
+  if (currentStep === steps.length - 1) { currentStep = 0; render(); }
+  autoBtn.textContent = "⏸ 停止播放";
+  autoBtn.classList.add("active");
+  autoInterval = setInterval(() => {
+    if (currentStep < steps.length - 1) { currentStep++; render(); }
+    else stopAuto();
+  }, 2800);
+}
+function stopAuto() {
+  if (autoInterval) { clearInterval(autoInterval); autoInterval = null; }
+  autoBtn.textContent = "▶ 自动播放"; autoBtn.classList.remove("active");
+}
+
+function toggleTheme() {
+  const body = document.body;
+  const cur = body.getAttribute("data-theme");
+  const next = cur === "dark" ? "light" : "dark";
+  body.setAttribute("data-theme", next);
+  $("#themeBtn").textContent = next === "dark" ? "☀️ 亮色模式" : "🌙 暗色模式";
+}
+if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) toggleTheme();
+
+render();
+</script>
+</body>
+</html>

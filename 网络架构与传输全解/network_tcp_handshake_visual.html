@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>TCP 三次握手 + 四次挥手 状态转换</title>
+<style>
+:root{--bg:#f5f5f5;--card:#fff;--text:#333;--sub:#666;--border:#ccc;--c1:#3498db;--c2:#e67e22;--syn:#2ecc71;--fin:#e74c3c;--ack:#f39c12}
+@media(prefers-color-scheme:dark){:root{--bg:#1a1a2e;--card:#16213e;--text:#e0e0e0;--sub:#aaa;--border:#444;--c1:#5dade2;--c2:#f0b27a}}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column;align-items:center;padding:16px;min-height:100vh}
+h1{font-size:1.35em;text-align:center;margin-bottom:4px}
+.desc{font-size:.82em;color:var(--sub);margin-bottom:10px;text-align:center;max-width:720px}
+.controls{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-bottom:10px}
+.controls button{padding:5px 14px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);cursor:pointer;font-size:.82em;transition:.15s}
+.controls button:hover{opacity:.8}
+.controls button.active{background:#3498db;color:#fff;border-color:#3498db}
+.chart{display:flex;gap:40px;justify-content:center;width:100%;max-width:860px;margin-bottom:12px}
+.side{flex:1;max-width:360px}
+.side h3{text-align:center;font-size:.9em;margin-bottom:6px}
+.state-box{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px;min-height:180px;display:flex;flex-direction:column;gap:2px}
+.state{font-size:.72em;padding:3px 8px;border-left:3px solid var(--border);transition:all .3s;display:flex;justify-content:space-between;align-items:center}
+.state.cur{border-left-color:var(--syn);background:rgba(46,204,113,.08);font-weight:bold}
+.state .lbl{font-weight:500}.state .info{font-size:.68em;color:var(--sub)}
+.middle{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px}
+.seq-diagram{width:100%;max-width:860px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px;min-height:120px;overflow-x:auto}
+.seq-diagram h3{font-size:.9em;text-align:center;margin-bottom:6px}
+.seq-row{display:flex;align-items:center;justify-content:center;gap:8px;font-size:.75em;font-family:monospace;padding:4px 0;opacity:.25;transition:opacity .4s}
+.seq-row.active{opacity:1}
+.seq-row .flag{display:inline-block;padding:1px 5px;border-radius:3px;color:#fff;font-size:.7em;font-weight:bold;margin:0 2px}
+.f-syn{background:var(--syn)} .f-ack{background:var(--ack)} .f-fin{background:var(--fin)}
+.arrow-sym{font-size:1.1em;margin:0 4px}
+.stage-label{font-size:.76em;color:var(--sub);text-align:center;margin:4px 0}
+footer{margin-top:16px;font-size:.7em;color:var(--sub);text-align:center;line-height:1.6}
+footer a{color:var(--sub)}
+.divider{border-top:1px dashed var(--border);margin:6px 0}
+</style>
+</head>
+<body>
+<h1>TCP 三次握手 + 四次挥手 — 状态转换</h1>
+<p class="desc">左侧客户端 (Client)，右侧服务器 (Server)。点击"逐步播放"观察双方状态变化和每个报文的内容。</p>
+<div class="controls">
+  <button id="btn-play" onclick="play()" class="active">▶ 逐步播放</button>
+  <button onclick="resetV()">↺ 重置</button>
+  <button onclick="skipToWave()">⏭ 跳到挥手</button>
+  <span id="stepInfo" style="font-size:.78em;color:var(--sub);align-self:center"></span>
+</div>
+<div class="chart">
+  <div class="side">
+    <h3 style="color:var(--c1)">客户端 Client</h3>
+    <div class="state-box" id="csBox">
+      <div class="state" id="cs-closed"><span class="lbl">CLOSED</span><span class="info">初始状态</span></div>
+      <div class="state" id="cs-syn_sent"><span class="lbl">SYN_SENT</span><span class="info">发出 SYN 后</span></div>
+      <div class="state" id="cs-estab"><span class="lbl">ESTABLISHED</span><span class="info">连接建立</span></div>
+      <div class="state" id="cs-fin1"><span class="lbl">FIN_WAIT_1</span><span class="info">发出 FIN 后</span></div>
+      <div class="state" id="cs-fin2"><span class="lbl">FIN_WAIT_2</span><span class="info">收到 ACK 后</span></div>
+      <div class="state" id="cs-tw"><span class="lbl">TIME_WAIT</span><span class="info">等 2MSL (~60s)</span></div>
+      <div class="state" id="cs-closed2"><span class="lbl">CLOSED</span><span class="info">最终关闭</span></div>
+    </div>
+  </div>
+  <div class="side">
+    <h3 style="color:var(--c2)">服务器 Server</h3>
+    <div class="state-box" id="ssBox">
+      <div class="state" id="ss-listen"><span class="lbl">LISTEN</span><span class="info">端口监听中</span></div>
+      <div class="state" id="ss-syn_rcvd"><span class="lbl">SYN_RCVD</span><span class="info">收到 SYN 后</span></div>
+      <div class="state" id="ss-estab"><span class="lbl">ESTABLISHED</span><span class="info">连接建立</span></div>
+      <div class="state" id="ss-cw"><span class="lbl">CLOSE_WAIT</span><span class="info">收到 FIN 后</span></div>
+      <div class="state" id="ss-last"><span class="lbl">LAST_ACK</span><span class="info">发出 FIN 后</span></div>
+      <div class="state" id="ss-closed"><span class="lbl">CLOSED</span><span class="info">最终关闭</span></div>
+    </div>
+  </div>
+</div>
+<div class="seq-diagram">
+  <h3>报文序列</h3>
+  <div class="seq-row" id="r1"><span style="color:var(--c1)">Client</span><span class="arrow-sym">→</span><span style="color:var(--c2)">Server</span>: <span class="flag f-syn">SYN</span> seq=x <span style="font-size:.7em">（第一次握手）</span></div>
+  <div class="seq-row" id="r2"><span style="color:var(--c2)">Server</span><span class="arrow-sym">→</span><span style="color:var(--c1)">Client</span>: <span class="flag f-syn">SYN</span><span class="flag f-ack">ACK</span> seq=y, ack=x+1 <span style="font-size:.7em">（第二次握手）</span></div>
+  <div class="seq-row" id="r3"><span style="color:var(--c1)">Client</span><span class="arrow-sym">→</span><span style="color:var(--c2)">Server</span>: <span class="flag f-ack">ACK</span> seq=x+1, ack=y+1 <span style="font-size:.7em">（第三次握手）</span></div>
+  <div class="seq-row" id="rD" style="opacity:.25;font-style:italic;color:var(--sub)">··· 数据传输 ··· (ESTABLISHED)</div>
+  <div class="seq-row" id="r4"><span style="color:var(--c1)">Client</span><span class="arrow-sym">→</span><span style="color:var(--c2)">Server</span>: <span class="flag f-fin">FIN</span> seq=u <span style="font-size:.7em">（第一次挥手）</span></div>
+  <div class="seq-row" id="r5"><span style="color:var(--c2)">Server</span><span class="arrow-sym">→</span><span style="color:var(--c1)">Client</span>: <span class="flag f-ack">ACK</span> ack=u+1 <span style="font-size:.7em">（第二次挥手）</span></div>
+  <div class="seq-row" id="r6"><span style="color:var(--c2)">Server</span><span class="arrow-sym">→</span><span style="color:var(--c1)">Client</span>: <span class="flag f-fin">FIN</span><span class="flag f-ack">ACK</span> seq=v, ack=u+1 <span style="font-size:.7em">（第三次挥手）</span></div>
+  <div class="seq-row" id="r7"><span style="color:var(--c1)">Client</span><span class="arrow-sym">→</span><span style="color:var(--c2)">Server</span>: <span class="flag f-ack">ACK</span> ack=v+1 <span style="font-size:.7em">（第四次挥手）</span></div>
+</div>
+<div class="stage-label" id="stageLabel"></div>
+<footer>
+  数据来源：基于 network_architecture_detailed_outline.md v2<br>
+  本可视化对应 <a href="#">网络架构与传输全解</a> 步骤15（TCP三次握手）+ 步骤17（TCP四次挥手）
+</footer>
+
+<script>
+let steps=[
+  {id:'r1',cs:'cs-syn_sent',ss:'ss-listen',txt:'第一次握手：Client → Server SYN (seq=x)，客户端进入 SYN_SENT',  handshake:true},
+  {id:'r2',cs:'cs-syn_sent',ss:'ss-syn_rcvd',txt:'第二次握手：Server → Client SYN+ACK (seq=y, ack=x+1)，服务器进入 SYN_RCVD'},
+  {id:'r3',cs:'cs-estab',ss:'ss-estab',txt:'第三次握手：Client → Server ACK (seq=x+1, ack=y+1)，双方进入 ESTABLISHED ✅'},
+  {id:'rD',cs:'cs-estab',ss:'ss-estab',txt:'数据传输阶段 — 双方在 ESTABLISHED 状态正常通信',  handshake:true},
+  {id:'r4',cs:'cs-fin1',ss:'ss-estab',txt:'第一次挥手：Client → Server FIN (seq=u)，客户端进入 FIN_WAIT_1'},
+  {id:'r5',cs:'cs-fin2',ss:'ss-cw',txt:'第二次挥手：Server → Client ACK (ack=u+1)，服务器进入 CLOSE_WAIT，客户端进入 FIN_WAIT_2'},
+  {id:'r6',cs:'cs-fin2',ss:'ss-last',txt:'第三次挥手：Server → Client FIN (seq=v, ack=u+1)，服务器进入 LAST_ACK'},
+  {id:'r7',cs:'cs-tw',ss:'ss-closed',txt:'第四次挥手：Client → Server ACK (ack=v+1)，服务器进入 CLOSED，客户端进入 TIME_WAIT'},
+  {id:'end',cs:'cs-closed2',ss:'ss-closed',txt:'2MSL (~60s) 后：客户端从 TIME_WAIT 进入 CLOSED — 连接彻底关闭'},
+];
+let cur=0,timer=null;
+function setState(side,id){
+  document.querySelectorAll('#'+side+'Box .state').forEach(s=>s.classList.remove('cur'));
+  let el=document.getElementById(id);
+  if(el)el.classList.add('cur');
+}
+function play(){
+  clearInterval(timer);
+  if(cur>=steps.length){cur=0;resetV()}
+  document.getElementById('btn-play').classList.add('active');
+  timer=setInterval(()=>{
+    if(cur>=steps.length){clearInterval(timer);document.getElementById('btn-play').classList.remove('active');return}
+    let s=steps[cur];
+    document.querySelectorAll('.seq-row').forEach(r=>r.classList.remove('active'));
+    let rEl=document.getElementById(s.id);
+    if(rEl&&s.id!=='end')rEl.classList.add('active');
+    setState('cs',s.cs);setState('ss',s.ss);
+    document.getElementById('stepInfo').textContent=(cur+1)+'/'+steps.length+'';
+    document.getElementById('stageLabel').textContent=s.txt;
+    cur++;
+    if(cur>=steps.length){clearInterval(timer);document.getElementById('btn-play').classList.remove('active')}
+  },2200);
+}
+function skipToWave(){
+  clearInterval(timer);cur=0;resetV();
+  cur=4; // skip handshake
+  play();
+}
+function resetV(){
+  clearInterval(timer);cur=0;
+  document.querySelectorAll('.seq-row').forEach(r=>r.classList.remove('active'));
+  document.querySelectorAll('.state').forEach(s=>s.classList.remove('cur'));
+  document.getElementById('cs-closed').classList.add('cur');
+  document.getElementById('ss-listen').classList.add('cur');
+  document.getElementById('btn-play').classList.add('active');
+  document.getElementById('stepInfo').textContent='';
+  document.getElementById('stageLabel').textContent='';
+}
+// init
+document.getElementById('cs-closed').classList.add('cur');
+document.getElementById('ss-listen').classList.add('cur');
+</script>
+</body>
+</html>

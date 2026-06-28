@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JWT 认证流程 — 登录与Token验证</title>
+<style>
+:root {
+  --bg: #f5f5f5; --card-bg: #fff; --text: #222; --text-secondary: #555;
+  --border: #ddd; --shadow: 0 2px 8px rgba(0,0,0,.08);
+  --client-color: #4a90d9; --server-color: #e8913a; --jwt-hdr: #4a90d9;
+  --jwt-payload: #50a85e; --jwt-sig: #e8913a; --arrow-color: #888;
+  --highlight: #ffd54f; --error-color: #e74c3c; --success-color: #50a85e;
+  --node-bg: #fafafa; --toggle-bg: #e0e0e0; --toggle-dot: #fff;
+  --btn-bg: #fff; --btn-border: #ccc; --btn-hover: #e8e8e8;
+  --step-text: #fff;
+}
+[data-theme="dark"] {
+  --bg: #1a1a2e; --card-bg: #252540; --text: #e0e0e0; --text-secondary: #aaa;
+  --border: #3a3a5c; --shadow: 0 2px 12px rgba(0,0,0,.3);
+  --arrow-color: #666; --node-bg: #2a2a42; --toggle-bg: #444;
+  --toggle-dot: #ccc; --btn-bg: #333; --btn-border: #555; --btn-hover: #444;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{
+  font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  background:var(--bg);color:var(--text);min-height:100vh;
+  display:flex;flex-direction:column;transition:background .3s,color .3s;
+}
+header{text-align:center;padding:24px 20px 0}
+header h1{font-size:1.7rem;font-weight:700}
+header p{color:var(--text-secondary);margin-top:4px;font-size:.88rem}
+.toolbar{display:flex;justify-content:center;align-items:center;gap:10px;margin-top:12px;flex-wrap:wrap}
+.theme-toggle{background:var(--toggle-bg);border:none;border-radius:20px;width:50px;height:28px;cursor:pointer;position:relative;transition:background .3s}
+.theme-toggle::after{content:'';position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:var(--toggle-dot);transition:transform .3s}
+[data-theme="dark"] .theme-toggle::after{transform:translateX(22px)}
+.controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:center;margin:8px 0}
+.controls button{padding:6px 16px;border:1px solid var(--btn-border);border-radius:6px;background:var(--btn-bg);color:var(--text);cursor:pointer;font-size:.85rem;transition:background .2s;font-family:inherit}
+.controls button:hover:not(:disabled){background:var(--btn-hover)}
+.controls button:disabled{opacity:.4;cursor:default}
+.step-indicator{font-size:.9rem;color:var(--text-secondary);min-width:200px;text-align:center;font-weight:600}
+main{flex:1;display:flex;flex-direction:column;align-items:center;padding:10px 20px;gap:14px}
+.flow-area{position:relative;width:100%;max-width:860px;min-height:340px;display:flex;justify-content:center;align-items:center}
+svg.flow-svg{width:100%;height:100%}
+.jwt-section{background:var(--card-bg);border:2px solid var(--border);border-radius:10px;padding:16px 24px;box-shadow:var(--shadow);max-width:700px;width:100%;opacity:0;transform:translateY(8px);transition:opacity .35s,transform .35s}
+.jwt-section.visible{opacity:1;transform:translateY(0)}
+.jwt-section h3{font-size:.92rem;margin-bottom:10px;color:var(--text-secondary)}
+.jwt-parts{display:flex;gap:0;align-items:stretch;border-radius:8px;overflow:hidden;border:1px solid var(--border)}
+.jwt-part{flex:1;padding:10px 14px;text-align:center;font-family:'Cascadia Code','Fira Code','Consolas',monospace;font-size:.78rem;word-break:break-all}
+.jwt-hdr{background:var(--jwt-hdr);color:#fff}
+.jwt-payload{background:var(--jwt-payload);color:#fff}
+.jwt-sig{background:var(--jwt-sig);color:#fff}
+.jwt-label{font-size:.72rem;margin-top:8px;display:flex;gap:0}
+.jwt-label span{flex:1;text-align:center;color:var(--text-secondary);font-size:.75rem}
+footer{text-align:center;padding:10px 20px 16px;font-size:.78rem;color:var(--text-secondary);line-height:1.7}
+footer a{color:var(--client-color);text-decoration:none}
+footer a:hover{text-decoration:underline}
+.step-desc{text-align:center;font-size:.92rem;color:var(--text);min-height:22px;margin-top:4px;font-weight:500}
+@media(max-width:600px){
+  header h1{font-size:1.3rem}
+  .jwt-part{font-size:.65rem;padding:8px 6px}
+  .controls button{padding:5px 10px;font-size:.78rem}
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>JWT 认证流程 — 登录与Token验证</h1>
+  <p>阶段一：登录获取Token → 阶段二：携带Token访问受保护接口</p>
+  <div class="toolbar">
+    <span style="font-size:.82rem;color:var(--text-secondary)">☀️</span>
+    <button class="theme-toggle" id="themeToggle" title="切换暗色/亮色模式" aria-label="切换主题"></button>
+    <span style="font-size:.82rem;color:var(--text-secondary)">🌙</span>
+  </div>
+</header>
+
+<main>
+  <div class="controls">
+    <button id="btnPrev" disabled>◀ 上一步</button>
+    <span class="step-indicator" id="stepIndicator">步骤 0/10</span>
+    <button id="btnNext">下一步 ▶</button>
+    <button id="btnAuto">▶ 自动播放</button>
+    <button id="btnReset">↺ 重置</button>
+  </div>
+  <div class="step-desc" id="stepDesc">点击「下一步」开始演示 JWT 认证流程</div>
+
+  <div class="flow-area">
+    <svg class="flow-svg" id="flowSvg" viewBox="0 0 860 340" xmlns="http://www.w3.org/2000/svg">
+      <!-- client box -->
+      <rect x="30" y="40" width="200" height="60" rx="10" fill="var(--client-color)" opacity="0.9"/>
+      <text x="130" y="76" text-anchor="middle" fill="#fff" font-size="18" font-weight="700" font-family="system-ui,sans-serif">客户端</text>
+      <!-- server box -->
+      <rect x="630" y="40" width="200" height="60" rx="10" fill="var(--server-color)" opacity="0.9"/>
+      <text x="730" y="76" text-anchor="middle" fill="#fff" font-size="18" font-weight="700" font-family="system-ui,sans-serif">服务器</text>
+
+      <!-- Phase labels -->
+      <text x="430" y="30" text-anchor="middle" fill="var(--text-secondary)" font-size="11" font-family="system-ui,sans-serif" id="phaseLabel">阶段一：登录</text>
+
+      <!-- Step nodes (positioned vertically between client and server) -->
+      <defs>
+        <marker id="arrowR" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="var(--arrow-color)"/></marker>
+        <marker id="arrowL" markerWidth="8" markerHeight="6" refX="0" refY="3" orient="auto"><path d="M8,0 L0,3 L8,6 Z" fill="var(--arrow-color)"/></marker>
+        <marker id="arrowR-hl" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="var(--highlight)"/></marker>
+        <marker id="arrowL-hl" markerWidth="8" markerHeight="6" refX="0" refY="3" orient="auto"><path d="M8,0 L0,3 L8,6 Z" fill="var(--highlight)"/></marker>
+        <marker id="arrowR-err" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="var(--error-color)"/></marker>
+        <marker id="arrowL-err" markerWidth="8" markerHeight="6" refX="0" refY="3" orient="auto"><path d="M8,0 L0,3 L8,6 Z" fill="var(--error-color)"/></marker>
+      </defs>
+
+      <!-- Phase 1 lines & labels -->
+      <!-- Step 1: client->server POST /api/auth/login -->
+      <line x1="235" y1="110" x2="605" y2="110" stroke="var(--arrow-color)" stroke-width="2" marker-end="url(#arrowR)" id="line1" opacity="0"/>
+      <rect x="260" y="97" width="320" height="24" rx="4" fill="var(--node-bg)" stroke="var(--border)" stroke-width="1" id="label1" opacity="0"/>
+      <text x="420" y="113" text-anchor="middle" font-size="11" font-family="system-ui,sans-serif" fill="var(--text)" id="txt1" opacity="0">POST /api/auth/login { email, password }</text>
+
+      <!-- Step 2: server internal - bcrypt -->
+      <rect x="640" y="130" width="180" height="24" rx="4" fill="var(--node-bg)" stroke="var(--border)" stroke-width="1" id="label2" opacity="0"/>
+      <text x="730" y="146" text-anchor="middle" font-size="11" font-family="system-ui,sans-serif" fill="var(--text)" id="txt2" opacity="0">🔍 bcrypt.compare()</text>
+
+      <!-- Step 3: server internal - jwt.sign -->
+      <rect x="640" y="162" width="180" height="24" rx="4" fill="var(--node-bg)" stroke="var(--border)" stroke-width="1" id="label3" opacity="0"/>
+      <text x="730" y="178" text-anchor="middle" font-size="11" font-family="system-ui,sans-serif" fill="var(--text)" id="txt3" opacity="0">✍️ jwt.sign(payload, secret)</text>
+
+      <!-- Step 4: server->client return token -->
+      <line x1="605" y1="236" x2="235" y2="236" stroke="var(--arrow-color)" stroke-width="2" marker-end="url(#arrowL)" id="line4" opacity="0"/>
+      <rect x="260" y="222" width="320" height="24" rx="4" fill="var(--node-bg)" stroke="var(--border)" stroke-width="1" id="label4" opacity="0"/>
+      <text x="420" y="238" text-anchor="middle" font-size="11" font-family="system-ui,sans-serif" fill="var(--text)" id="txt4" opacity="0">◀ 返回 { token: "eyJhbGciOi..." }</text>
+
+      <!-- Step 5: client store -->
+      <rect x="40" y="266" width="180" height="24" rx="4" fill="var(--node-bg)" stroke="var(--border)" stroke-width="1" id="label5" opacity="0"/>
+      <text x="130" y="282" text-anchor="middle" font-size="11" font-family="system-ui,sans-serif" fill="var(--text)" id="txt5" opacity="0">💾 localStorage.setItem()</text>
+
+      <!-- Phase 2 lines & labels -->
+      <!-- Step 6: client->server GET /api/articles -->
+      <line x1="235" y="115" x2="605" y2="115" stroke="var(--arrow-color)" stroke-width="2" marker-end="url(#arrowR)" id="line6" opacity="0" stroke-dasharray=""/>
+      <rect x="225" y="97" width="390" height="24" rx="4" fill="var(--node-bg)" stroke="var(--border)" stroke-width="1" id="label6" opacity="0"/>
+      <text x="420" y="113" text-anchor="middle" font-size="10" font-family="system-ui,sans-serif" fill="var(--text)" id="txt6" opacity="0">GET /api/articles  Authorization: Bearer &lt;token&gt;</text>
+
+      <!-- Step 7: server internal - jwt.verify -->
+      <rect x="640" y="135" width="180" height="24" rx="4" fill="var(--node-bg)" stroke="var(--border)" stroke-width="1" id="label7" opacity="0"/>
+      <text x="730" y="151" text-anchor="middle" font-size="11" font-family="system-ui,sans-serif" fill="var(--text)" id="txt7" opacity="0">🔐 jwt.verify(token, secret)</text>
+
+      <!-- Step 8: server internal - req.user -->
+      <rect x="640" y="167" width="200" height="24" rx="4" fill="var(--node-bg)" stroke="var(--border)" stroke-width="1" id="label8" opacity="0"/>
+      <text x="740" y="183" text-anchor="middle" font-size="11" font-family="system-ui,sans-serif" fill="var(--text)" id="txt8" opacity="0">✅ req.user = decoded → 路由处理</text>
+
+      <!-- Step 9: server->client data -->
+      <line x1="605" y2="241" x2="235" y2="241" stroke="var(--arrow-color)" stroke-width="2" marker-end="url(#arrowL)" id="line9" opacity="0"/>
+      <rect x="280" y="227" width="300" height="24" rx="4" fill="var(--node-bg)" stroke="var(--border)" stroke-width="1" id="label9" opacity="0"/>
+      <text x="430" y="243" text-anchor="middle" font-size="11" font-family="system-ui,sans-serif" fill="var(--text)" id="txt9" opacity="0">◀ 返回数据 [{id:1, title:"...", ...}]</text>
+
+      <!-- Step 10: error path - 401 -->
+      <line x1="605" y2="115" x2="235" y2="241" stroke="var(--error-color)" stroke-width="2" stroke-dasharray="6,4" marker-end="url(#arrowL-err)" id="line10err" opacity="0"/>
+      <text x="420" y="188" text-anchor="middle" font-size="12" font-weight="700" fill="var(--error-color)" font-family="system-ui,sans-serif" id="txt10" opacity="0">⛔ 401 Unauthorized</text>
+
+      <!-- JWT structure annotation line to bottom area -->
+      <line x1="730" y1="190" x2="730" y2="210" stroke="var(--text-secondary)" stroke-width="1" stroke-dasharray="4,3" id="jwtLink" opacity="0"/>
+      <text x="730" y="205" text-anchor="middle" font-size="9" fill="var(--text-secondary)" font-family="system-ui,sans-serif" id="jwtLinkTxt" opacity="0">↓ JWT 结构</text>
+    </svg>
+  </div>
+
+  <div class="jwt-section" id="jwtSection">
+    <h3>📦 JWT Token 结构：Header.Payload.Signature</h3>
+    <div class="jwt-parts" id="jwtParts">
+      <div class="jwt-part jwt-hdr">eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9</div>
+      <div class="jwt-part jwt-payload">eyJpZCI6MSwiZW1haWwiOiJ1c2VyQGV4YW1wbGUuY29tIn0</div>
+      <div class="jwt-part jwt-sig">SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c</div>
+    </div>
+    <div class="jwt-label">
+      <span>Header（算法 + 类型）</span>
+      <span>Payload（用户数据，不加密！）</span>
+      <span>Signature（防篡改签名）</span>
+    </div>
+  </div>
+</main>
+
+<footer>
+  基于 <strong>Node.js 后端速成教程 第18章细纲</strong> 制作<br>
+  <a href="18-用户登录与JWT认证.md">本可视化对应 Node.js速成后端教程 第18章</a>
+</footer>
+
+<script>
+'use strict';
+
+// ---- Step definitions ----
+const steps = [
+  { // 0: initial
+    desc: '点击「下一步」开始演示 JWT 认证流程',
+    phase: '阶段一：登录',
+    show: [],
+    jwtVisible: false,
+  },
+  { // 1: POST /api/auth/login
+    desc: '客户端发送登录请求：POST /api/auth/login，携带 email 和 password',
+    phase: '阶段一：登录',
+    show: ['line1','label1','txt1','phaseLabel'],
+    jwtVisible: false,
+  },
+  { // 2: bcrypt.compare
+    desc: '服务器使用 bcrypt.compare() 比对用户提交的密码与数据库中存储的哈希值',
+    phase: '阶段一：登录',
+    show: ['line1','label1','txt1','label2','txt2','phaseLabel'],
+    jwtVisible: false,
+  },
+  { // 3: jwt.sign
+    desc: '密码验证通过，服务器调用 jwt.sign(payload, secret, options) 签发 Token',
+    phase: '阶段一：登录',
+    show: ['line1','label1','txt1','label2','txt2','label3','txt3','phaseLabel'],
+    jwtVisible: true,
+  },
+  { // 4: return token
+    desc: '服务器将 Token 通过响应返回给客户端',
+    phase: '阶段一：登录',
+    show: ['line1','label1','txt1','label2','txt2','label3','txt3','line4','label4','txt4','phaseLabel'],
+    jwtVisible: true,
+  },
+  { // 5: localStorage
+    desc: '客户端收到 Token 后存储到 localStorage，登录阶段完成',
+    phase: '阶段一：登录',
+    show: ['line1','label1','txt1','label2','txt2','label3','txt3','line4','label4','txt4','label5','txt5','phaseLabel'],
+    jwtVisible: true,
+  },
+  { // 6: GET /api/articles with token
+    desc: '客户端发起认证请求：GET /api/articles，在 Authorization 头中携带 Bearer Token',
+    phase: '阶段二：认证请求',
+    show: ['label5','txt5','line6','label6','txt6','phaseLabel'],
+    jwtVisible: true,
+  },
+  { // 7: jwt.verify
+    desc: '认证中间件从请求头提取 Token，调用 jwt.verify(token, secret) 进行验证',
+    phase: '阶段二：认证请求',
+    show: ['label5','txt5','line6','label6','txt6','label7','txt7','phaseLabel'],
+    jwtVisible: true,
+  },
+  { // 8: req.user = decoded
+    desc: '验证通过！解码后的用户信息挂载到 req.user，交给路由处理函数',
+    phase: '阶段二：认证请求',
+    show: ['label5','txt5','line6','label6','txt6','label7','txt7','label8','txt8','phaseLabel'],
+    jwtVisible: true,
+  },
+  { // 9: return data
+    desc: '路由处理函数执行业务逻辑后，服务器将数据返回给客户端',
+    phase: '阶段二：认证请求',
+    show: ['label5','txt5','line6','label6','txt6','label7','txt7','label8','txt8','line9','label9','txt9','phaseLabel'],
+    jwtVisible: true,
+  },
+  { // 10: 401 error
+    desc: '错误路径：如果 Token 无效或已过期，jwt.verify() 抛出异常，认证中间件返回 401 Unauthorized',
+    phase: '阶段二：认证请求（错误路径）',
+    show: ['label5','txt5','line6','label6','txt6','label7','txt7','line10err','txt10','phaseLabel'],
+    jwtVisible: true,
+   errorPath: true,
+  },
+];
+
+let currentStep = 0;
+let autoTimer = null;
+const totalSteps = steps.length - 1;
+
+function getEl(id) { return document.getElementById(id); }
+
+function hideAll() {
+  const allIds = ['line1','label1','txt1','label2','txt2','label3','txt3','line4','label4','txt4','label5','txt5','line6','label6','txt6','label7','txt7','label8','txt8','line9','label9','txt9','line10err','txt10','phaseLabel','jwtLink','jwtLinkTxt'];
+  allIds.forEach(id => {
+    const el = getEl(id); if (el) el.setAttribute('opacity', '0');
+  });
+}
+
+function resetHighlight() {
+  document.querySelectorAll('#flowSvg line').forEach(l => {
+    const isErr = l.id && l.id.includes('10err');
+    l.setAttribute('stroke', isErr ? 'var(--error-color)' : 'var(--arrow-color)');
+    l.setAttribute('stroke-width', '2');
+  });
+}
+
+function showStep(n) {
+  hideAll();
+  resetHighlight();
+  const s = steps[n];
+  s.show.forEach(id => {
+    const el = getEl(id); if (el) el.setAttribute('opacity', '1');
+  });
+  // Phase label update
+  const pl = getEl('phaseLabel');
+  if (pl && s.phase) { pl.textContent = s.phase; pl.setAttribute('opacity','1'); }
+
+  // Highlight active elements for current step
+  if (n >= 1 && n <= 9) {
+    // highlight the "active" line
+    const activeLines = {1:'line1',2:'line1',3:'line1',4:'line4',5:'line4',6:'line6',7:'line6',8:'line6',9:'line9'};
+    const lineId = activeLines[n];
+    if (lineId) {
+      const l = getEl(lineId);
+      if (l) {
+        if (n === 10) { l.setAttribute('stroke','var(--error-color)'); }
+        else { l.setAttribute('stroke','var(--highlight)'); l.setAttribute('stroke-width','3'); }
+      }
+    }
+  }
+  if (n === 10) {
+    const l10 = getEl('line10err');
+    if (l10) { l10.setAttribute('stroke','var(--error-color)'); l10.setAttribute('stroke-width','3'); }
+  }
+
+  // JWT visibility
+  const jwtSec = getEl('jwtSection');
+  const jwtLink = getEl('jwtLink');
+  const jwtLinkTxt = getEl('jwtLinkTxt');
+  if (s.jwtVisible) {
+    jwtSec.classList.add('visible');
+    if (jwtLink) jwtLink.setAttribute('opacity','1');
+    if (jwtLinkTxt) jwtLinkTxt.setAttribute('opacity','1');
+  } else {
+    jwtSec.classList.remove('visible');
+    if (jwtLink) jwtLink.setAttribute('opacity','0');
+    if (jwtLinkTxt) jwtLinkTxt.setAttribute('opacity','0');
+  }
+
+  getEl('stepDesc').textContent = s.desc;
+  getEl('stepIndicator').textContent = `步骤 ${n}/${totalSteps}`;
+  getEl('btnPrev').disabled = (n === 0);
+  getEl('btnNext').disabled = (n === totalSteps);
+}
+
+function nextStep() {
+  if (currentStep < totalSteps) { currentStep++; showStep(currentStep); }
+}
+function prevStep() {
+  if (currentStep > 0) { currentStep--; showStep(currentStep); }
+}
+function resetAll() {
+  stopAuto();
+  currentStep = 0;
+  showStep(0);
+}
+function stopAuto() {
+  if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+  getEl('btnAuto').textContent = '▶ 自动播放';
+}
+function toggleAuto() {
+  if (autoTimer) { stopAuto(); return; }
+  if (currentStep === totalSteps) { currentStep = -1; }
+  getEl('btnAuto').textContent = '⏸ 停止';
+  autoTimer = setInterval(() => {
+    if (currentStep >= totalSteps) { stopAuto(); return; }
+    nextStep();
+  }, 2000);
+}
+
+// Theme toggle
+function applyTheme() {
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const stored = localStorage.getItem('jwt-visual-theme');
+  const isDark = stored ? stored === 'dark' : prefersDark;
+  document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
+}
+getEl('themeToggle').addEventListener('click', () => {
+  const cur = document.documentElement.getAttribute('data-theme');
+  const next = cur === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  localStorage.setItem('jwt-visual-theme', next);
+});
+
+getEl('btnPrev').addEventListener('click', prevStep);
+getEl('btnNext').addEventListener('click', nextStep);
+getEl('btnAuto').addEventListener('click', toggleAuto);
+getEl('btnReset').addEventListener('click', resetAll);
+
+// Keyboard navigation
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight') nextStep();
+  if (e.key === 'ArrowLeft') prevStep();
+  if (e.key === 'r' || e.key === 'R') resetAll();
+});
+
+// Init
+applyTheme();
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
+showStep(0);
+</script>
+</body>
+</html>

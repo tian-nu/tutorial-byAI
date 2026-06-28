@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CDN 工作原理</title>
+<style>
+:root{--bg:#fff;--fg:#1a1a2e;--border:#d0d0d0;--card:#f8f9fa;--btn:#e9ecef;--btn-fg:#333;--shadow:0 2px 8px rgba(0,0,0,.1);--info-bg:#fff3cd;--info-bd:#ffc107;--user-clr:#e3f2fd;--gslb-clr:#e8f5e9;--edge-clr:#fce4ec;--origin-clr:#fff8e1;--hit:#4caf50;--miss:#f44336;--arrow-h:#4caf50;--arrow-m:#f44336}
+[data-theme="dark"]{--bg:#1a1a2e;--fg:#e0e0e0;--border:#444;--card:#2d2d44;--btn:#3a3a5a;--btn-fg:#ccc;--shadow:0 2px 8px rgba(0,0,0,.4);--info-bg:#3a2a10;--info-bd:#8a7a3a;--user-clr:#1a2a4a;--gslb-clr:#1a3a2a;--edge-clr:#3a1a2a;--origin-clr:#3a3a1a;--hit:#66bb6a;--miss:#ef5350;--arrow-h:#66bb6a;--arrow-m:#ef5350}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--fg);min-height:100vh;transition:background .3s,color .3s}
+.header{max-width:960px;margin:0 auto;padding:20px 20px 0;display:flex;justify-content:space-between;align-items:center}
+.header h1{font-size:1.3em;font-weight:600}
+.theme-btn{background:var(--btn);color:var(--btn-fg);border:1px solid var(--border);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:.9em}
+.desc{max-width:960px;margin:0 auto;padding:6px 20px 10px;font-size:.85em;opacity:.75}
+.controls{max-width:960px;margin:0 auto 10px;padding:0 20px;display:flex;gap:8px;flex-wrap:wrap}
+.controls button{background:var(--btn);color:var(--btn-fg);border:1px solid var(--border);padding:8px 14px;border-radius:6px;cursor:pointer;font-size:.85em;transition:background .2s,transform .15s}
+.controls button:hover{transform:translateY(-1px)}
+.controls button.active{background:#1976d2;color:#fff;border-color:#1976d2}
+.step-info{max-width:960px;margin:0 auto 16px;padding:12px 20px;background:var(--info-bg);border-radius:8px;border-left:4px solid var(--info-bd);font-size:.88em;line-height:1.6;min-height:48px}
+.canvas-wrap{max-width:960px;margin:0 auto;padding:0 20px 20px}
+canvas{width:100%;height:auto;border:1px solid var(--border);border-radius:10px;background:var(--card);box-shadow:var(--shadow)}
+.footer{max-width:960px;margin:0 auto;padding:10px 20px 20px;font-size:.78em;opacity:.6;text-align:center}
+.footer a{color:var(--fg)}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>CDN 工作原理</h1>
+  <button class="theme-btn" onclick="toggleTheme()" title="切换暗色/亮色模式">🌓 切换主题</button>
+</div>
+<div class="desc">
+  本可视化对应 <a href="34-CDN.md" style="color:inherit">网络架构与传输全解 步骤 34（CDN）</a>。展示用户请求如何通过 GSLB 调度到最近边缘节点，以及缓存命中/未命中两条路径。
+</div>
+
+<div class="controls">
+  <button id="btn0" class="active" onclick="goTo(0)">① 用户发起请求</button>
+  <button id="btn1" onclick="goTo(1)">② DNS 被 GSLB 接管</button>
+  <button id="btn2" onclick="goTo(2)">③ GSLB 返回最近节点</button>
+  <button id="btn3" onclick="goTo(3)">④ 缓存命中（绿色路径）</button>
+  <button id="btn4" onclick="goTo(4)">⑤ 缓存未命中→回源（红色路径）</button>
+  <button id="btn-reset" onclick="goTo(0)">⟳ 重置</button>
+</div>
+
+<div class="step-info" id="step-info">
+  <strong>步骤 ①：用户发起请求</strong> — 北京用户和上海用户同时访问 <code>cdn.example.com</code>，浏览器发起 DNS 解析。
+</div>
+
+<div class="canvas-wrap">
+  <canvas id="cv" width="920" height="500"></canvas>
+</div>
+
+<div class="footer">
+  数据来源：基于 network_architecture_detailed_outline.md v2 | 
+  本可视化对应 <a href="34-CDN.md">网络架构与传输全解</a> 步骤 34
+</div>
+
+<script>
+let step=0;
+const steps=[
+  '<strong>步骤 ①：用户发起请求</strong> — 北京用户和上海用户同时访问 <code>cdn.example.com</code>，浏览器发起 DNS 解析。',
+  '<strong>步骤 ②：DNS 被 GSLB 接管</strong> — DNS 解析请求到达 GSLB（全局负载均衡），GSLB 根据用户源 IP 判断地理位置。',
+  '<strong>步骤 ③：GSLB 返回最近节点 IP</strong> — 北京用户被分配到 北京边缘节点（1.1.1.1），上海用户被分配到 上海边缘节点（2.2.2.2）。',
+  '<strong>步骤 ④：缓存命中 🟢</strong> — 用户请求的内容在边缘节点已有缓存，直接返回（绿色路径）。延迟低，用户体验好！',
+  '<strong>步骤 ⑤：缓存未命中 🔴 → 回源</strong> — 边缘节点没有缓存该内容，向源站发起回源请求。源站返回内容后，边缘节点缓存一份再返回给用户。'
+];
+
+function toggleTheme(){
+  const h=document.documentElement;
+  h.setAttribute('data-theme',h.getAttribute('data-theme')==='dark'?'light':'dark');
+  draw();
+}
+
+function goTo(n){step=n;document.querySelectorAll('.controls button[id^="btn"]').forEach((b,i)=>{b.classList.toggle('active',i===n)});document.getElementById('step-info').innerHTML=steps[n];draw()}
+
+function draw(){
+  const c=document.getElementById('cv'),ctx=c.getContext('2d'),W=c.width,H=c.height;
+  const d=document.documentElement.getAttribute('data-theme')==='dark';
+  const cl=d?{
+    bg:'#1a1a2e',fg:'#e0e0e0',fgD:'#999',line:'#444',
+    user:'#1a2a4a',userB:'#3a6a8a',dns:'#1a3a2a',dnsB:'#3a8a4a',
+    gslb:'#2a2a1a',gslbB:'#8a8a3a',edge:'#3a1a2a',edgeB:'#8a4a5a',
+    origin:'#2a1a3a',originB:'#6a3a8a',
+    hit:'#66bb6a',miss:'#ef5350',h2:'#66bb6a44',m2:'#ef535044'
+  }:{
+    bg:'#fff',fg:'#1a1a2e',fgD:'#888',line:'#ccc',
+    user:'#e3f2fd',userB:'#4a90d9',dns:'#e8f5e9',dnsB:'#28a745',
+    gslb:'#fff8e1',gslbB:'#f5a623',edge:'#fce4ec',edgeB:'#e91e63',
+    origin:'#f3e5f5',originB:'#9c27b0',
+    hit:'#4caf50',miss:'#f44336',h2:'#4caf5033',m2:'#f4433633'
+  };
+
+  ctx.clearRect(0,0,W,H);ctx.fillStyle=cl.bg;ctx.fillRect(0,0,W,H);
+
+  // Nodes
+  function box(x,y,w,h,label,sub,fill,border){
+    ctx.fillStyle=fill;ctx.strokeStyle=border;ctx.lineWidth=2;
+    roundRect(ctx,x,y,w,h,10);ctx.fill();ctx.stroke();
+    ctx.fillStyle=cl.fg;ctx.font='bold 12px sans-serif';ctx.fillText(label,x+8,y+18);
+    ctx.fillStyle=cl.fgD;ctx.font='10px sans-serif';ctx.fillText(sub,x+8,y+34);
+  }
+
+  // User nodes (top)
+  box(80,30,160,50,'北京用户','IP: 1.2.3.4',cl.user,cl.userB);
+  box(680,30,160,50,'上海用户','IP: 5.6.7.8',cl.user,cl.userB);
+
+  // DNS + GSLB (middle-left)
+  box(240,140,180,50,'DNS / GSLB','全局负载均衡',cl.gslb,cl.gslbB);
+
+  // Edge nodes (middle-right)
+  box(520,130,180,50,'北京边缘节点','1.1.1.1',cl.edge,cl.edgeB);
+  box(520,210,180,50,'上海边缘节点','2.2.2.2',cl.edge,cl.edgeB);
+
+  // Origin (bottom)
+  box(280,370,220,54,'源站（Origin）','origin.example.com',cl.origin,cl.originB);
+
+  // Region labels
+  ctx.fillStyle=cl.fgD;ctx.font='10px sans-serif';
+  ctx.fillText('华北地区',60,20);ctx.fillText('华东地区',680,20);
+
+  function arrow(x1,y1,x2,y2,color,lbl,ox,oy){
+    ctx.strokeStyle=color;ctx.fillStyle=color;ctx.lineWidth=2.5;
+    ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
+    const a=Math.atan2(y2-y1,x2-x1);
+    ctx.beginPath();ctx.moveTo(x2,y2);
+    ctx.lineTo(x2-7*Math.cos(a-Math.PI/6),y2-7*Math.sin(a-Math.PI/6));
+    ctx.lineTo(x2-7*Math.cos(a+Math.PI/6),y2-7*Math.sin(a+Math.PI/6));
+    ctx.closePath();ctx.fill();
+    if(lbl){ctx.font='bold 10px sans-serif';ctx.fillText(lbl,ox||(x1+x2)/2-30,oy||(y1+y2)/2-4)}
+  }
+
+  // Step 0: Users → DNS
+  if(step>=0){
+    arrow(160,80,300,140,cl.line,'DNS 解析',170,105);
+    arrow(760,80,420,140,cl.line,'DNS 解析',500,105);
+  }
+
+  // Step 1: GSLB analysis
+  if(step>=1){
+    ctx.fillStyle=cl.fgD;ctx.font='11px sans-serif';
+    ctx.fillText('GSLB 判断：北京 → 北京节点',260,200);
+    ctx.fillText('GSLB 判断：上海 → 上海节点',260,218);
+    // Highlight edges
+    ctx.strokeStyle=cl.line;ctx.lineWidth=1.5;ctx.setLineDash([4,3]);
+    ctx.beginPath();ctx.moveTo(240,165);ctx.lineTo(520,155);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(240,165);ctx.lineTo(520,235);ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // Step 2: GSLB returns edge IPs
+  if(step>=2){
+    arrow(340,140,160,80,cl.line,'← 返回 1.1.1.1',180,105);
+    arrow(340,140,760,80,cl.line,'← 返回 2.2.2.2',500,105);
+  }
+
+  // Step 3: Cache hit (green)
+  if(step>=3){
+    arrow(160,80,520,155,cl.hit,'缓存命中 ✅',280,100);
+    arrow(640,155,160,80,cl.hit,'直接返回',400,175);
+    arrow(760,80,520,235,cl.hit,'缓存命中 ✅',580,140);
+    arrow(640,235,760,80,cl.hit,'直接返回',680,175);
+    // Highlight edges green
+    ctx.strokeStyle=cl.hit;ctx.lineWidth=2.5;ctx.globalAlpha=0.3;
+    roundRect(ctx,515,125,190,55,10);ctx.fillStyle=cl.h2;ctx.fill();ctx.stroke();
+    roundRect(ctx,515,205,190,55,10);ctx.fill();ctx.stroke();
+    ctx.globalAlpha=1;
+    ctx.fillStyle=cl.hit;ctx.font='bold 11px sans-serif';
+    ctx.fillText('缓存命中！',540,155);
+    ctx.fillText('缓存命中！',540,235);
+  }
+
+  // Step 4: Cache miss (red) + back to origin
+  if(step>=4){
+    // Override green with red for miss scenario
+    ctx.strokeStyle=cl.miss;ctx.lineWidth=3;ctx.globalAlpha=0.3;
+    roundRect(ctx,515,125,190,55,10);ctx.fillStyle=cl.m2;ctx.fill();ctx.stroke();
+    ctx.globalAlpha=1;
+    arrow(160,80,520,155,cl.miss,'未命中 ❌',280,95);
+    // Edge → Origin (回源)
+    arrow(580,180,390,370,cl.miss,'回源',490,270);
+    // Origin → Edge
+    arrow(350,400,560,235,cl.miss,'返回内容',420,330);
+    // Edge → User
+    arrow(610,235,160,80,cl.miss,'返回给用户',400,175);
+    ctx.fillStyle=cl.miss;ctx.font='bold 12px sans-serif';
+    ctx.fillText('缓存未命中！回源中...',530,155);
+    // Origin info
+    ctx.fillStyle=cl.fgD;ctx.font='10px sans-serif';
+    ctx.fillText('边缘节点缓存一份，下次直接命中',300,450);
+  }
+
+  // Legend
+  const ly=H-32;
+  [{c:cl.userB,t:'用户'},{c:cl.gslbB,t:'GSLB'},{c:cl.edgeB,t:'边缘节点'},{c:cl.originB,t:'源站'},{c:cl.hit,t:'缓存命中',s:2.5},{c:cl.miss,t:'回源',s:2.5}].forEach((it,i)=>{
+    const lx=20+i*130;
+    ctx.fillStyle=it.c;ctx.fillRect(lx,ly,14,14);
+    ctx.strokeStyle=cl.fgD;ctx.lineWidth=1;ctx.strokeRect(lx,ly,14,14);
+    ctx.fillStyle=cl.fgD;ctx.font='10px sans-serif';ctx.fillText(it.t,lx+20,ly+12)
+  });
+}
+
+function roundRect(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath()}
+draw();
+</script>
+</body>
+</html>

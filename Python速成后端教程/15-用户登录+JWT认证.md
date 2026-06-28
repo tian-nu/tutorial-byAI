@@ -1,11 +1,11 @@
-﻿# 15-用户登录 + JWT 认证
+# 15-用户登录 + JWT 认证
 
 - 对应文档版本：首版教程
 - 适用环境：Python 3.10+, FastAPI 0.100+, SQLAlchemy 2.0+, python-jose 3.3+, Windows/macOS/Linux
 - 读者角色：后端初学者
 - 预计耗时：新手 50 分钟 / 熟手 25 分钟
-- 前置教程：[14-用户注册](./14-用户注册/)（User 模型含 `password_hash`、`auth.py` 含 `pwd_context`）
-- 可视化：有，[python_15_jwt_visual.html](python_15_jwt_visual.html)
+- 前置教程：[14-用户注册](../14-用户注册/)（User 模型含 `password_hash`、`auth.py` 含 `pwd_context`）
+- 可视化：有，python_15_jwt_visual.html
 
 ---
 
@@ -64,7 +64,7 @@ curl http://127.0.0.1:8000/my-posts?username=alice&password=123456
 
 **我们需要一种更好的方式：用户登录一次，服务端给他发一个"通行证"。之后他只要出示通行证，服务端就能认出他是谁，不需要再传密码。** 这个通行证，就是 **JWT（JSON Web Token）**。
 
-> 📊 可视化演示见 [python_15_jwt_visual.html](python_15_jwt_visual.html)（步骤 1：从"每次都传密码"到"一次登录，多次使用 token"）
+> 📊 可视化演示见 python_15_jwt_visual.html（步骤 1：从"每次都传密码"到"一次登录，多次使用 token"）
 
 ---
 
@@ -1002,13 +1002,13 @@ curl -X POST "http://127.0.0.1:8000/users/login?username=nobody&password=whateve
 
 你已经实现了用户登录和 JWT 签发——但现在 token 还没真正"用起来"。
 
-- **下一章 [16-权限保护](./16-权限保护：没登录不能写/)**：用 token 保护接口——只有登录用户才能创建、修改、删除文章。没登录的人只能看，不能写。
+- **下一章 [16-权限保护](../16-权限保护：没登录不能写/)**：用 token 保护接口——只有登录用户才能创建、修改、删除文章。没登录的人只能看，不能写。
 - **延伸思考**：如果你拿到 token 后，想从 token 中解析出当前用户，需要写一个 `get_current_user` 依赖函数。这个在下一章会详细实现。
 - **进阶话题**：JWT 还有"刷新 token"（Refresh Token）机制，可以让用户在不下线的情况下持续使用。感兴趣的话，可以搜索 "JWT refresh token" 了解。
 
 ---
 
-> 📊 可视化演示见 [python_15_jwt_visual.html](python_15_jwt_visual.html)
+> 📊 可视化演示见 python_15_jwt_visual.html
 >
 > 本可视化完整展示了 JWT 认证流程：从用户登录、密码验证、token 签发，到后续请求中 token 验证的全过程。
 

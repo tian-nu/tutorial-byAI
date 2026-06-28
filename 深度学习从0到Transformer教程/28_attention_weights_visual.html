@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Attention 权重热力图 — 模型学会看哪里</title>
+<style>
+:root{
+  --bg:#f5f5f5;--card:#fff;--text:#333;--sub:#666;
+  --border:#ddd;--blue:#3498db;--blue-light:#ebf5fb;
+  --green:#27ae60;--green-light:#e8f6ef;
+  --red:#e74c3c;--red-light:#fdedec;
+  --orange:#f39c12;--purple:#8e44ad;
+  --shadow:0 2px 8px rgba(0,0,0,.06);
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#1a1a2e;--card:#16213e;--text:#e0e0e0;--sub:#aaa;
+    --border:#333;--blue:#5dade2;--blue-light:rgba(93,173,226,.12);
+    --green:#2ecc71;--green-light:rgba(46,204,113,.12);
+    --red:#e74c3c;--red-light:rgba(231,76,60,.12);
+    --orange:#f1c40f;--purple:#bb8fce;
+    --shadow:0 2px 8px rgba(0,0,0,.3);
+  }
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column;align-items:center;padding:20px 16px;min-height:100vh}
+h1{font-size:1.35em;text-align:center;margin-bottom:4px}
+.desc{font-size:.82em;color:var(--sub);margin-bottom:14px;text-align:center;max-width:880px;line-height:1.6}
+.controls{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-bottom:14px;align-items:center}
+.controls button{padding:6px 14px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);cursor:pointer;font-size:.82em;transition:.15s}
+.controls button:hover{opacity:.85}
+.controls button.primary{background:var(--blue);color:#fff;border-color:var(--blue)}
+.mode-toggle{position:fixed;top:10px;right:14px;font-size:.72em;color:var(--sub);cursor:pointer;background:var(--card);border:1px solid var(--border);border-radius:6px;padding:4px 10px}
+.viz{width:100%;max-width:920px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;box-shadow:var(--shadow);margin-bottom:10px}
+.viz svg{display:block;margin:0 auto;width:100%;height:auto;max-width:880px}
+.legend{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;font-size:.74em;color:var(--sub);margin-top:8px;align-items:center}
+.legend .bar{display:inline-block;width:120px;height:10px;border-radius:2px;background:linear-gradient(to right,#fff,#3498db,#e74c3c);border:1px solid var(--border)}
+.formula{font-size:.78em;color:var(--sub);text-align:center;margin-top:8px;font-family:monospace;line-height:1.6}
+.formula b{color:var(--text)}
+.formula code{font-size:.92em;background:var(--blue-light);padding:1px 5px;border-radius:3px;color:var(--text)}
+.info-panel{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px 16px;width:100%;max-width:880px;min-height:70px}
+.info-panel .step-title{font-weight:600;font-size:.85em;margin-bottom:4px;color:var(--blue)}
+.info-panel .step-desc{font-size:.78em;color:var(--sub);line-height:1.7}
+.info-panel .step-desc code{font-size:.9em;background:var(--blue-light);padding:1px 5px;border-radius:3px;color:var(--text)}
+.info-panel .step-desc b{color:var(--text)}
+footer{margin-top:14px;font-size:.7em;color:var(--sub);text-align:center;line-height:1.6}
+footer a{color:var(--sub)}
+text{font-family:system-ui,sans-serif}
+</style>
+</head>
+<body>
+<div class="mode-toggle" id="modeToggle" onclick="toggleTheme()">🌙 暗色</div>
+<h1>Attention 权重热力图 — 模型学会看哪里</h1>
+<p class="desc">
+  Encoder 编码源序列「我 / 爱 / 自然语言」得到 3 个隐藏状态 h₁,h₂,h₃；Decoder 在每个时间步生成目标词时，
+  用当前状态 sₜ 与所有 hᵢ 计算分数 <code>eₜᵢ = score(sₜ, hᵢ)</code>，softmax 后得到 attention 权重 αₜᵢ。
+  点击下方不同 Decoder 步骤，观察权重分布如何随生成内容变化。
+</p>
+
+<div class="controls">
+  <span style="font-size:.8em;color:var(--sub)">选择 Decoder 步骤：</span>
+  <button class="primary" onclick="selectStep(0)">t=1 (生成 "I")</button>
+  <button class="primary" onclick="selectStep(1)">t=2 (生成 "love")</button>
+  <button class="primary" onclick="selectStep(2)">t=3 (生成 "NLP")</button>
+  <button onclick="toggleAuto()">⏯ 自动轮播</button>
+</div>
+
+<div class="viz">
+  <svg id="attSvg" viewBox="0 0 900 380" xmlns="http://www.w3.org/2000/svg"></svg>
+  <div class="legend">
+    <span>权重低</span><span class="bar"></span><span>权重高</span>
+    <span style="margin-left:10px">|　αₜᵢ 数值标注在每条连线上</span>
+  </div>
+  <div class="formula">
+    <code>eₜᵢ = score(sₜ, hᵢ)</code>　→　<code>αₜᵢ = softmax(eₜᵢ) = exp(eₜᵢ) / Σⱼ exp(eₜⱼ)</code>　→　<code>cₜ = Σᵢ αₜᵢ · hᵢ</code>
+  </div>
+</div>
+
+<div class="info-panel" id="info">
+  <div class="step-title">点击上方按钮选择 Decoder 步骤</div>
+  <div class="step-desc">每个 Decoder 时间步对应不同的 attention 权重分布。本示例使用预设分数，模拟翻译「我爱自然语言 → I love NLP」时模型的对齐行为。</div>
+</div>
+
+<footer>
+  数据来源：基于 28-Attention机制让模型学会看哪里.md<br>
+  本可视化对应 <a href="28-Attention机制让模型学会看哪里.md">28-Attention机制让模型学会看哪里.md</a>
+</footer>
+
+<script>
+/* ---- 主题切换 ---- */
+function toggleTheme(){
+  const isDark=document.body.classList.toggle('force-dark');
+  const r=document.documentElement.style;
+  if(isDark){
+    r.setProperty('--bg','#1a1a2e');r.setProperty('--card','#16213e');r.setProperty('--text','#e0e0e0');r.setProperty('--sub','#aaa');
+    r.setProperty('--border','#333');r.setProperty('--blue','#5dade2');r.setProperty('--blue-light','rgba(93,173,226,.12)');
+    r.setProperty('--green','#2ecc71');r.setProperty('--green-light','rgba(46,204,113,.12)');
+    r.setProperty('--red','#e74c3c');r.setProperty('--red-light','rgba(231,76,60,.12)');
+    r.setProperty('--orange','#f1c40f');r.setProperty('--purple','#bb8fce');
+    r.setProperty('--shadow','0 2px 8px rgba(0,0,0,.3)');
+    document.getElementById('modeToggle').textContent='☀️ 亮色';
+  }else{
+    r.setProperty('--bg','#f5f5f5');r.setProperty('--card','#fff');r.setProperty('--text','#333');r.setProperty('--sub','#666');
+    r.setProperty('--border','#ddd');r.setProperty('--blue','#3498db');r.setProperty('--blue-light','#ebf5fb');
+    r.setProperty('--green','#27ae60');r.setProperty('--green-light','#e8f6ef');
+    r.setProperty('--red','#e74c3c');r.setProperty('--red-light','#fdedec');
+    r.setProperty('--orange','#f39c12');r.setProperty('--purple','#8e44ad');
+    r.setProperty('--shadow','0 2px 8px rgba(0,0,0,.06)');
+    document.getElementById('modeToggle').textContent='🌙 暗色';
+  }
+  draw();
+}
+
+const svg=document.getElementById('attSvg');
+const SVGNS='http://www.w3.org/2000/svg';
+function el(tag,attrs){const e=document.createElementNS(SVGNS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);return e;}
+function cssVar(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim();}
+
+/* ---- 预设数据 ---- */
+// Encoder: 3 个源词，3 个隐藏状态 h_i
+const ENC=[
+  {word:'我',     h:'h₁'},
+  {word:'爱',     h:'h₂'},
+  {word:'自然语言', h:'h₃'}
+];
+// Decoder: 3 步，每步对 3 个 h 的原始分数 e_ti（未归一化）
+const DEC=[
+  {t:1, word:'I',    e:[2.5, 0.3, -0.5]},   // 主要关注「我」
+  {t:2, word:'love', e:[0.4, 2.8, 0.2]},    // 主要关注「爱」
+  {t:3, word:'NLP',  e:[0.1, 0.3, 3.0]}     // 主要关注「自然语言」
+];
+// 计算 softmax 得到 α
+function softmax(arr){
+  const m=Math.max(...arr);
+  const ex=arr.map(v=>Math.exp(v-m));
+  const s=ex.reduce((a,b)=>a+b,0);
+  return ex.map(v=>v/s);
+}
+const ALPHAS=DEC.map(d=>softmax(d.e));
+
+let curIdx=0;
+
+function colorForAlpha(a){
+  // a 在 0..1，映射到 蓝(#3498db) → 红(#e74c3c)
+  // 用 HSL 插值更直观：低权重浅蓝/灰，高权重红
+  if(a<0.33){
+    // 浅蓝 → 蓝
+    const t=a/0.33;
+    return interp([235,245,250],[52,152,219],t); // #ebf5fa -> #3498db
+  }else if(a<0.66){
+    const t=(a-0.33)/0.33;
+    return interp([52,152,219],[241,196,15],t); // 蓝 -> 橙
+  }else{
+    const t=(a-0.66)/0.34;
+    return interp([241,196,15],[231,76,60],t); // 橙 -> 红
+  }
+}
+function interp(c1,c2,t){
+  return 'rgb('+Math.round(c1[0]+(c2[0]-c1[0])*t)+','+
+                Math.round(c1[1]+(c2[1]-c1[1])*t)+','+
+                Math.round(c1[2]+(c2[2]-c1[2])*t)+')';
+}
+
+function draw(){
+  svg.innerHTML='';
+  const blue=cssVar('--blue'),red=cssVar('--red'),green=cssVar('--green'),sub=cssVar('--sub'),text=cssVar('--text'),border=cssVar('--border');
+  const dec=DEC[curIdx], alphas=ALPHAS[curIdx];
+
+  // 左侧：Encoder 列
+  const encX=140, encYs=[80,170,260];
+  ENC.forEach((e,i)=>{
+    // 词卡片
+    const r=el('rect',{x:encX-50,y:encYs[i]-26,width:100,height:52,rx:10,fill:'var(--blue-light)',stroke:blue,'stroke-width':1.8});
+    svg.appendChild(r);
+    const w=el('text',{x:encX,y:encYs[i]-6,'font-size':13,fill:text,'text-anchor':'middle','font-weight':600});
+    w.textContent=e.word;
+    svg.appendChild(w);
+    const hh=el('text',{x:encX,y:encYs[i]+12,'font-size':11,fill:sub,'text-anchor':'middle'});
+    hh.textContent=e.h;
+    svg.appendChild(hh);
+  });
+
+  // 右侧：当前 Decoder 节点（高亮）+ 其它步淡化
+  const decX=760, decYs=[80,170,260];
+  DEC.forEach((d,i)=>{
+    const active=(i===curIdx);
+    const r=el('rect',{x:decX-55,y:decYs[i]-26,width:110,height:52,rx:10,
+      fill:active?'var(--green-light)':'var(--card)',
+      stroke:active?green:border,'stroke-width':active?2.5:1.3,
+      opacity:active?1:.45});
+    svg.appendChild(r);
+    const w=el('text',{x:decX,y:decYs[i]-6,'font-size':13,fill:text,'text-anchor':'middle','font-weight':600,opacity:active?1:.6});
+    w.textContent='→ '+d.word;
+    svg.appendChild(w);
+    const ss=el('text',{x:decX,y:decYs[i]+12,'font-size':11,fill:active?green:sub,'text-anchor':'middle','font-weight':active?600:400});
+    ss.textContent='s'+sub_(d.t);
+    svg.appendChild(ss);
+    // 点击热区
+    const hit=el('rect',{x:decX-55,y:decYs[i]-26,width:110,height:52,fill:'transparent',cursor:'pointer'});
+    hit.setAttribute('onclick','selectStep('+i+')');
+    svg.appendChild(hit);
+  });
+
+  // 连线（h_i -> s_t 当前），按 α 上色与粗细
+  ENC.forEach((e,i)=>{
+    const a=alphas[i];
+    const color=colorForAlpha(a);
+    const width=1.5+a*8;
+    const ln=el('line',{x1:encX+50,y1:encYs[i],x2:decX-55,y2:decYs[curIdx],
+      stroke:color,'stroke-width':width,opacity:.85,'stroke-linecap':'round'});
+    svg.appendChild(ln);
+  });
+
+  // α 数值标注（连线中点，加白底）
+  ENC.forEach((e,i)=>{
+    const a=alphas[i];
+    const mx=(encX+50+decX-55)/2;
+    const my=(encYs[i]+decYs[curIdx])/2;
+    // 白底圆角
+    const bg=el('rect',{x:mx-30,y:my-10,width:60,height:18,rx:5,fill:cssVar('--card'),stroke:colorForAlpha(a),'stroke-width':1.2});
+    svg.appendChild(bg);
+    const t=el('text',{x:mx,y:my+3,'font-size':11,fill:colorForAlpha(a),'text-anchor':'middle','font-weight':700});
+    t.textContent='α='+a.toFixed(3);
+    svg.appendChild(t);
+  });
+
+  // 标题
+  const title=el('text',{x:450,y:30,'font-size':14,fill:text,'text-anchor':'middle','font-weight':600});
+  title.textContent='Decoder t='+dec.t+'  生成「'+dec.word+'」时的 Attention 权重';
+  svg.appendChild(title);
+
+  // 列标题
+  const eLbl=el('text',{x:encX,y:encYs[0]-46,'font-size':12,fill:blue,'text-anchor':'middle','font-weight':600});
+  eLbl.textContent='Encoder 隐藏状态';
+  svg.appendChild(eLbl);
+  const dLbl=el('text',{x:decX,y:decYs[0]-46,'font-size':12,fill:green,'text-anchor':'middle','font-weight':600});
+  dLbl.textContent='Decoder 状态';
+  svg.appendChild(dLbl);
+
+  // 当前 context vector c_t 显示
+  let cStr='c'+sub_(dec.t)+' = ';
+  ENC.forEach((e,i)=>{
+    cStr+=(i===0?'':' + ')+alphas[i].toFixed(2)+'·'+e.h;
+  });
+  const cLbl=el('text',{x:450,y:340,'font-size':12,fill:text,'text-anchor':'middle','font-family':'monospace'});
+  cLbl.textContent=cStr;
+  svg.appendChild(cLbl);
+  const cSub=el('text',{x:450,y:360,'font-size':10,fill:sub,'text-anchor':'middle'});
+  cSub.textContent='↑ context vector：当前步对源序列的加权汇总，传给 Decoder 生成下一词';
+  svg.appendChild(cSub);
+}
+
+function sub_(t){const m={'0':'₀','1':'₁','2':'₂','3':'₃','4':'₄'};return String(t).split('').map(c=>m[c]||c).join('');}
+
+/* ---- 控制 ---- */
+function selectStep(i){
+  curIdx=i;
+  draw();
+  updateInfo();
+}
+function updateInfo(){
+  const dec=DEC[curIdx], alphas=ALPHAS[curIdx];
+  const inf=document.getElementById('info');
+  // 找最大权重
+  let maxI=0; for(let i=1;i<alphas.length;i++) if(alphas[i]>alphas[maxI]) maxI=i;
+  const html='<div class="step-title">Decoder t='+dec.t+' → 生成「'+dec.word+'」</div>'+
+    '<div class="step-desc">原始分数 e=['+dec.e.join(', ')+']，softmax 后 α=['+
+    alphas.map(a=>a.toFixed(3)).join(', ')+']。<b>模型主要关注源词「'+ENC[maxI].word+'」</b>（α='+alphas[maxI].toFixed(3)+'），'+
+    '这与翻译对齐一致：英文词「'+dec.word+'」对应中文「'+ENC[maxI].word+'」。'+
+    'context vector c'+sub_(dec.t)+' = Σ α·h 作为额外输入喂给 Decoder。</div>';
+  inf.innerHTML=html;
+}
+let autoTimer=null;
+function toggleAuto(){
+  const btn=event.target;
+  if(autoTimer){clearInterval(autoTimer);autoTimer=null;btn.textContent='⏯ 自动轮播';return;}
+  btn.textContent='⏸ 暂停';
+  autoTimer=setInterval(()=>{
+    curIdx=(curIdx+1)%DEC.length;
+    draw();updateInfo();
+  },1800);
+}
+
+draw();
+updateInfo();
+</script>
+</body>
+</html>

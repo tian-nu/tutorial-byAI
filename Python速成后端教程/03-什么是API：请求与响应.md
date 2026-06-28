@@ -1,11 +1,11 @@
-﻿# 03-什么是 API：请求与响应
+# 03-什么是 API：请求与响应
 
 - 对应文档版本：首版教程
 - 适用环境：Python 3.10+, FastAPI 0.100+, 浏览器（Chrome/Edge/Firefox）, curl（或 PowerShell）
 - 读者角色：后端初学者
 - 预计耗时：新手 35 分钟 / 熟手 10 分钟
-- 前置教程：[02-你的第一个后端程序](./02-你的第一个后端程序/)
-- 可视化：有，[python_03_http_visual.html](python_03_http_visual.html)
+- 前置教程：[02-你的第一个后端程序](../02-你的第一个后端程序/)
+- 可视化：有，python_03_http_visual.html
 
 ---
 
@@ -81,7 +81,7 @@ curl http://127.0.0.1:8000
 - **Programming（编程）**：两个程序之间不是"随便聊聊"，而是按**固定规则**对话。
 - **Interface（接口）**：一个"接触面"——你不能直接把手伸进厨房，只能通过服务员这个"接触面"来点菜。
 
-> 📊 可视化演示见 [python_03_http_visual.html](python_03_http_visual.html)（步骤 1-2：客户端-服务器模型）
+> 📊 可视化演示见 python_03_http_visual.html（步骤 1-2：客户端-服务器模型）
 
 **所以，你上一章写的 `@app.get("/")` 本质上就是在说："服务员，当有人点'首页'这道菜时，把 `{"message": "Hello World"}` 端上去。"**
 
@@ -546,8 +546,8 @@ curl -v http://127.0.0.1:8000/hello
 
 ---
 
-> 📊 可视化演示见 [python_03_http_visual.html](python_03_http_visual.html)
+> 📊 可视化演示见 python_03_http_visual.html
 >
 > 本可视化对应教程步骤 1-7，演示一次完整的 HTTP 请求-响应链路。
 >
-> [可暂停点 2/9]：阶段一的路准备部分已完成。你已经理解了 HTTP 的基本原理。下次从 [04-返回 JSON](04-返回JSON/) 继续。
+> [可暂停点 2/9]：阶段一的路准备部分已完成。你已经理解了 HTTP 的基本原理。下次从 [04-返回 JSON](../04-返回JSON/) 继续。

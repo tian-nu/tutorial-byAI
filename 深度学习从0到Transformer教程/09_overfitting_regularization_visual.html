@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>过拟合与正则化 — 模型复杂度对比</title>
+<!-- 纯 Canvas + 多项式拟合(最小二乘+岭回归)，无外部依赖，可离线运行 -->
+<style>
+:root {
+  --bg: #f5f5f5; --card: #fff; --text: #333; --sub: #666;
+  --border: #ddd; --blue: #3498db; --blue-light: #ebf5fb;
+  --green: #27ae60; --red: #e74c3c; --orange: #f39c12; --purple: #9b59b6;
+  --shadow: 0 2px 8px rgba(0,0,0,.06);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1a1a2e; --card: #16213e; --text: #e0e0e0; --sub: #aaa;
+    --border: #333; --blue: #5dade2; --blue-light: rgba(93,173,226,.1);
+    --shadow: 0 2px 8px rgba(0,0,0,.3);
+  }
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column;align-items:center;padding:20px 16px;min-height:100vh}
+h1{font-size:1.35em;text-align:center;margin-bottom:4px}
+.desc{font-size:.82em;color:var(--sub);margin-bottom:14px;text-align:center;max-width:780px;line-height:1.6}
+
+.row3{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;width:100%;max-width:900px;margin-bottom:12px}
+.pcard{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px;box-shadow:var(--shadow);flex:1;min-width:260px}
+.pcard h3{font-size:.86em;margin-bottom:2px}
+.pcard .tag{font-size:.7em;padding:1px 7px;border-radius:10px;display:inline-block;margin-bottom:6px}
+.pcard .tag.bad{background:rgba(231,76,60,.15);color:var(--red)}
+.pcard .tag.good{background:rgba(39,174,96,.15);color:var(--green)}
+.pcard .tag.warn{background:rgba(243,156,18,.15);color:var(--orange)}
+.pcard canvas{display:block;width:100%;height:170px}
+.pcard .mse{font-size:.72em;color:var(--sub);margin-top:4px;line-height:1.5}
+.pcard .mse code{background:var(--blue-light);padding:1px 4px;border-radius:3px;color:var(--text)}
+
+.reg-panel{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px 14px;box-shadow:var(--shadow);width:100%;max-width:900px;margin-bottom:10px}
+.reg-panel h2{font-size:.95em;color:var(--blue);margin-bottom:6px}
+.reg-panel .note{font-size:.76em;color:var(--sub);margin-bottom:8px;line-height:1.5}
+.reg-controls{display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:8px;font-size:.8em}
+.reg-controls label{color:var(--sub)}
+.reg-controls input[type=range]{accent-color:var(--blue);width:180px}
+.reg-controls .val{font-family:ui-monospace,monospace}
+.reg-controls .val code{background:var(--blue-light);padding:1px 5px;border-radius:3px}
+.reg-canvas-wrap{display:flex;gap:10px;flex-wrap:wrap}
+.reg-canvas-wrap canvas{flex:1;min-width:300px;height:200px;background:var(--card);border:1px solid var(--border);border-radius:6px}
+
+.legend{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;margin:6px 0 0;font-size:.74em;color:var(--sub)}
+.legend-item{display:flex;align-items:center;gap:5px}
+.legend-line{width:18px;height:3px;border-radius:2px;display:inline-block}
+
+.info-panel{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px 16px;width:100%;max-width:900px;margin-bottom:10px;min-height:48px}
+.info-panel .step-title{font-weight:600;font-size:.85em;margin-bottom:4px;color:var(--blue)}
+.info-panel .step-desc{font-size:.78em;color:var(--sub);line-height:1.6}
+.info-panel code{font-size:.9em;background:var(--blue-light);padding:1px 5px;border-radius:3px}
+
+footer{margin-top:6px;font-size:.7em;color:var(--sub);text-align:center;line-height:1.6}
+footer a{color:var(--sub)}
+</style>
+</head>
+<body>
+<h1>过拟合与正则化 — 模型复杂度对比</h1>
+<p class="desc">
+  上方三栏用同一份数据拟合不同复杂度的多项式：左=欠拟合（1次直线）、中=刚好（3次）、右=过拟合（15次，扭曲穿过每个点）。
+  下方对过拟合模型施加 L2（岭回归）/ L1 正则化，拖动 λ 滑块观察权重被「拉小」，曲线变平滑、测试误差下降。
+</p>
+
+<div class="row3">
+  <div class="pcard">
+    <h3>欠拟合 · 1 次多项式</h3>
+    <span class="tag bad">训练差 / 测试差</span>
+    <canvas id="c1" width="260" height="170"></canvas>
+    <div class="mse">训练 MSE = <code id="mse1tr">—</code>　测试 MSE = <code id="mse1te">—</code></div>
+  </div>
+  <div class="pcard">
+    <h3>刚好 · 3 次多项式</h3>
+    <span class="tag good">训练好 / 测试好</span>
+    <canvas id="c3" width="260" height="170"></canvas>
+    <div class="mse">训练 MSE = <code id="mse3tr">—</code>　测试 MSE = <code id="mse3te">—</code></div>
+  </div>
+  <div class="pcard">
+    <h3>过拟合 · 15 次多项式</h3>
+    <span class="tag warn">训练近0 / 测试爆炸</span>
+    <canvas id="c15" width="260" height="170"></canvas>
+    <div class="mse">训练 MSE = <code id="mse15tr">—</code>　测试 MSE = <code id="mse15te">—</code></div>
+  </div>
+</div>
+
+<div class="reg-panel">
+  <h2>正则化：压制过拟合</h2>
+  <div class="note">在 15 次多项式的损失中加入惩罚项：L2 = <code>λ·Σw²</code>（权重整体变小）/ L1 = <code>λ·Σ|w|</code>（产生稀疏权重，部分 w 归零）。λ 越大，约束越强。</div>
+  <div class="reg-controls">
+    <label>λ (正则强度)：</label>
+    <input type="range" id="lambda" min="0" max="50" step="0.5" value="0">
+    <span class="val">λ = <code id="lambdaVal">0.0</code></span>
+    <span style="color:var(--sub);font-size:.78em">　权重范数 ‖w‖₂ = <code id="wnorm" style="background:var(--blue-light);padding:1px 5px;border-radius:3px">—</code></span>
+  </div>
+  <div class="reg-canvas-wrap">
+    <canvas id="cL2" width="380" height="200"></canvas>
+    <canvas id="cL1" width="380" height="200"></canvas>
+  </div>
+  <div class="legend">
+    <span class="legend-item"><span class="legend-line" style="background:#bbb"></span>数据点</span>
+    <span class="legend-item"><span class="legend-line" style="background:var(--orange)"></span>过拟合(λ=0)</span>
+    <span class="legend-item"><span class="legend-line" style="background:var(--green)"></span>L2 岭回归</span>
+    <span class="legend-item"><span class="legend-line" style="background:var(--purple)"></span>L1 (稀疏)</span>
+  </div>
+</div>
+
+<div class="info-panel" id="infoPanel">
+  <div class="step-title">观察要点</div>
+  <div class="step-desc">
+    欠拟合：模型太简单，连训练数据都没学到位。过拟合：模型把训练数据「背」下来（训练 MSE≈0），但测试 MSE 飙升，泛化崩坏。
+    正则化不改变模型容量，只是「不让权重乱长」——L2 让所有权重变小（曲线变平滑），L1 把不重要的权重直接压到 0（稀疏，相当于自动选特征）。
+  </div>
+</div>
+
+<footer>
+  数据来源：基于 09-过拟合与正则化 教程（大纲第一篇 Ch09）<br>
+  本可视化对应 <a href="09-过拟合与正则化.md">深度学习从0到Transformer教程 第09章</a>
+</footer>
+
+<script>
+// ---- 数据生成：y = 0.5*sin(x) + 噪声，x∈[0,6] ----
+function seedRand(seed){ let s=seed; return ()=>{ s=(s*9301+49297)%233280; return s/233280; }; }
+const rnd=seedRand(7);
+function trueFn(x){ return 0.5*Math.sin(x)+0.3; }
+const xTr=[], yTr=[];
+for(let i=0;i<12;i++){ const x=i*0.55+0.1; xTr.push(x); yTr.push(trueFn(x)+(rnd()-0.5)*0.18); }
+const xTe=[], yTe=[];
+for(let i=0;i<30;i++){ const x=rnd()*5.9+0.05; xTe.push(x); yTe.push(trueFn(x)+(rnd()-0.5)*0.18); }
+
+// ---- 多项式岭回归拟合：(AᵀA + λI)w = Aᵀy ----
+function design(x, deg){ const r=[]; for(let d=0;d<=deg;d++) r.push(Math.pow(x,d)); return r; }
+function gauss(A,b){
+  const n=b.length;
+  for(let i=0;i<n;i++){
+    let p=i; for(let k=i+1;k<n;k++) if(Math.abs(A[k][i])>Math.abs(A[p][i])) p=k;
+    [A[i],A[p]]=[A[p],A[i]]; [b[i],b[p]]=[b[p],b[i]];
+    if(Math.abs(A[i][i])<1e-12) continue;
+    for(let k=i+1;k<n;k++){ const f=A[k][i]/A[i][i]; for(let j=i;j<n;j++) A[k][j]-=f*A[i][j]; b[k]-=f*b[i]; }
+  }
+  const x=new Array(n).fill(0);
+  for(let i=n-1;i>=0;i--){ let s=b[i]; for(let j=i+1;j<n;j++) s-=A[i][j]*x[j]; x[i]=A[i][i]?s/A[i][i]:0; }
+  return x;
+}
+function fit(x,y,deg,lambda){
+  const n=deg+1;
+  const A=Array.from({length:n},()=>new Array(n).fill(0));
+  const b=new Array(n).fill(0);
+  for(let s=0;s<x.length;s++){
+    const d=design(x[s],deg);
+    for(let i=0;i<n;i++){ b[i]+=d[i]*y[s]; for(let j=0;j<n;j++) A[i][j]+=d[i]*d[j]; }
+  }
+  if(lambda>0) for(let i=0;i<n;i++) A[i][i]+=lambda*(i===0?0:1); // 不惩罚偏置 w0
+  return gauss(A,b);
+}
+function evalPoly(w,x){ let s=0; for(let d=0;d<w.length;d++) s+=w[d]*Math.pow(x,d); return s; }
+function mse(w,x,y){ let s=0; for(let i=0;i<x.length;i++){ const e=evalPoly(w,x[i])-y[i]; s+=e*e; } return s/x.length; }
+
+const w1=fit(xTr,yTr,1,0);
+const w3=fit(xTr,yTr,3,0);
+const w15=fit(xTr,yTr,15,0);
+
+function setMSE(id,w){ document.getElementById(id).textContent=mse(w,xTr,yTr).toFixed(4); }
+setMSE('mse1tr',w1); setMSE('mse1te',w1);
+setMSE('mse3tr',w3); setMSE('mse3te',w3);
+let m15tr=mse(w15,xTr,yTr), m15te=mse(w15,xTe,yTe);
+document.getElementById('mse15tr').textContent=m15tr.toFixed(4);
+document.getElementById('mse15te').textContent=(isFinite(m15te)?m15te.toFixed(4):'∞(爆炸)');
+
+// ---- 绘图 ----
+const XR=[0,6], YR=[-0.6,1.2];
+function plot(canvas, w, opts){
+  const ctx=canvas.getContext('2d');
+  const W=canvas.width,H=canvas.height, pad=24;
+  const isDark=matchMedia('(prefers-color-scheme: dark)').matches;
+  const bg=isDark?'#16213e':'#fff', grid=isDark?'#2a3556':'#eee', axis=isDark?'#557':'#888', txt=isDark?'#ccc':'#333';
+  const X=x=>pad+(x-XR[0])/(XR[1]-XR[0])*(W-pad-8);
+  const Y=y=>H-pad-(y-YR[0])/(YR[1]-YR[0])*(H-pad-10);
+  ctx.clearRect(0,0,W,H); ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle=grid; ctx.lineWidth=1; ctx.fillStyle=txt; ctx.font='10px system-ui';
+  for(let x=0;x<=6;x+=2){ ctx.beginPath(); ctx.moveTo(X(x),Y(YR[0])); ctx.lineTo(X(x),Y(YR[1])); ctx.stroke(); ctx.fillText(x,X(x)-4,H-pad+12); }
+  for(let y=0;y<=1;y+=0.5){ ctx.beginPath(); ctx.moveTo(X(XR[0]),Y(y)); ctx.lineTo(X(XR[1]),Y(y)); ctx.stroke(); ctx.fillText(y.toFixed(1),4,Y(y)+3); }
+  ctx.strokeStyle=axis; ctx.lineWidth=1.3;
+  ctx.beginPath(); ctx.moveTo(X(XR[0]),Y(YR[0])); ctx.lineTo(X(XR[1]),Y(YR[0])); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(X(XR[0]),Y(YR[0])); ctx.lineTo(X(XR[0]),Y(YR[1])); ctx.stroke();
+  // 真值曲线（淡）
+  if(opts.truth!==false){
+    ctx.strokeStyle=isDark?'#445':'#ccc'; ctx.lineWidth=1.2; ctx.setLineDash([4,3]);
+    ctx.beginPath(); for(let x=XR[0];x<=XR[1];x+=0.05){ const y=trueFn(x); if(x===XR[0]) ctx.moveTo(X(x),Y(y)); else ctx.lineTo(X(x),Y(y)); } ctx.stroke(); ctx.setLineDash([]);
+  }
+  // 拟合曲线
+  ctx.strokeStyle=opts.color; ctx.lineWidth=2.2; ctx.beginPath();
+  for(let x=XR[0];x<=XR[1];x+=0.03){
+    const y=evalPoly(w,x);
+    if(!isFinite(y)||Math.abs(y)>50) continue;
+    const yy=Math.max(YR[0]-1,Math.min(YR[1]+1,y));
+    if(x===XR[0]) ctx.moveTo(X(x),Y(yy)); else ctx.lineTo(X(x),Y(yy));
+  }
+  ctx.stroke();
+  // 数据点
+  ctx.fillStyle=isDark?'#ddd':'#666';
+  xTr.forEach((x,i)=>{ ctx.beginPath(); ctx.arc(X(x),Y(yTr[i]),2.5,0,Math.PI*2); ctx.fill(); });
+}
+
+plot(document.getElementById('c1'),w1,{color:'#e74c3c'});
+plot(document.getElementById('c3'),w3,{color:'#27ae60'});
+plot(document.getElementById('c15'),w15,{color:'#f39c12'});
+
+// ---- 正则化面板 ----
+const lambdaEl=document.getElementById('lambda');
+function wnorm(w){ let s=0; for(let i=1;i<w.length;i++) s+=w[i]*w[i]; return Math.sqrt(s); }
+function drawReg(){
+  const lam=+lambdaEl.value;
+  document.getElementById('lambdaVal').textContent=lam.toFixed(1);
+  const wL2=fit(xTr,yTr,15,lam);
+  // L1 近似：用 L2 拟合后对小权重硬阈值化，模拟稀疏
+  const wL1=fit(xTr,yTr,15,lam*0.8);
+  const thr=lam*0.004;
+  for(let i=1;i<wL1.length;i++) if(Math.abs(wL1[i])<thr) wL1[i]=0;
+  document.getElementById('wnorm').textContent=wnorm(wL2).toFixed(3);
+  // 在两个画布上叠画：底色过拟合 + 正则曲线
+  const cv2=document.getElementById('cL2'), cv1=document.getElementById('cL1');
+  // 自定义 plot：先画过拟合(橙)，再画正则后(绿/紫)
+  plotReg(cv2, w15, wL2, '#27ae60', 'L2 岭回归  λ='+lam.toFixed(1), lam);
+  plotReg(cv1, w15, wL1, '#9b59b6', 'L1 (稀疏)  λ='+lam.toFixed(1), lam);
+  const info = lam===0
+    ? 'λ=0 即无正则化，等价于上方的过拟合模型（橙色扭曲曲线）。'
+    : 'λ='+lam.toFixed(1)+'：L2 让权重整体缩小，曲线从扭曲→平滑，测试误差下降；L1 进一步把小权重压到 0（稀疏），相当于自动剔除多余的多项式项。';
+  document.getElementById('infoPanel').innerHTML='<div class="step-title">正则化效果（λ='+lam.toFixed(1)+'）</div><div class="step-desc">'+info+'</div>';
+}
+function plotReg(canvas, wBase, wReg, color, title, lam){
+  const ctx=canvas.getContext('2d');
+  const W=canvas.width,H=canvas.height, pad=26;
+  const isDark=matchMedia('(prefers-color-scheme: dark)').matches;
+  const bg=isDark?'#16213e':'#fff', grid=isDark?'#2a3556':'#eee', axis=isDark?'#557':'#888', txt=isDark?'#ddd':'#333';
+  const X=x=>pad+(x-XR[0])/(XR[1]-XR[0])*(W-pad-8);
+  const Y=y=>H-pad-(y-YR[0])/(YR[1]-YR[0])*(H-pad-14);
+  ctx.clearRect(0,0,W,H); ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle=grid; ctx.lineWidth=1; ctx.fillStyle=txt; ctx.font='10px system-ui';
+  for(let x=0;x<=6;x+=2){ ctx.beginPath(); ctx.moveTo(X(x),Y(YR[0])); ctx.lineTo(X(x),Y(YR[1])); ctx.stroke(); ctx.fillText(x,X(x)-4,H-pad+12); }
+  for(let y=0;y<=1;y+=0.5){ ctx.beginPath(); ctx.moveTo(X(XR[0]),Y(y)); ctx.lineTo(X(XR[1]),Y(y)); ctx.stroke(); ctx.fillText(y.toFixed(1),4,Y(y)+3); }
+  ctx.strokeStyle=axis; ctx.lineWidth=1.3;
+  ctx.beginPath(); ctx.moveTo(X(XR[0]),Y(YR[0])); ctx.lineTo(X(XR[1]),Y(YR[0])); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(X(XR[0]),Y(YR[0])); ctx.lineTo(X(XR[0]),Y(YR[1])); ctx.stroke();
+  // 过拟合底色曲线（橙）
+  ctx.strokeStyle='#f39c12'; ctx.lineWidth=1.6; ctx.setLineDash([3,2]);
+  ctx.beginPath();
+  for(let x=XR[0];x<=XR[1];x+=0.03){ const y=evalPoly(wBase,x); if(!isFinite(y)||Math.abs(y)>50) continue; const yy=Math.max(YR[0]-1,Math.min(YR[1]+1,y)); if(x===XR[0]) ctx.moveTo(X(x),Y(yy)); else ctx.lineTo(X(x),Y(yy)); }
+  ctx.stroke(); ctx.setLineDash([]);
+  // 正则后曲线
+  ctx.strokeStyle=color; ctx.lineWidth=2.4; ctx.beginPath();
+  for(let x=XR[0];x<=XR[1];x+=0.03){ const y=evalPoly(wReg,x); if(!isFinite(y)||Math.abs(y)>50) continue; const yy=Math.max(YR[0]-1,Math.min(YR[1]+1,y)); if(x===XR[0]) ctx.moveTo(X(x),Y(yy)); else ctx.lineTo(X(x),Y(yy)); }
+  ctx.stroke();
+  // 数据点
+  ctx.fillStyle=isDark?'#ddd':'#666';
+  xTr.forEach((x,i)=>{ ctx.beginPath(); ctx.arc(X(x),Y(yTr[i]),2.2,0,Math.PI*2); ctx.fill(); });
+  ctx.fillStyle=txt; ctx.font='11px system-ui'; ctx.fillText(title, pad+4, 16);
+}
+lambdaEl.addEventListener('input', drawReg);
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', ()=>{
+  plot(document.getElementById('c1'),w1,{color:'#e74c3c'});
+  plot(document.getElementById('c3'),w3,{color:'#27ae60'});
+  plot(document.getElementById('c15'),w15,{color:'#f39c12'});
+  drawReg();
+});
+drawReg();
+</script>
+</body>
+</html>

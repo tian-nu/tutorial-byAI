@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>博客系统 — 数据库 ER 图</title>
+<style>
+:root {
+  --bg: #f5f5f5;
+  --card-bg: #fff;
+  --text: #222;
+  --text-secondary: #555;
+  --border: #ddd;
+  --card-border: #ccc;
+  --shadow: 0 2px 8px rgba(0,0,0,.08);
+  --users-color: #4a90d9;
+  --articles-color: #e8913a;
+  --comments-color: #50a85e;
+  --tag-bg: #f0f0f0;
+  --tag-text: #444;
+  --pk-bg: #e3f2fd;
+  --fk-bg: #fff3e0;
+  --line-color: #999;
+  --toggle-bg: #e0e0e0;
+  --toggle-dot: #fff;
+}
+[data-theme="dark"] {
+  --bg: #1a1a2e;
+  --card-bg: #252540;
+  --text: #e0e0e0;
+  --text-secondary: #aaa;
+  --border: #3a3a5c;
+  --card-border: #3a3a5c;
+  --shadow: 0 2px 12px rgba(0,0,0,.3);
+  --tag-bg: #333350;
+  --tag-text: #ccc;
+  --pk-bg: #1a2a3a;
+  --fk-bg: #2a2218;
+  --line-color: #666;
+  --toggle-bg: #444;
+  --toggle-dot: #ccc;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex; flex-direction: column;
+  transition: background .3s, color .3s;
+}
+header {
+  text-align: center; padding: 28px 20px 0;
+}
+header h1 { font-size: 2rem; font-weight: 700; }
+header p { color: var(--text-secondary); margin-top: 6px; font-size: .95rem; }
+.toolbar {
+  display: flex; justify-content: center; align-items: center; gap: 12px;
+  margin-top: 14px;
+}
+.theme-toggle {
+  background: var(--toggle-bg); border: none; border-radius: 20px;
+  width: 50px; height: 28px; cursor: pointer; position: relative; transition: background .3s;
+}
+.theme-toggle::after {
+  content: ''; position: absolute; top: 3px; left: 3px;
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--toggle-dot); transition: transform .3s;
+}
+[data-theme="dark"] .theme-toggle::after { transform: translateX(22px); }
+main {
+  flex: 1; display: flex; justify-content: center; align-items: flex-start;
+  padding: 30px 20px 10px; gap: 0;
+  position: relative;
+}
+svg.connections {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  pointer-events: none; z-index: 0;
+}
+svg.connections line, svg.connections path {
+  stroke: var(--line-color); stroke-width: 2;
+}
+svg.connections text {
+  fill: var(--text-secondary); font-size: 12px; font-family: system-ui, sans-serif;
+}
+.cards {
+  position: relative; z-index: 1;
+  display: flex; justify-content: center; align-items: flex-start;
+  gap: 60px; flex-wrap: wrap;
+}
+.card {
+  background: var(--card-bg); border: 2px solid var(--card-border);
+  border-radius: 12px; padding: 20px 24px 18px;
+  min-width: 260px; max-width: 300px;
+  box-shadow: var(--shadow);
+  transition: background .3s, border .3s;
+}
+.card-users { border-top: 5px solid var(--users-color); }
+.card-articles { border-top: 5px solid var(--articles-color); }
+.card-comments { border-top: 5px solid var(--comments-color); }
+.card h2 {
+  font-size: 1.3rem; margin-bottom: 4px; display: flex; align-items: center; gap: 8px;
+}
+.card h2 .dot {
+  width: 14px; height: 14px; border-radius: 50%; display: inline-block;
+}
+.dot-users { background: var(--users-color); }
+.dot-articles { background: var(--articles-color); }
+.dot-comments { background: var(--comments-color); }
+.card .divider {
+  height: 1px; background: var(--border); margin: 10px 0 12px;
+}
+.field {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 5px 0; font-size: .88rem; line-height: 1.5;
+  border-bottom: 1px solid var(--border);
+}
+.field:last-child { border-bottom: none; }
+.field-name {
+  display: flex; align-items: center; gap: 5px;
+  font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+}
+.field-name.bold { font-weight: 700; }
+.field-type {
+  color: var(--text-secondary); font-size: .8rem;
+  font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+}
+.badge {
+  display: inline-block; font-size: .68rem; padding: 1px 6px; border-radius: 4px;
+  font-weight: 600; font-family: system-ui, sans-serif; margin-left: 4px;
+}
+.badge-pk { background: var(--pk-bg); color: var(--users-color); }
+.badge-fk { background: var(--fk-bg); color: var(--articles-color); }
+.legend {
+  display: flex; justify-content: center; gap: 24px;
+  margin: 10px 0 0; font-size: .82rem; color: var(--text-secondary);
+  flex-wrap: wrap;
+}
+.legend span { display: flex; align-items: center; gap: 5px; }
+footer {
+  text-align: center; padding: 12px 20px 18px;
+  font-size: .82rem; color: var(--text-secondary);
+}
+footer a { color: var(--users-color); text-decoration: none; }
+footer a:hover { text-decoration: underline; }
+@media (max-width: 900px) {
+  .cards { flex-direction: column; align-items: center; gap: 32px; }
+  svg.connections { display: none; }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>博客系统 — 数据库 ER 图</h1>
+  <p>三张核心表及其外键关系一览</p>
+  <div class="toolbar">
+    <span style="font-size:.85rem;color:var(--text-secondary)">☀️</span>
+    <button class="theme-toggle" id="themeToggle" title="切换暗色/亮色模式" aria-label="切换主题"></button>
+    <span style="font-size:.85rem;color:var(--text-secondary)">🌙</span>
+  </div>
+</header>
+
+<main id="mainArea">
+  <svg class="connections" id="svgLines"></svg>
+  <div class="cards" id="cardsContainer">
+    <!-- users -->
+    <div class="card card-users" data-table="users">
+      <h2><span class="dot dot-users"></span>users</h2>
+      <div class="divider"></div>
+      <div class="field">
+        <span class="field-name bold">id <span class="badge badge-pk">PK</span></span>
+        <span class="field-type">INTEGER</span>
+      </div>
+      <div class="field">
+        <span class="field-name bold">username</span>
+        <span class="field-type">VARCHAR(50)</span>
+      </div>
+      <div class="field">
+        <span class="field-name bold">email</span>
+        <span class="field-type">VARCHAR(100)</span>
+      </div>
+      <div class="field">
+        <span class="field-name bold">password_hash</span>
+        <span class="field-type">VARCHAR(255)</span>
+      </div>
+      <div class="field">
+        <span class="field-name">created_at</span>
+        <span class="field-type">DATETIME</span>
+      </div>
+    </div>
+
+    <!-- articles -->
+    <div class="card card-articles" data-table="articles">
+      <h2><span class="dot dot-articles"></span>articles</h2>
+      <div class="divider"></div>
+      <div class="field">
+        <span class="field-name bold">id <span class="badge badge-pk">PK</span></span>
+        <span class="field-type">INTEGER</span>
+      </div>
+      <div class="field">
+        <span class="field-name bold">title</span>
+        <span class="field-type">VARCHAR(200)</span>
+      </div>
+      <div class="field">
+        <span class="field-name bold">content</span>
+        <span class="field-type">TEXT</span>
+      </div>
+      <div class="field">
+        <span class="field-name bold">author_id <span class="badge badge-fk">FK</span></span>
+        <span class="field-type">INTEGER</span>
+      </div>
+      <div class="field">
+        <span class="field-name">cover_image</span>
+        <span class="field-type">VARCHAR(255)</span>
+      </div>
+      <div class="field">
+        <span class="field-name">created_at</span>
+        <span class="field-type">DATETIME</span>
+      </div>
+      <div class="field">
+        <span class="field-name">updated_at</span>
+        <span class="field-type">DATETIME</span>
+      </div>
+    </div>
+
+    <!-- comments -->
+    <div class="card card-comments" data-table="comments">
+      <h2><span class="dot dot-comments"></span>comments</h2>
+      <div class="divider"></div>
+      <div class="field">
+        <span class="field-name bold">id <span class="badge badge-pk">PK</span></span>
+        <span class="field-type">INTEGER</span>
+      </div>
+      <div class="field">
+        <span class="field-name bold">content</span>
+        <span class="field-type">TEXT</span>
+      </div>
+      <div class="field">
+        <span class="field-name bold">article_id <span class="badge badge-fk">FK</span></span>
+        <span class="field-type">INTEGER</span>
+      </div>
+      <div class="field">
+        <span class="field-name bold">user_id <span class="badge badge-fk">FK</span></span>
+        <span class="field-type">INTEGER</span>
+      </div>
+      <div class="field">
+        <span class="field-name">created_at</span>
+        <span class="field-type">DATETIME</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="legend" style="position:absolute;bottom:10px;left:0;right:0;">
+    <span><span class="badge badge-pk">PK</span> 主键 (PRIMARY KEY)</span>
+    <span><span class="badge badge-fk">FK</span> 外键 (FOREIGN KEY)</span>
+    <span><strong style="font-weight:700">粗体</strong> NOT NULL</span>
+  </div>
+</main>
+
+<footer>
+  数据来源：基于 <strong>Node.js 后端速成教程 第13章细纲</strong><br>
+  <a href="#">本可视化对应 Node.js速成后端教程 第13章</a>
+</footer>
+
+<script>
+function detectTheme() {
+  if (window.matchMedia('(prefers-color-scheme: dark)').matches) return 'dark';
+  return 'light';
+}
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+}
+function toggleTheme() {
+  const cur = document.documentElement.getAttribute('data-theme') || 'light';
+  const next = cur === 'dark' ? 'light' : 'dark';
+  applyTheme(next);
+}
+document.getElementById('themeToggle').addEventListener('click', toggleTheme);
+applyTheme(detectTheme());
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function(e) {
+  applyTheme(e.matches ? 'dark' : 'light');
+});
+
+function drawLines() {
+  const svg = document.getElementById('svgLines');
+  const main = document.getElementById('mainArea');
+  const cards = document.querySelectorAll('.card');
+
+  if (cards.length < 3) return;
+
+  const mainRect = main.getBoundingClientRect();
+  svg.setAttribute('viewBox', `0 0 ${mainRect.width} ${mainRect.height}`);
+  svg.style.width = mainRect.width + 'px';
+  svg.style.height = mainRect.height + 'px';
+
+  function cardCenter(el) {
+    const r = el.getBoundingClientRect();
+    return {
+      x: r.left + r.width / 2 - mainRect.left,
+      y: r.top + r.height / 2 - mainRect.top
+    };
+  }
+  function cardSide(el, side) {
+    const r = el.getBoundingClientRect();
+    return {
+      top:    { x: r.left + r.width/2 - mainRect.left, y: r.top - mainRect.top },
+      bottom: { x: r.left + r.width/2 - mainRect.left, y: r.bottom - mainRect.top },
+      left:   { x: r.left - mainRect.left, y: r.top + r.height/2 - mainRect.top },
+      right:  { x: r.right - mainRect.left, y: r.top + r.height/2 - mainRect.top }
+    }[side];
+  }
+
+  const usersEl = document.querySelector('.card-users');
+  const articlesEl = document.querySelector('.card-articles');
+  const commentsEl = document.querySelector('.card-comments');
+
+  const uRight  = cardSide(usersEl, 'right');
+  const aLeft   = cardSide(articlesEl, 'left');
+  const aRight  = cardSide(articlesEl, 'right');
+  const cLeft   = cardSide(commentsEl, 'left');
+  const uBottom = cardSide(usersEl, 'bottom');
+  const cTop    = cardSide(commentsEl, 'top');
+
+  let html = '';
+
+  // users → articles
+  html += `<line x1="${uRight.x}" y1="${uRight.y}" x2="${aLeft.x}" y2="${aLeft.y}" stroke-dasharray="6,3"/>`;
+  const uaMidX = (uRight.x + aLeft.x) / 2;
+  const uaMidY = (uRight.y + aLeft.y) / 2 - 12;
+  html += `<text x="${uaMidX}" y="${uaMidY}" text-anchor="middle">1:N (author_id)</text>`;
+
+  // articles → comments
+  html += `<line x1="${aRight.x}" y1="${aRight.y}" x2="${cLeft.x}" y2="${cLeft.y}" stroke-dasharray="6,3"/>`;
+  const acMidX = (aRight.x + cLeft.x) / 2;
+  const acMidY = (aRight.y + cLeft.y) / 2 - 12;
+  html += `<text x="${acMidX}" y="${acMidY}" text-anchor="middle">1:N (article_id)</text>`;
+
+  // users → comments (curved)
+  const ucx1 = uBottom.x;
+  const ucy1 = uBottom.y;
+  const ucx2 = cTop.x;
+  const ucy2 = cTop.y;
+  const cpY = (ucy1 + ucy2) / 2 + 30;
+  html += `<path d="M${ucx1},${ucy1} C${ucx1},${cpY} ${ucx2},${cpY} ${ucx2},${ucy2}" fill="none" stroke-dasharray="6,3"/>`;
+  html += `<text x="${(ucx1 + ucx2) / 2}" y="${cpY - 6}" text-anchor="middle">1:N (user_id)</text>`;
+
+  svg.innerHTML = html;
+}
+
+window.addEventListener('load', drawLines);
+window.addEventListener('resize', drawLines);
+
+// Redraw on theme change (reflow may shift positions)
+const observer = new MutationObserver(function(mutations) {
+  mutations.forEach(function(m) {
+    if (m.attributeName === 'data-theme') {
+      requestAnimationFrame(drawLines);
+    }
+  });
+});
+observer.observe(document.documentElement, { attributes: true });
+</script>
+</body>
+</html>

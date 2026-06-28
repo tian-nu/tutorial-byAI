@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cursor Agent工作流程可视化</title>
+    <style>
+        :root {
+            --bg-color: #f5f5f5;
+            --card-bg: white;
+            --text-color: #333;
+            --border-color: #ddd;
+            --active-color: #2563eb;
+            --success-color: #16a34a;
+            --shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg-color: #111827;
+                --card-bg: #1f2937;
+                --text-color: #f3f4f6;
+                --border-color: #374151;
+                --active-color: #3b82f6;
+                --success-color: #22c55e;
+                --shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+            }
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.6;
+            padding: 20px;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 2rem;
+        }
+
+        .description {
+            text-align: center;
+            margin-bottom: 40px;
+            color: var(--text-color);
+            opacity: 0.8;
+        }
+
+        .controls {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        button {
+            background-color: var(--active-color);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 0 5px;
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            background-color: #1d4ed8;
+        }
+
+        button:disabled {
+            background-color: #9ca3af;
+            cursor: not-allowed;
+        }
+
+        .flow-container {
+            position: relative;
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            padding: 40px 20px;
+            box-shadow: var(--shadow);
+            margin-bottom: 40px;
+        }
+
+        .flow-path {
+            position: absolute;
+            top: 80px;
+            left: 100px;
+            right: 100px;
+            height: 4px;
+            background-color: var(--border-color);
+            z-index: 1;
+        }
+
+        .flow-steps {
+            display: flex;
+            justify-content: space-between;
+            position: relative;
+            z-index: 2;
+        }
+
+        .step {
+            flex: 1;
+            text-align: center;
+            position: relative;
+            padding: 0 10px;
+        }
+
+        .step-circle {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background-color: var(--card-bg);
+            border: 4px solid var(--border-color);
+            margin: 0 auto 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            position: relative;
+            z-index: 2;
+        }
+
+        .step.active .step-circle {
+            border-color: var(--active-color);
+            background-color: var(--active-color);
+            color: white;
+            animation: pulse 1s infinite;
+        }
+
+        .step.done .step-circle {
+            border-color: var(--success-color);
+            background-color: var(--success-color);
+            color: white;
+        }
+
+        .step-label {
+            font-size: 0.9rem;
+            font-weight: 500;
+            margin-bottom: 8px;
+        }
+
+        .step-desc {
+            font-size: 0.8rem;
+            opacity: 0.7;
+            line-height: 1.4;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.4);
+            }
+            50% {
+                box-shadow: 0 0 0 10px rgba(37, 99, 235, 0);
+            }
+        }
+
+        .loop-arrow {
+            position: absolute;
+            bottom: -60px;
+            right: 80px;
+            font-size: 3rem;
+            color: var(--active-color);
+            animation: bounce 2s infinite;
+        }
+
+        @keyframes bounce {
+            0%, 100% {
+                transform: translateX(0);
+            }
+            50% {
+                transform: translateX(-10px);
+            }
+        }
+
+        .current-step-info {
+            background-color: var(--card-bg);
+            border: 2px solid var(--border-color);
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .current-step-info h3 {
+            margin-bottom: 10px;
+            color: var(--active-color);
+        }
+
+        footer {
+            text-align: center;
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid var(--border-color);
+            opacity: 0.7;
+            font-size: 0.9rem;
+        }
+
+        footer a {
+            color: var(--active-color);
+            text-decoration: none;
+        }
+
+        .theme-toggle {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <button class="theme-toggle" onclick="toggleTheme()">切换主题</button>
+    <div class="container">
+        <h1>Cursor Agent 工作流程</h1>
+        <p class="description">这张图展示了Cursor Agent如何自动完成你的需求：探索 → 理解 → 修改 → 测试 → 循环</p>
+
+        <div class="controls">
+            <button id="startBtn" onclick="startAnimation()">开始播放</button>
+            <button id="resetBtn" onclick="resetAnimation()">重置</button>
+            <button id="nextBtn" onclick="nextStep()" disabled>下一步</button>
+        </div>
+
+        <div class="current-step-info">
+            <h3 id="currentTitle">等待开始...</h3>
+            <p id="currentDesc">点击"开始播放"查看完整流程</p>
+        </div>
+
+        <div class="flow-container">
+            <div class="flow-steps">
+                <div class="step" data-step="0">
+                    <div class="step-circle">1</div>
+                    <div class="step-label">用户需求</div>
+                    <div class="step-desc">你说清楚要做什么</div>
+                </div>
+                <div class="step" data-step="1">
+                    <div class="step-circle">2</div>
+                    <div class="step-label">自动找文件</div>
+                    <div class="step-desc">Agent扫描项目</div>
+                </div>
+                <div class="step" data-step="2">
+                    <div class="step-circle">3</div>
+                    <div class="step-label">读取代码</div>
+                    <div class="step-desc">理解项目结构</div>
+                </div>
+                <div class="step" data-step="3">
+                    <div class="step-circle">4</div>
+                    <div class="step-label">制定计划</div>
+                    <div class="step-desc">分析哪里需要改</div>
+                </div>
+                <div class="step" data-step="4">
+                    <div class="step-circle">5</div>
+                    <div class="step-label">请求权限</div>
+                    <div class="step-desc">改文件问你同意</div>
+                </div>
+                <div class="step" data-step="5">
+                    <div class="step-circle">6</div>
+                    <div class="step-label">修改代码</div>
+                    <div class="step-desc">逐个文件修改</div>
+                </div>
+                <div class="step" data-step="6">
+                    <div class="step-circle">7</div>
+                    <div class="step-label">运行测试</div>
+                    <div class="step-desc">验证功能正常</div>
+                </div>
+                <div class="step" data-step="7">
+                    <div class="step-circle">8</div>
+                    <div class="step-label">完成/循环</div>
+                    <div class="step-desc">成功结束，失败重试</div>
+                </div>
+            </div>
+            <div class="loop-arrow">↺</div>
+        </div>
+
+        <footer>
+            <p>基于 ai_coding_outline.md v2<br>本可视化对应 <a href="26-Cursor安装与首次配置.md" target="_blank">第30章：Agent模式</a></p>
+        </footer>
+    </div>
+
+    <script>
+        const steps = [
+            {
+                title: '第一步：用户输入需求',
+                desc: '你告诉Agent你想做什么，比如"给我的Todo项目加一个删除功能"'
+            },
+            {
+                title: '第二步：Agent自动找文件',
+                desc: 'Agent扫描你的项目目录，找到所有相关的源代码文件'
+            },
+            {
+                title: '第三步：Agent读取代码',
+                desc: 'Agent读取每个文件的内容，理解项目结构、数据结构和已有逻辑'
+            },
+            {
+                title: '第四步：Agent制定修改计划',
+                desc: 'Agent分析哪些文件需要修改、哪里需要加代码，制定出清晰的计划'
+            },
+            {
+                title: '第五步：请求用户权限',
+                desc: 'Agent准备修改第一个文件前，会问你："是否允许修改这个文件？"，你同意了才会改'
+            },
+            {
+                title: '第六步：执行代码修改',
+                desc: '得到你的同意后，Agent修改文件。所有需要改的文件逐个处理'
+            },
+            {
+                title: '第七步：运行测试验证',
+                desc: '改完后Agent会建议运行测试，看功能是否正常工作。如果需要，还会执行终端命令'
+            },
+            {
+                title: '第八步：判断是否完成',
+                desc: '如果测试通过，任务完成。如果有错误，Agent会回到第二步，重新分析问题并修复，形成循环'
+            }
+        ];
+
+        let currentStep = -1;
+        let animationInterval = null;
+        let autoPlay = false;
+
+        function updateUI() {
+            const stepElements = document.querySelectorAll('.step');
+            stepElements.forEach((el, index) => {
+                if (index < currentStep) {
+                    el.classList.add('done');
+                    el.classList.remove('active');
+                } else if (index === currentStep) {
+                    el.classList.add('active');
+                    el.classList.remove('done');
+                } else {
+                    el.classList.remove('active');
+                    el.classList.remove('done');
+                }
+            });
+
+            if (currentStep >= 0 && currentStep < steps.length) {
+                document.getElementById('currentTitle').textContent = steps[currentStep].title;
+                document.getElementById('currentDesc').textContent = steps[currentStep].desc;
+            }
+
+            document.getElementById('nextBtn').disabled = currentStep >= steps.length - 1;
+            document.getElementById('startBtn').disabled = autoPlay;
+        }
+
+        function nextStep() {
+            if (currentStep < steps.length - 1) {
+                currentStep++;
+                updateUI();
+            }
+        }
+
+        function startAnimation() {
+            resetAnimation();
+            autoPlay = true;
+            animationInterval = setInterval(() => {
+                if (currentStep >= steps.length - 1) {
+                    clearInterval(animationInterval);
+                    autoPlay = false;
+                    document.getElementById('startBtn').disabled = false;
+                    return;
+                }
+                nextStep();
+            }, 1500);
+            updateUI();
+        }
+
+        function resetAnimation() {
+            if (animationInterval) {
+                clearInterval(animationInterval);
+            }
+            autoPlay = false;
+            currentStep = -1;
+            document.getElementById('currentTitle').textContent = '等待开始...';
+            document.getElementById('currentDesc').textContent = '点击"开始播放"查看完整流程';
+            updateUI();
+            document.getElementById('startBtn').disabled = false;
+        }
+
+        function toggleTheme() {
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)');
+            if (document.documentElement.classList.contains('force-dark')) {
+                document.documentElement.classList.remove('force-dark');
+                document.documentElement.classList.remove('force-light');
+            } else if (prefersDark.matches) {
+                document.documentElement.classList.add('force-light');
+            } else {
+                document.documentElement.classList.add('force-dark');
+            }
+        }
+
+        // 监听系统主题变化
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+            // 主题跟随系统，不需要额外处理，CSS变量自动更新
+        });
+
+        updateUI();
+    </script>
+</body>
+</html>

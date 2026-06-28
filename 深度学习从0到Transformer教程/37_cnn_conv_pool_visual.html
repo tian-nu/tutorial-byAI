@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>CNN 卷积 + 池化过程 — 滑动窗口可视化</title>
+<style>
+:root {
+  --bg: #f5f5f5; --card: #fff; --text: #333; --sub: #666;
+  --border: #ddd; --blue: #3498db; --blue-light: #ebf5fb;
+  --green: #27ae60; --green-light: #eafaf1;
+  --orange: #f39c12; --orange-light: #fef5e7;
+  --purple: #9b59b6; --purple-light: #f5eef8;
+  --red: #e74c3c; --teal: #1abc9c;
+  --shadow: 0 2px 8px rgba(0,0,0,.06);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1a1a2e; --card: #16213e; --text: #e0e0e0; --sub: #aaa;
+    --border: #333; --blue: #5dade2; --blue-light: rgba(93,173,226,.12);
+    --green: #2ecc71; --green-light: rgba(46,204,113,.12);
+    --orange: #f5b041; --orange-light: rgba(245,176,65,.12);
+    --purple: #bb8fce; --purple-light: rgba(187,143,206,.12);
+    --teal: #48c9b0;
+    --shadow: 0 2px 8px rgba(0,0,0,.3);
+  }
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,"PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column;align-items:center;padding:20px 16px;min-height:100vh}
+h1{font-size:1.35em;text-align:center;margin-bottom:4px}
+.desc{font-size:.82em;color:var(--sub);margin-bottom:14px;text-align:center;max-width:900px;line-height:1.6}
+
+.controls{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-bottom:14px;align-items:center}
+.controls button{padding:6px 16px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);cursor:pointer;font-size:.82em;transition:.15s}
+.controls button:hover{opacity:.85}
+.controls button.primary{background:var(--blue);color:#fff;border-color:var(--blue)}
+.controls button:disabled{opacity:.4;cursor:not-allowed}
+.step-indicator{font-size:.78em;color:var(--sub);min-width:90px;text-align:center}
+
+/* 主体三栏：输入图 / 卷积核 / 特征图 */
+.flow{display:flex;gap:18px;justify-content:center;align-items:flex-start;flex-wrap:wrap;width:100%;max-width:1000px;margin-bottom:14px}
+.panel{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center;box-shadow:var(--shadow);transition:all .3s}
+.panel.active{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-light)}
+.panel .ttl{font-weight:600;font-size:.82em;margin-bottom:4px;color:var(--blue)}
+.panel .sub{font-size:.7em;color:var(--sub);margin-bottom:8px}
+.panel.kernel .ttl{color:var(--orange)}
+.panel.kernel.active{border-color:var(--orange);box-shadow:0 0 0 3px var(--orange-light)}
+.panel.feat .ttl{color:var(--green)}
+.panel.feat.active{border-color:var(--green);box-shadow:0 0 0 3px var(--green-light)}
+.panel.pooled .ttl{color:var(--purple)}
+.panel.pooled.active{border-color:var(--purple);box-shadow:0 0 0 3px var(--purple-light)}
+
+/* 网格 */
+.grid{display:inline-grid;gap:2px;font-family:"Courier New",monospace;font-size:.9em}
+.cell{width:38px;height:38px;display:flex;align-items:center;justify-content:center;border:1px solid var(--border);border-radius:3px;background:var(--card);transition:all .3s}
+.cell.win{background:var(--orange-light);border:2px solid var(--orange);font-weight:700;color:var(--orange);transform:scale(1.05);z-index:2}
+.cell.out{background:var(--green-light);border:2px solid var(--green);font-weight:700;color:var(--green);transform:scale(1.08);z-index:2}
+.cell.kernel{background:var(--orange-light);border:1px solid var(--orange);color:var(--orange)}
+.cell.pooled{background:var(--purple-light);border:2px solid var(--purple);font-weight:700;color:var(--purple)}
+.cell.dim{opacity:.3}
+
+/* 行列标签 */
+.grid-wrap{display:inline-flex;flex-direction:column;align-items:center}
+.coord-row{display:flex;align-items:center;gap:4px}
+.coord-row .row-idx{width:18px;text-align:right;font-size:.66em;color:var(--sub);font-family:monospace}
+
+/* 颜色映射说明 */
+.value-legend{font-size:.68em;color:var(--sub);margin-top:6px}
+.value-legend .bar{display:inline-block;width:50px;height:8px;background:linear-gradient(to right,#fff,var(--orange));vertical-align:middle;border-radius:2px;margin:0 3px}
+
+/* 信息面板 */
+.info-panel{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px 16px;width:100%;max-width:900px;margin-bottom:10px;min-height:90px;transition:all .3s}
+.info-panel .step-title{font-weight:600;font-size:.85em;margin-bottom:6px;color:var(--blue)}
+.info-panel .step-desc{font-size:.78em;color:var(--sub);line-height:1.6}
+.info-panel .step-desc code{font-size:.9em;background:var(--blue-light);padding:1px 5px;border-radius:3px;color:var(--text)}
+.info-panel .calc{font-family:"Courier New",monospace;font-size:.76em;background:var(--bg);padding:8px 10px;border-radius:5px;margin-top:6px;border-left:3px solid var(--blue);white-space:pre-wrap;color:var(--text);line-height:1.5}
+.info-panel .tip{margin-top:6px;font-size:.74em;color:var(--orange);padding:4px 8px;background:var(--orange-light);border-radius:4px}
+
+footer{margin-top:14px;font-size:.7em;color:var(--sub);text-align:center;line-height:1.6}
+footer a{color:var(--sub)}
+</style>
+</head>
+<body>
+<h1>CNN 卷积 + 池化过程</h1>
+<p class="desc">
+  4×4 灰度图（左半暗=1、右半亮=2）用 3×3 垂直边缘检测卷积核滑动（stride=1, padding=0），
+  得到 2×2 特征图（4 个位置都是 -3）；再过 2×2 MaxPool 缩成 1×1。
+  对应教程《37-CNN 简介 — 处理图像的另一条路》数值小例子。
+</p>
+
+<div class="controls">
+  <button id="btn-next" class="primary" onclick="nextStep()">▶ 下一步</button>
+  <button id="btn-auto" onclick="toggleAuto()">⏯ 自动播放</button>
+  <button id="btn-reset" onclick="resetAll()">↺ 重置</button>
+  <span class="step-indicator" id="stepInfo">0 / 7</span>
+</div>
+
+<div class="flow">
+  <div class="panel input" id="p-input">
+    <div class="ttl">输入图像 (4×4)</div>
+    <div class="sub">单通道，左1右2，中间是垂直边缘</div>
+    <div id="input-grid"></div>
+    <div class="value-legend">数值越大颜色越深 <span class="bar"></span></div>
+  </div>
+
+  <div class="panel kernel" id="p-kernel">
+    <div class="ttl">3×3 卷积核</div>
+    <div class="sub">垂直边缘检测器：左+1，中0，右-1</div>
+    <div id="kernel-grid"></div>
+    <div class="value-legend">橙底=核权重</div>
+  </div>
+
+  <div class="panel feat" id="p-feat">
+    <div class="ttl">特征图 (2×2)</div>
+    <div class="sub">输出尺寸 = (4-3)/1+1 = 2</div>
+    <div id="feat-grid"></div>
+    <div class="value-legend">绿底=已计算</div>
+  </div>
+
+  <div class="panel pooled" id="p-pooled">
+    <div class="ttl">MaxPool 后 (1×1)</div>
+    <div class="sub">2×2 取最大值，尺寸减半</div>
+    <div id="pooled-grid"></div>
+    <div class="value-legend">紫底=池化结果</div>
+  </div>
+</div>
+
+<div class="info-panel" id="info">
+  <div class="step-title">点击「下一步」看卷积核如何滑动</div>
+  <div class="step-desc">输入 <code>X = [[1,1,2,2],[1,1,2,2],[1,1,2,2],[1,1,2,2]]</code>，卷积核 <code>K = [[1,0,-1],[1,0,-1],[1,0,-1]]</code>。stride=1, padding=0，输出 2×2。</div>
+</div>
+
+<footer>
+  数据来源：37-CNN简介处理图像的另一条路.md（3×3 卷积数值小例子）｜
+  本可视化对应 <a href="37-CNN简介处理图像的另一条路.md">Ch37 · CNN 简介 — 处理图像的另一条路</a>
+</footer>
+
+<script>
+// === 数据 ===
+const X = [[1,1,2,2],[1,1,2,2],[1,1,2,2],[1,1,2,2]];
+const K = [[1,0,-1],[1,0,-1],[1,0,-1]];
+// 4 个位置的输出都是 -3
+const featOut = [[-3,-3],[-3,-3]];
+const pooledOut = [-3];
+
+// === 渲染网格 ===
+function gridHTML(mat, opts){
+  opts = opts || {};
+  const win = opts.win || null;  // {r,c} 当前窗口左上角
+  const out = opts.out || null;  // {r,c} 当前输出位置
+  const filled = opts.filled || [];  // [[r,c]...] 已填充
+  const cls = opts.cls || 'cell';
+  let h = `<div class="grid" style="grid-template-columns:repeat(${mat[0].length},38px)">`;
+  for(let i=0;i<mat.length;i++){
+    for(let j=0;j<mat[0].length;j++){
+      let c = cls;
+      // 当前窗口
+      if(win){
+        const wr = win.r, wc = win.c;
+        if(i>=wr && i<wr+3 && j>=wc && j<wc+3){
+          c = 'cell win';
+        }
+      }
+      // 已计算输出
+      const isFilled = filled.some(p=>p[0]===i&&p[1]===j);
+      const isOut = out && out.r===i && out.c===j;
+      if(isOut) c = 'cell out';
+      else if(isFilled) c = 'cell out';
+      h += `<div class="${c}">${mat[i][j]}</div>`;
+    }
+  }
+  h += '</div>';
+  return h;
+}
+function kernelHTML(){
+  let h = '<div class="grid" style="grid-template-columns:repeat(3,38px)">';
+  for(let i=0;i<3;i++){
+    for(let j=0;j<3;j++){
+      h += `<div class="cell kernel">${K[i][j]}</div>`;
+    }
+  }
+  return h + '</div>';
+}
+function featHTML(filled, curOut){
+  let h = '<div class="grid" style="grid-template-columns:repeat(2,38px)">';
+  for(let i=0;i<2;i++){
+    for(let j=0;j<2;j++){
+      const isFilled = filled.some(p=>p[0]===i&&p[1]===j);
+      const isCur = curOut && curOut.r===i && curOut.c===j;
+      let c = isCur ? 'cell out' : (isFilled ? 'cell out' : 'cell dim');
+      h += `<div class="${c}">${isFilled||isCur ? featOut[i][j] : '?'}</div>`;
+    }
+  }
+  return h + '</div>';
+}
+function pooledHTML(filled){
+  let h = '<div class="grid" style="grid-template-columns:repeat(1,38px)">';
+  const isFilled = filled;
+  h += `<div class="cell ${isFilled?'pooled':'dim'}">${isFilled?pooledOut[0]:'?'}</div>`;
+  return h + '</div>';
+}
+
+// === 步骤 ===
+const steps = [
+  {title:"第 0 步：输入图像与卷积核", desc:"4×4 单通道灰度图，左半像素=1（暗）、右半=2（亮），中间是一条垂直边缘。卷积核是垂直边缘检测器：左列+1、中列0、右列-1。", tip:null,
+   panels:['p-input','p-kernel'],
+   win:null, outPos:null, filledFeat:[], filledPooled:false,
+   calc:"X = [[1,1,2,2],\n     [1,1,2,2],\n     [1,1,2,2],\n     [1,1,2,2]]   # 4×4 输入\n\nK = [[ 1, 0,-1],\n     [ 1, 0,-1],\n     [ 1, 0,-1]]   # 3×3 垂直边缘核\n\n参数：stride=1, padding=0\n输出尺寸 = (4-3)/1 + 1 = 2 → 2×2 特征图"},
+  {title:"第 1 步：位置 (0,0) — 盖住左上角 3×3", desc:"卷积核滑到输入左上角，盖住 <code>X[0:3, 0:3]</code>。对应位置相乘再求和。", tip:null,
+   panels:['p-input','p-kernel','p-feat'],
+   win:{r:0,c:0}, outPos:{r:0,c:0}, filledFeat:[], filledPooled:false,
+   calc:"窗口 = X[0:3, 0:3] = [[1,1,2],[1,1,2],[1,1,2]]\n核  K = [[1,0,-1],[1,0,-1],[1,0,-1]]\n\n逐元素相乘求和：\n  行1: 1×1 + 1×0 + 2×(-1) = 1 + 0 - 2 = -1\n  行2: 1×1 + 1×0 + 2×(-1) = -1\n  行3: 1×1 + 1×0 + 2×(-1) = -1\n  合计 = -1 + (-1) + (-1) = -3\n\n特征图[0][0] = -3"},
+  {title:"第 2 步：位置 (0,1) — 滑到右上角", desc:"卷积核向右滑一格，盖住 <code>X[0:3, 1:4]</code>。", tip:null,
+   panels:['p-input','p-kernel','p-feat'],
+   win:{r:0,c:1}, outPos:{r:0,c:1}, filledFeat:[[0,0]], filledPooled:false,
+   calc:"窗口 = X[0:3, 1:4] = [[1,2,2],[1,2,2],[1,2,2]]\n\n逐元素求和：\n  行1: 1×1 + 2×0 + 2×(-1) = -1\n  行2: 1×1 + 2×0 + 2×(-1) = -1\n  行3: 1×1 + 2×0 + 2×(-1) = -1\n  合计 = -3\n\n特征图[0][1] = -3"},
+  {title:"第 3 步：位置 (1,0) — 滑到左下角", desc:"卷积核向下移一格（按行扫描），盖住 <code>X[1:4, 0:3]</code>。", tip:null,
+   panels:['p-input','p-kernel','p-feat'],
+   win:{r:1,c:0}, outPos:{r:1,c:0}, filledFeat:[[0,0],[0,1]], filledPooled:false,
+   calc:"窗口 = X[1:4, 0:3] = [[1,1,2],[1,1,2],[1,1,2]]\n（与位置(0,0)相同，因为输入各行相同）\n\n合计 = -3\n特征图[1][0] = -3"},
+  {title:"第 4 步：位置 (1,1) — 滑到右下角（最后位置）", desc:"卷积核滑到右下角，盖住 <code>X[1:4, 1:4]</code>。四个位置都算完了，特征图填满。", tip:"观察：4 个位置都是 -3，因为输入每个 3×3 窗口都是「左1右2」结构，核在每个位置都检测到同样的垂直边缘。-3 是负数，表示「右侧比左侧亮」。",
+   panels:['p-input','p-kernel','p-feat'],
+   win:{r:1,c:1}, outPos:{r:1,c:1}, filledFeat:[[0,0],[0,1],[1,0]], filledPooled:false,
+   calc:"窗口 = X[1:4, 1:4] = [[1,2,2],[1,2,2],[1,2,2]]\n\n合计 = -3\n特征图[1][1] = -3\n\n最终特征图：\n  [[-3, -3],\n   [-3, -3]]"},
+  {title:"第 5 步：MaxPool 2×2 — 缩成 1×1", desc:"2×2 MaxPool 在 2×2 特征图上取最大值。这里 4 个值都是 -3，所以最大值也是 -3。图缩到 1×1。作用：降维 + 平移不变性（特征稍微挪一点，最大值还在）。", tip:"MaxPool 无可学习参数。输出尺寸 = (2-2)/2 + 1 = 1。",
+   panels:['p-feat','p-pooled'],
+   win:null, outPos:null, filledFeat:[[0,0],[0,1],[1,0],[1,1]], filledPooled:true,
+   calc:"特征图 = [[-3, -3],\n            [-3, -3]]\n\nMaxPool(2×2, stride=2):\n  max(-3, -3, -3, -3) = -3\n\n池化后 = [[-3]]   # 1×1\n尺寸 (2-2)/2 + 1 = 1"},
+  {title:"✅ 完成：卷积 + 池化全流程", desc:"输入 4×4 → 卷积得 2×2 特征图 → 池化得 1×1。卷积核用<strong>同一组权重</strong>在所有位置滑动（参数共享：9 个权重走完整张图），这就是 CNN 比全连接省参数的根本原因。", tip:"核心性质：① 平移不变性（同特征无论在哪都能检测）② 参数共享（整图一组权重）③ 局部连接（每个输出只看局部 3×3 区域）。",
+   panels:['p-input','p-kernel','p-feat','p-pooled'],
+   win:null, outPos:null, filledFeat:[[0,0],[0,1],[1,0],[1,1]], filledPooled:true,
+   calc:"完整流程：\n  4×4 输入 → [3×3 卷积核 stride=1 pad=0] → 2×2 特征图\n          → [2×2 MaxPool stride=2] → 1×1\n\n参数量：3×3×1 + 1 = 10（核权重 9 + 偏置 1）\n对比全连接 16→4：16×4+4 = 68\nCNN 节省 6.8 倍参数"}
+];
+
+// === 状态机 ===
+let cur = -1;
+let autoTimer = null;
+
+function renderStep(){
+  // 面板高亮
+  ['p-input','p-kernel','p-feat','p-pooled'].forEach(id=>{
+    document.getElementById(id).classList.remove('active');
+  });
+  if(cur>=0){
+    steps[cur].panels.forEach(id=>document.getElementById(id).classList.add('active'));
+  }
+
+  // 渲染网格
+  const s = cur>=0 ? steps[cur] : null;
+  // 输入图
+  document.getElementById('input-grid').innerHTML = gridHTML(X, s ? {win:s.win} : {});
+  // 核
+  document.getElementById('kernel-grid').innerHTML = kernelHTML();
+  // 特征图
+  if(cur<0){
+    document.getElementById('feat-grid').innerHTML = featHTML([], null);
+  } else {
+    document.getElementById('feat-grid').innerHTML = featHTML(s.filledFeat, s.outPos);
+  }
+  // 池化
+  document.getElementById('pooled-grid').innerHTML = pooledHTML(s ? s.filledPooled : false);
+
+  // 信息面板
+  const info = document.getElementById('info');
+  if(cur<0){
+    info.innerHTML = '<div class="step-title">点击「下一步」看卷积核如何滑动</div>'+
+      '<div class="step-desc">输入 <code>X = [[1,1,2,2],[1,1,2,2],[1,1,2,2],[1,1,2,2]]</code>，卷积核 <code>K = [[1,0,-1],[1,0,-1],[1,0,-1]]</code>。stride=1, padding=0，输出 2×2。</div>';
+  } else {
+    let html = `<div class="step-title">${steps[cur].title}</div>`;
+    html += `<div class="step-desc">${steps[cur].desc}</div>`;
+    if(steps[cur].calc){
+      html += `<div class="calc">${steps[cur].calc}</div>`;
+    }
+    if(steps[cur].tip){
+      html += `<div class="tip">${steps[cur].tip}</div>`;
+    }
+    info.innerHTML = html;
+  }
+  document.getElementById('stepInfo').textContent = (cur+1) + ' / ' + steps.length;
+  document.getElementById('btn-next').disabled = (cur >= steps.length-1);
+}
+
+function nextStep(){
+  if(cur < steps.length-1){ cur++; renderStep(); }
+  else if(autoTimer){ toggleAuto(); }
+}
+
+function toggleAuto(){
+  if(autoTimer){
+    clearInterval(autoTimer); autoTimer=null;
+    document.getElementById('btn-auto').textContent='⏯ 自动播放';
+  } else {
+    if(cur >= steps.length-1) resetAll();
+    autoTimer = setInterval(()=>{
+      if(cur >= steps.length-1){
+        clearInterval(autoTimer); autoTimer=null;
+        document.getElementById('btn-auto').textContent='⏯ 自动播放';
+      } else nextStep();
+    }, 2200);
+    document.getElementById('btn-auto').textContent='⏸ 暂停';
+  }
+}
+
+function resetAll(){
+  if(autoTimer){ clearInterval(autoTimer); autoTimer=null; document.getElementById('btn-auto').textContent='⏯ 自动播放'; }
+  cur = -1; renderStep();
+}
+
+resetAll();
+</script>
+</body>
+</html>

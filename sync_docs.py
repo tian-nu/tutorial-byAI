@@ -17,9 +17,12 @@ TUTORIALS = {
     "数据库精通教程": "database",
     "Docker精通教程": "docker",
     "Git到GitHub教程": "git",
+    "Node.js速成后端教程": "nodejs",
     "高中数学人教版教程": "math",
     "AIcoding从零到精通": "ai-coding",
     "初创互联网团队": "startup",
+    "深度学习从0到Transformer教程": "dl",
+    "网络架构与传输全解": "network",
 }
 
 # 需要排除的文件名模式
@@ -63,6 +66,25 @@ def sync_tutorial(src_dir: Path, dest_dir: Path):
     if pages_file.exists():
         shutil.copy2(pages_file, dest_dir / ".pages")
         print(f"    + .pages")
+
+    # 复制 .html 可视化文件
+    html_files = list(src_dir.glob("*.html"))
+    for f in html_files:
+        shutil.copy2(f, dest_dir / f.name)
+        count += 1
+
+    # 复制子目录（code/、visual/ 等）中的文件
+    for subdir in src_dir.iterdir():
+        if subdir.is_dir() and subdir.name not in ("stylesheets", "__pycache__", ".git"):
+            dest_subdir = dest_dir / subdir.name
+            dest_subdir.mkdir(parents=True, exist_ok=True)
+            for f in subdir.rglob("*"):
+                if f.is_file():
+                    rel = f.relative_to(subdir)
+                    dest_f = dest_subdir / rel
+                    dest_f.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(f, dest_f)
+                    count += 1
 
     # 复制 stylesheets 子目录（如果存在）
     styles_src = src_dir / "stylesheets"

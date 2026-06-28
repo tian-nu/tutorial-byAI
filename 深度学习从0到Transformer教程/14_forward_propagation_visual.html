@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>前向传播 — 信号从前往后走</title>
+<!-- 纯 SVG + JS，矩阵运算手写，无外部依赖，可离线运行 -->
+<style>
+:root {
+  --bg: #f5f5f5; --card: #fff; --text: #333; --sub: #666;
+  --border: #ddd; --blue: #3498db; --blue-light: #ebf5fb;
+  --green: #27ae60; --red: #e74c3c; --orange: #f39c12; --purple: #9b59b6;
+  --shadow: 0 2px 8px rgba(0,0,0,.06);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1a1a2e; --card: #16213e; --text: #e0e0e0; --sub: #aaa;
+    --border: #333; --blue: #5dade2; --blue-light: rgba(93,173,226,.1);
+    --shadow: 0 2px 8px rgba(0,0,0,.3);
+  }
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column;align-items:center;padding:20px 16px;min-height:100vh}
+h1{font-size:1.35em;text-align:center;margin-bottom:4px}
+.desc{font-size:.82em;color:var(--sub);margin-bottom:14px;text-align:center;max-width:820px;line-height:1.6}
+
+.controls{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-bottom:12px;align-items:center}
+.controls button{padding:5px 14px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);cursor:pointer;font-size:.82em;transition:.15s}
+.controls button:hover{opacity:.85}
+.controls button.primary{background:var(--blue);color:#fff;border-color:var(--blue)}
+.step-indicator{font-size:.78em;color:var(--sub);min-width:90px;text-align:center}
+
+.canvas-wrap{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px;box-shadow:var(--shadow);margin-bottom:12px;width:100%;max-width:860px}
+svg{display:block;width:100%;height:auto}
+.edge{stroke:var(--sub);stroke-width:1;opacity:.25;transition:all .3s}
+.edge.active{stroke:var(--blue);opacity:.9;stroke-width:2.5}
+.edge.done{stroke:var(--green);opacity:.55;stroke-width:1.6}
+.edge-label{font-size:9px;fill:var(--sub);font-family:ui-monospace,monospace;transition:all .3s}
+.edge-label.active{fill:var(--blue);font-weight:600}
+.node-circle{fill:var(--card);stroke:var(--border);stroke-width:2;transition:all .3s}
+.node-circle.active{stroke:var(--blue);fill:var(--blue-light);stroke-width:3}
+.node-circle.done{stroke:var(--green);fill:rgba(39,174,96,.1)}
+.node-circle.input{stroke:var(--orange)}
+.node-circle.output{stroke:var(--purple)}
+.node-label{font-size:11px;fill:var(--text);text-anchor:middle;font-weight:600;font-family:ui-monospace,monospace}
+.layer-label{font-size:11px;fill:var(--sub);text-anchor:middle;font-weight:600}
+
+.info-panel{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px 16px;width:100%;max-width:860px;margin-bottom:10px;min-height:70px}
+.info-panel .step-title{font-weight:600;font-size:.85em;margin-bottom:4px;color:var(--blue)}
+.info-panel .step-desc{font-size:.78em;color:var(--sub);line-height:1.7}
+.info-panel code{font-size:.9em;background:var(--blue-light);padding:1px 5px;border-radius:3px;color:var(--text)}
+.info-panel .formula{font-family:ui-monospace,monospace;background:var(--blue-light);padding:6px 10px;border-radius:6px;display:inline-block;margin:4px 0;font-size:.85em;color:var(--text)}
+
+footer{margin-top:6px;font-size:.7em;color:var(--sub);text-align:center;line-height:1.6}
+footer a{color:var(--sub)}
+</style>
+</head>
+<body>
+<h1>前向传播 — 信号从前往后走</h1>
+<p class="desc">
+  一个 3→4→2 的多层感知机：输入层 3 个特征，隐藏层 4 个神经元（ReLU 激活），输出层 2 个神经元（softmax 激活）。
+  点「下一步」逐层观察信号流动：先算 z⁽¹⁾=W⁽¹⁾x+b⁽¹⁾，再算 a⁽¹⁾=ReLU(z⁽¹⁾)，再算 z⁽²⁾=W⁽²⁾a⁽¹⁾+b⁽²⁾，最后输出 softmax(z⁽²⁾)。
+</p>
+
+<div class="controls">
+  <button id="btn-next" class="primary" onclick="nextStep()">▶ 下一步</button>
+  <button id="btn-auto" onclick="toggleAuto()">⏯ 自动播放</button>
+  <button onclick="resetAll()">↺ 重置</button>
+  <span class="step-indicator" id="stepInfo">0 / 5</span>
+</div>
+
+<div class="canvas-wrap">
+  <svg id="net" viewBox="0 0 860 400"></svg>
+</div>
+
+<div class="info-panel" id="infoPanel">
+  <div class="step-title">准备就绪</div>
+  <div class="step-desc">输入向量 x = [1.0, 2.0, −1.0]。点击「下一步」开始前向传播。每一步会高亮当前正在计算的连线和节点。</div>
+</div>
+
+<footer>
+  数据来源：基于 14-前向传播信号从前往后走 教程（大纲第二篇 Ch14）<br>
+  本可视化对应 <a href="14-前向传播信号从前往后走.md">深度学习从0到Transformer教程 第14章</a>
+</footer>
+
+<script>
+// 固定参数，便于复现
+const x = [1.0, 2.0, -1.0];
+// W1: 4x3，行=隐藏神经元
+const W1 = [[0.2, 0.8, -0.5],[0.5, -0.3, 0.7],[-0.6, 0.1, 0.4],[0.3, 0.9, -0.2]];
+const b1 = [0.1, -0.2, 0.3, 0.0];
+// W2: 2x4
+const W2 = [[0.4, -0.7, 0.2, 0.5],[-0.3, 0.6, 0.8, -0.1]];
+const b2 = [0.1, -0.1];
+
+function relu(v){ return Math.max(0,v); }
+function softmax(v){ const m=Math.max(...v); const e=v.map(x=>Math.exp(x-m)); const s=e.reduce((a,b)=>a+b,0); return e.map(x=>x/s); }
+
+// 前向计算
+function matVec(W, v){ return W.map(row=> row.reduce((s,w,i)=>s+w*v[i],0)); }
+function addBias(v,b){ return v.map((x,i)=>x+b[i]); }
+const z1 = addBias(matVec(W1, x), b1);
+const a1 = z1.map(relu);
+const z2 = addBias(matVec(W2, a1), b2);
+const out = softmax(z2);
+
+// 布局
+const inX=120, hidX=430, outX=740;
+const inY=[110,200,290];
+const hidY=[70,160,250,340];
+const outY=[170,260];
+const layers=[
+  {name:'输入层 x', x:inX, ys:inY, kind:'input', vals:x, labels:['x₁','x₂','x₃']},
+  {name:'隐藏层 a⁽¹⁾', x:hidX, ys:hidY, kind:'hidden', vals:a1, zvals:z1, labels:['a₁⁽¹⁾','a₂⁽¹⁾','a₃⁽¹⁾','a₄⁽¹⁾']},
+  {name:'输出层 ŷ', x:outX, ys:outY, kind:'output', vals:out, zvals:z2, labels:['ŷ₁','ŷ₂']},
+];
+
+// 步骤定义
+const steps=[
+  {title:'第 0 步：输入数据就位', desc:'输入向量 x = [1.0, 2.0, −1.0] 已加载到输入层节点。', active:{in:[0,1,2]}},
+  {title:'第 1 步：计算 z⁽¹⁾ = W⁽¹⁾x + b⁽¹⁾', desc:'隐藏层 4 个神经元分别做加权求和。例如 a₂⁽¹⁾ 的 z = 0.5·1.0 + (−0.3)·2.0 + 0.7·(−1.0) + (−0.2) = '+z1[1].toFixed(2)+'。', active:{edges1:true, hid:[]}, formula:'z⁽¹⁾ = W⁽¹⁾x + b⁽¹⁾ = ['+z1.map(v=>v.toFixed(2)).join(', ')+']ᵀ'},
+  {title:'第 2 步：a⁽¹⁾ = ReLU(z⁽¹⁾)', desc:'对 z⁽¹⁾ 逐元素过 ReLU：负值变 0，正值不变。这是引入非线性的关键。', active:{hid:[0,1,2,3]}, formula:'a⁽¹⁾ = ['+a1.map(v=>v.toFixed(2)).join(', ')+']ᵀ'},
+  {title:'第 3 步：计算 z⁽²⁾ = W⁽²⁾a⁽¹⁾ + b⁽²⁾', desc:'输出层 2 个神经元对隐藏层激活值加权求和。', active:{edges2:true, out:[]}, formula:'z⁽²⁾ = ['+z2.map(v=>v.toFixed(2)).join(', ')+']ᵀ'},
+  {title:'第 4 步：ŷ = softmax(z⁽²⁾)', desc:'输出层用 softmax 把 logits 压成概率（和为 1）。最终预测：类 1 概率 '+out[0].toFixed(3)+'，类 2 概率 '+out[1].toFixed(3)+'。', active:{out:[0,1]}, formula:'ŷ = ['+out.map(v=>v.toFixed(3)).join(', ')+']ᵀ'},
+];
+let cur=0, autoTimer=null;
+
+const svg=document.getElementById('net');
+function buildSVG(){
+  svg.innerHTML='';
+  // 层标签
+  layers.forEach(L=>{
+    const t=document.createElementNS('http://www.w3.org/2000/svg','text');
+    t.setAttribute('class','layer-label'); t.setAttribute('x',L.x); t.setAttribute('y',30); t.textContent=L.name;
+    svg.appendChild(t);
+  });
+  // 连线 input->hidden
+  for(let i=0;i<3;i++) for(let j=0;j<4;j++){
+    const ln=document.createElementNS('http://www.w3.org/2000/svg','line');
+    ln.setAttribute('class','edge'); ln.setAttribute('id','e1-'+i+'-'+j);
+    ln.setAttribute('x1',inX); ln.setAttribute('y1',inY[i]);
+    ln.setAttribute('x2',hidX); ln.setAttribute('y2',hidY[j]);
+    svg.appendChild(ln);
+    // 权重标签
+    const mid=document.createElementNS('http://www.w3.org/2000/svg','text');
+    mid.setAttribute('class','edge-label'); mid.setAttribute('id','el1-'+i+'-'+j);
+    const mx=(inX+hidX)/2, my=(inY[i]+hidY[j])/2;
+    mid.setAttribute('x',mx+(j%2?6:-30)); mid.setAttribute('y',my-3);
+    mid.textContent=W1[j][i].toFixed(1);
+    svg.appendChild(mid);
+  }
+  // 连线 hidden->output
+  for(let i=0;i<4;i++) for(let j=0;j<2;j++){
+    const ln=document.createElementNS('http://www.w3.org/2000/svg','line');
+    ln.setAttribute('class','edge'); ln.setAttribute('id','e2-'+i+'-'+j);
+    ln.setAttribute('x1',hidX); ln.setAttribute('y1',hidY[i]);
+    ln.setAttribute('x2',outX); ln.setAttribute('y2',outY[j]);
+    svg.appendChild(ln);
+    const mid=document.createElementNS('http://www.w3.org/2000/svg','text');
+    mid.setAttribute('class','edge-label'); mid.setAttribute('id','el2-'+i+'-'+j);
+    const mx=(hidX+outX)/2, my=(hidY[i]+outY[j])/2;
+    mid.setAttribute('x',mx+(j?6:-30)); mid.setAttribute('y',my-3);
+    mid.textContent=W2[j][i].toFixed(1);
+    svg.appendChild(mid);
+  }
+  // 节点
+  layers.forEach((L,li)=>{
+    L.ys.forEach((y,ni)=>{
+      const c=document.createElementNS('http://www.w3.org/2000/svg','circle');
+      c.setAttribute('class','node-circle '+(L.kind==='input'?'input':L.kind==='output'?'output':''));
+      c.setAttribute('id','n-'+li+'-'+ni);
+      c.setAttribute('cx',L.x); c.setAttribute('cy',y); c.setAttribute('r',22);
+      svg.appendChild(c);
+      const lbl=document.createElementNS('http://www.w3.org/2000/svg','text');
+      lbl.setAttribute('class','node-label'); lbl.setAttribute('id','nv-'+li+'-'+ni);
+      lbl.setAttribute('x',L.x); lbl.setAttribute('y',y+4);
+      lbl.textContent='—';
+      svg.appendChild(lbl);
+      const nm=document.createElementNS('http://www.w3.org/2000/svg','text');
+      nm.setAttribute('class','layer-label'); nm.setAttribute('x',L.x); nm.setAttribute('y',y+40);
+      nm.setAttribute('font-size','10px'); nm.textContent=L.labels[ni];
+      svg.appendChild(nm);
+    });
+  });
+}
+
+function clearAll(){
+  document.querySelectorAll('.edge.active,.edge.done').forEach(e=>e.classList.remove('active','done'));
+  document.querySelectorAll('.edge-label.active').forEach(e=>e.classList.remove('active'));
+  document.querySelectorAll('.node-circle.active,.node-circle.done').forEach(e=>e.classList.remove('active','done'));
+  // 重置节点显示
+  layers.forEach((L,li)=>{
+    L.ys.forEach((y,ni)=>{
+      const lbl=document.getElementById('nv-'+li+'-'+ni);
+      if(lbl) lbl.textContent='—';
+    });
+  });
+}
+
+function render(){
+  clearAll();
+  const s=steps[cur];
+  const a=s.active;
+  // 输入层
+  if(a.in) a.in.forEach(i=>{
+    document.getElementById('n-0-'+i).classList.add('active');
+    document.getElementById('nv-0-'+i).textContent=x[i].toFixed(1);
+  });
+  if(cur>=1){ // z1 已算
+    for(let i=0;i<3;i++) for(let j=0;j<4;j++){
+      const e=document.getElementById('e1-'+i+'-'+j);
+      const el=document.getElementById('el1-'+i+'-'+j);
+      if(a.edges1){ e.classList.add('active'); el.classList.add('active'); }
+      else if(cur>1){ e.classList.add('done'); }
+    }
+    // 隐藏层显示 z（第1步）或 a（第2步及以后）
+    for(let j=0;j<4;j++){
+      const n=document.getElementById('n-1-'+j);
+      const nv=document.getElementById('nv-1-'+j);
+      if(a.hid && a.hid.includes(j)) n.classList.add('active');
+      else if(cur>2) n.classList.add('done');
+      if(cur===1) nv.textContent='z='+z1[j].toFixed(2);
+      else if(cur>=2) nv.textContent=a1[j].toFixed(2);
+    }
+  }
+  if(cur>=2){ // a1 完成
+    for(let i=0;i<3;i++) for(let j=0;j<4;j++){ const e=document.getElementById('e1-'+i+'-'+j); if(!e.classList.contains('done')) e.classList.add('done'); }
+  }
+  if(cur>=3){ // z2
+    for(let i=0;i<4;i++) for(let j=0;j<2;j++){
+      const e=document.getElementById('e2-'+i+'-'+j);
+      const el=document.getElementById('el2-'+i+'-'+j);
+      if(a.edges2){ e.classList.add('active'); el.classList.add('active'); }
+      else if(cur>3) e.classList.add('done');
+    }
+    for(let j=0;j<2;j++){
+      const n=document.getElementById('n-2-'+j);
+      const nv=document.getElementById('nv-2-'+j);
+      if(a.out && a.out.includes(j)) n.classList.add('active');
+      else if(cur>4) n.classList.add('done');
+      if(cur===3) nv.textContent='z='+z2[j].toFixed(2);
+      else if(cur>=4) nv.textContent=out[j].toFixed(2);
+    }
+  }
+  // 隐藏层 done 标记
+  if(cur>2){ for(let j=0;j<4;j++) document.getElementById('n-1-'+j).classList.add('done'); }
+  // 信息面板
+  let html='<div class="step-title">'+s.title+'</div><div class="step-desc">'+s.desc;
+  if(s.formula) html+='<br><span class="formula">'+s.formula+'</span>';
+  html+='</div>';
+  document.getElementById('infoPanel').innerHTML=html;
+  document.getElementById('stepInfo').textContent=cur+' / '+(steps.length-1);
+}
+
+function nextStep(){
+  if(cur>=steps.length-1) return;
+  cur++; render();
+}
+function resetAll(){
+  if(autoTimer){clearInterval(autoTimer);autoTimer=null;document.getElementById('btn-auto').textContent='⏯ 自动播放';}
+  cur=0; render();
+}
+function toggleAuto(){
+  if(autoTimer){clearInterval(autoTimer);autoTimer=null;document.getElementById('btn-auto').textContent='⏯ 自动播放';return;}
+  document.getElementById('btn-auto').textContent='⏸ 暂停';
+  autoTimer=setInterval(()=>{
+    if(cur<steps.length-1) nextStep();
+    else{clearInterval(autoTimer);autoTimer=null;document.getElementById('btn-auto').textContent='⏯ 自动播放';}
+  },1100);
+}
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', render);
+buildSVG();
+render();
+</script>
+</body>
+</html>

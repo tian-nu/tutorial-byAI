@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Express 中间件管道 — 请求处理流程</title>
+<style>
+:root {
+  --bg: #f5f5f5; --card: #fff; --text: #333; --sub: #666;
+  --border: #ddd; --blue: #3498db; --blue-light: #ebf5fb;
+  --green: #27ae60; --red: #e74c3c; --orange: #f39c12;
+  --shadow: 0 2px 8px rgba(0,0,0,.06);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1a1a2e; --card: #16213e; --text: #e0e0e0; --sub: #aaa;
+    --border: #333; --blue: #5dade2; --blue-light: rgba(93,173,226,.1);
+    --shadow: 0 2px 8px rgba(0,0,0,.3);
+  }
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column;align-items:center;padding:20px 16px;min-height:100vh}
+h1{font-size:1.35em;text-align:center;margin-bottom:4px}
+.desc{font-size:.82em;color:var(--sub);margin-bottom:14px;text-align:center;max-width:760px;line-height:1.6}
+.controls{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-bottom:14px;align-items:center}
+.controls button{padding:5px 14px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);cursor:pointer;font-size:.82em;transition:.15s}
+.controls button:hover{opacity:.8}
+.controls button.primary{background:var(--blue);color:#fff;border-color:var(--blue)}
+.controls button.primary:hover{opacity:.85}
+.step-indicator{font-size:.78em;color:var(--sub);min-width:60px;text-align:center}
+
+/* pipeline */
+.pipeline{display:flex;align-items:flex-start;justify-content:center;flex-wrap:wrap;gap:0;width:100%;max-width:960px;margin-bottom:10px}
+.node{background:var(--card);border:2px solid var(--border);border-radius:10px;padding:10px 12px;min-width:100px;max-width:130px;text-align:center;transition:all .35s;opacity:.5;position:relative}
+.node.active{opacity:1;border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-light);transform:translateY(-2px)}
+.node .name{font-weight:600;font-size:.78em;margin-bottom:3px}
+.node .role{font-size:.65em;color:var(--sub);line-height:1.4}
+.arrow{display:flex;align-items:center;font-size:1.3em;color:var(--sub);padding:0 4px;margin-top:22px;opacity:.5;transition:opacity .35s}
+.arrow.active{opacity:1;color:var(--blue)}
+.arrow.dashed{color:var(--red);opacity:0;transition:opacity .35s}
+.arrow.dashed.visible{opacity:1}
+
+/* error row */
+.error-row{display:flex;justify-content:center;align-items:flex-start;gap:0;width:100%;max-width:960px;margin-bottom:10px;flex-wrap:wrap}
+.error-node{background:var(--card);border:2px dashed var(--red);border-radius:10px;padding:8px 12px;min-width:110px;text-align:center;transition:all .35s;opacity:.3}
+.error-node.active{opacity:1;border-color:var(--red);box-shadow:0 0 0 3px rgba(231,76,60,.15);transform:translateY(-2px)}
+.error-node .name{font-weight:600;font-size:.78em;color:var(--red);margin-bottom:2px}
+.error-node .role{font-size:.65em;color:var(--sub);line-height:1.4}
+
+/* info panel */
+.info-panel{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px 16px;width:100%;max-width:760px;margin-bottom:10px;min-height:60px;transition:all .3s}
+.info-panel .step-title{font-weight:600;font-size:.85em;margin-bottom:4px;color:var(--blue)}
+.info-panel .step-desc{font-size:.78em;color:var(--sub);line-height:1.5}
+.info-panel .step-desc code{font-size:.9em;background:var(--blue-light);padding:1px 5px;border-radius:3px}
+
+footer{margin-top:16px;font-size:.7em;color:var(--sub);text-align:center;line-height:1.6}
+footer a{color:var(--sub)}
+</style>
+</head>
+<body>
+<h1>Express 中间件管道 — 请求处理流程</h1>
+<p class="desc">
+  一个 HTTP 请求从客户端发出，依次经过 morgan、cors、express.json()、自定义 logger 中间件，
+  到达路由处理函数（GET /api/articles），最后返回响应。若中途出错，由 errorHandler 兜底。
+</p>
+
+<div class="controls">
+  <button id="btn-next" class="primary" onclick="nextStep()">▶ 下一步</button>
+  <button id="btn-auto" onclick="toggleAuto()">⏯ 自动播放</button>
+  <button id="btn-reset" onclick="resetAll()">↺ 重置</button>
+  <span class="step-indicator" id="stepInfo"></span>
+</div>
+
+<!-- 正常流程行 -->
+<div class="pipeline" id="pipeline">
+  <div class="node" id="n-client"><div class="name">客户端</div><div class="role">发送 HTTP 请求</div></div>
+  <div class="arrow" id="a0">→</div>
+  <div class="node" id="n-morgan"><div class="name">morgan</div><div class="role">记录请求日志<br>(dev 格式)</div></div>
+  <div class="arrow" id="a1">→</div>
+  <div class="node" id="n-cors"><div class="name">cors</div><div class="role">设置跨域响应头<br>允许跨域访问</div></div>
+  <div class="arrow" id="a2">→</div>
+  <div class="node" id="n-json"><div class="name">express.json()</div><div class="role">解析 JSON 请求体<br>→ req.body</div></div>
+  <div class="arrow" id="a3">→</div>
+  <div class="node" id="n-logger"><div class="name">自定义 logger</div><div class="role">记录方法、路径<br>和响应耗时</div></div>
+  <div class="arrow" id="a4">→</div>
+  <div class="node" id="n-route"><div class="name">路由处理函数</div><div class="role">GET /api/articles<br>处理业务逻辑</div></div>
+  <div class="arrow" id="a5">→</div>
+  <div class="node" id="n-resp"><div class="name">响应</div><div class="role">返回数据<br>给客户端</div></div>
+  <div class="arrow" id="a6">→</div>
+  <div class="node" id="n-client2"><div class="name">客户端</div><div class="role">接收响应</div></div>
+</div>
+
+<!-- 错误处理行（虚线连接） -->
+<div class="error-row" id="errorRow">
+  <div class="arrow dashed" id="a-err">↘ 出错时</div>
+  <div class="error-node" id="n-err"><div class="name">errorHandler</div><div class="role">(err,req,res,next)<br>全局错误处理<br>返回 JSON 错误</div></div>
+  <div class="arrow dashed" id="a-err2">→</div>
+  <div class="node" id="n-err-resp" style="opacity:.3;border-style:dashed;border-color:var(--red)"><div class="name" style="color:var(--red)">错误响应</div><div class="role">返回 JSON<br>错误信息</div></div>
+</div>
+
+<!-- 信息面板 -->
+<div class="info-panel" id="infoPanel">
+  <div class="step-title">准备就绪</div>
+  <div class="step-desc">点击「下一步」开始观察请求在 Express 中间件管道中的流转过程。</div>
+</div>
+
+<footer>
+  数据来源：基于 Node.js 后端速成教程 第06章细纲<br>
+  本可视化对应 <a href="06-中间件：流水线上的工人.md">Node.js速成后端教程 第06章</a>
+</footer>
+
+<script>
+const steps = [
+  {id:'n-client',  arrow:'a0', title:'客户端发送请求', desc:'客户端（浏览器 / Thunder Client / Postman）发起 HTTP 请求，例如 <code>GET /api/articles</code>。请求进入 Express 应用。'},
+  {id:'n-morgan',  arrow:'a1', title:'第 1 站：morgan（日志中间件）', desc:'<code>morgan(\'dev\')</code> 记录请求的方法、URL、状态码和响应时间。终端输出彩色日志：<code>GET /api/articles 200 15.234 ms - 345</code>。调用 <code>next()</code> 传给下一个中间件。'},
+  {id:'n-cors',    arrow:'a2', title:'第 2 站：cors（跨域中间件）', desc:'<code>cors()</code> 设置 <code>Access-Control-Allow-Origin</code> 等响应头，允许前端从不同域名访问后端 API。调用 <code>next()</code> 传给下一个中间件。'},
+  {id:'n-json',    arrow:'a3', title:'第 3 站：express.json()（JSON 解析）', desc:'<code>express.json()</code> 读取请求体中的 JSON 数据，解析为 JavaScript 对象挂到 <code>req.body</code> 上。如果请求体不是 JSON 或为空，<code>req.body</code> 为 <code>{}</code>。调用 <code>next()</code> 传给下一个中间件。'},
+  {id:'n-logger',  arrow:'a4', title:'第 4 站：自定义 logger 中间件', desc:'自定义的 <code>logger.js</code> 记录请求开始时间，打印 <code>[时间戳] 方法 路径</code>。通过 <code>res.on(\'finish\')</code> 监听响应完成事件，计算并打印耗时。调用 <code>next()</code> 传给下一个中间件。'},
+  {id:'n-route',   arrow:'a5', title:'第 5 站：路由处理函数 GET /api/articles', desc:'Express 匹配到路由 <code>GET /api/articles</code>，执行对应的处理函数。此时 <code>req.body</code> 已被解析好，<code>req.method</code> 和 <code>req.url</code> 可直接使用。处理函数查询数据并调用 <code>res.json()</code> 返回响应。'},
+  {id:'n-resp',    arrow:'a6', title:'正常流程：返回响应', desc:'路由处理函数调用 <code>res.json(data)</code> 后，Express 将数据序列化为 JSON，设置 <code>Content-Type: application/json</code>，通过 HTTP 连接发送给客户端。响应完成后，触发 <code>res.on(\'finish\')</code> 事件。'},
+  {id:'n-client2', arrow:null, title:'客户端接收响应', desc:'客户端收到 HTTP 响应，解析 JSON 数据。若状态码为 200，表示请求成功。整个请求-响应周期结束。'},
+];
+
+let cur = 0;
+let autoTimer = null;
+
+function clearAllActive() {
+  document.querySelectorAll('.node.active,.error-node.active').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.arrow.active').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.arrow.dashed.visible').forEach(el => el.classList.remove('visible'));
+  document.getElementById('n-err-resp').classList.remove('active');
+}
+
+function resetAll() {
+  clearInterval(autoTimer);
+  autoTimer = null;
+  cur = 0;
+  clearAllActive();
+  document.getElementById('btn-auto').textContent = '⏯ 自动播放';
+  document.getElementById('btn-auto').classList.remove('primary');
+  document.getElementById('stepInfo').textContent = '';
+  document.getElementById('infoPanel').innerHTML = '<div class="step-title">准备就绪</div><div class="step-desc">点击「下一步」开始观察请求在 Express 中间件管道中的流转过程。</div>';
+}
+
+function nextStep() {
+  if (cur >= steps.length) {
+    // show error flow
+    if (cur === steps.length) {
+      showErrorFlow();
+      cur++;
+    }
+    return;
+  }
+  clearAllActive();
+  const s = steps[cur];
+  const nodeEl = document.getElementById(s.id);
+  if (nodeEl) nodeEl.classList.add('active');
+  if (s.arrow) {
+    const arrowEl = document.getElementById(s.arrow);
+    if (arrowEl) arrowEl.classList.add('active');
+  }
+  document.getElementById('infoPanel').innerHTML = '<div class="step-title">' + s.title + '</div><div class="step-desc">' + s.desc + '</div>';
+  document.getElementById('stepInfo').textContent = (cur + 1) + '/' + (steps.length + 1);
+  cur++;
+}
+
+function showErrorFlow() {
+  clearAllActive();
+  // highlight route handler as the "error origin"
+  document.getElementById('n-route').classList.add('active');
+  document.getElementById('a-err').classList.add('visible');
+  document.getElementById('n-err').classList.add('active');
+  document.getElementById('a-err2').classList.add('visible');
+  document.getElementById('n-err-resp').classList.add('active');
+  document.getElementById('infoPanel').innerHTML = '<div class="step-title" style="color:var(--red)">异常流程：错误处理中间件捕获错误</div><div class="step-desc">当路由处理函数或前面的中间件中抛出错误（<code>throw new Error()</code>），Express 跳过后续普通中间件，直接将错误交给 <code>errorHandler</code>（四个参数：<code>err, req, res, next</code>）。errorHandler 返回 JSON 格式的错误信息：<br><code>{"success":false,"error":{"message":"错误描述"}}</code>。<br>🔥 注意：errorHandler 必须放在所有路由之后，且必须有四个参数，Express 通过参数个数来识别它。</div>';
+  document.getElementById('stepInfo').textContent = (steps.length + 1) + '/' + (steps.length + 1);
+}
+
+function toggleAuto() {
+  if (autoTimer) {
+    clearInterval(autoTimer);
+    autoTimer = null;
+    document.getElementById('btn-auto').textContent = '⏯ 自动播放';
+    document.getElementById('btn-auto').classList.remove('primary');
+    return;
+  }
+  resetAll();
+  document.getElementById('btn-auto').textContent = '⏸ 暂停';
+  document.getElementById('btn-auto').classList.add('primary');
+  let autoIdx = 0;
+  autoTimer = setInterval(() => {
+    if (autoIdx < steps.length) {
+      nextStep();
+      autoIdx++;
+    } else if (autoIdx === steps.length) {
+      showErrorFlow();
+      autoIdx++;
+    } else {
+      clearInterval(autoTimer);
+      autoTimer = null;
+      document.getElementById('btn-auto').textContent = '⏯ 自动播放';
+      document.getElementById('btn-auto').classList.remove('primary');
+    }
+  }, 2000);
+}
+</script>
+</body>
+</html>

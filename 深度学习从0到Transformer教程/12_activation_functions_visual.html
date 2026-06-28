@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>激活函数家族 — 五种函数曲线对比</title>
+<!-- 纯 Canvas 实现，无外部依赖，可离线运行。GELU 用 tanh 近似式 -->
+<style>
+:root {
+  --bg: #f5f5f5; --card: #fff; --text: #333; --sub: #666;
+  --border: #ddd; --blue: #3498db; --blue-light: #ebf5fb;
+  --green: #27ae60; --red: #e74c3c; --orange: #f39c12; --purple: #9b59b6;
+  --shadow: 0 2px 8px rgba(0,0,0,.06);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1a1a2e; --card: #16213e; --text: #e0e0e0; --sub: #aaa;
+    --border: #333; --blue: #5dade2; --blue-light: rgba(93,173,226,.1);
+    --shadow: 0 2px 8px rgba(0,0,0,.3);
+  }
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column;align-items:center;padding:20px 16px;min-height:100vh}
+h1{font-size:1.35em;text-align:center;margin-bottom:4px}
+.desc{font-size:.82em;color:var(--sub);margin-bottom:14px;text-align:center;max-width:800px;line-height:1.6}
+
+.controls{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-bottom:12px;align-items:center;font-size:.82em}
+.controls label{display:flex;align-items:center;gap:5px;cursor:pointer;padding:4px 10px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text)}
+.controls input[type=checkbox]{accent-color:var(--blue)}
+.controls .swatch{width:14px;height:3px;border-radius:2px;display:inline-block}
+.controls .sep{width:1px;height:20px;background:var(--border);margin:0 4px}
+.controls button{padding:5px 14px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);cursor:pointer;font-size:.82em}
+.controls button.primary{background:var(--blue);color:#fff;border-color:var(--blue)}
+.controls button:hover{opacity:.85}
+
+.canvas-wrap{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px;box-shadow:var(--shadow);margin-bottom:12px}
+canvas{display:block;max-width:100%;cursor:crosshair}
+.hover-info{font-size:.76em;color:var(--sub);text-align:center;margin-top:6px;min-height:18px}
+.hover-info code{background:var(--blue-light);padding:1px 5px;border-radius:3px;color:var(--text)}
+
+table{width:100%;max-width:880px;border-collapse:collapse;font-size:.76em;margin-bottom:10px;background:var(--card);box-shadow:var(--shadow);border-radius:8px;overflow:hidden}
+table th,table td{padding:7px 10px;border:1px solid var(--border);text-align:left}
+table th{background:var(--blue-light);color:var(--text)}
+table td{color:var(--sub)}
+table td code{background:var(--blue-light);padding:1px 4px;border-radius:3px;color:var(--text)}
+.fn-sigmoid{color:#3498db;font-weight:600}
+.fn-tanh{color:#e74c3c;font-weight:600}
+.fn-relu{color:#27ae60;font-weight:600}
+.fn-leaky{color:#f39c12;font-weight:600}
+.fn-gelu{color:#9b59b6;font-weight:600}
+
+footer{margin-top:6px;font-size:.7em;color:var(--sub);text-align:center;line-height:1.6}
+footer a{color:var(--sub)}
+</style>
+</head>
+<body>
+<h1>激活函数家族 — 五种函数曲线对比</h1>
+<p class="desc">
+  同一坐标系叠加 sigmoid / tanh / ReLU / LeakyReLU / GELU 五种激活函数。勾选框控制显示哪些函数；
+  切换「显示导数」可看各函数导数曲线（梯度特性决定训练是否易「梯度消失/爆炸」）。鼠标在图上移动可读取该 x 处的函数值与导数值。
+</p>
+
+<div class="controls" id="ctrls">
+  <label><input type="checkbox" id="f-sigmoid" checked><span class="swatch" style="background:#3498db"></span>sigmoid</label>
+  <label><input type="checkbox" id="f-tanh" checked><span class="swatch" style="background:#e74c3c"></span>tanh</label>
+  <label><input type="checkbox" id="f-relu" checked><span class="swatch" style="background:#27ae60"></span>ReLU</label>
+  <label><input type="checkbox" id="f-leaky" checked><span class="swatch" style="background:#f39c12"></span>LeakyReLU</label>
+  <label><input type="checkbox" id="f-gelu" checked><span class="swatch" style="background:#9b59b6"></span>GELU</label>
+  <span class="sep"></span>
+  <button id="btn-deriv" onclick="toggleDeriv()">显示导数</button>
+  <button onclick="resetView()">↺ 重置</button>
+</div>
+
+<div class="canvas-wrap">
+  <canvas id="cv" width="820" height="380"></canvas>
+  <div class="hover-info" id="hoverInfo">把鼠标移到图上查看各函数在该 x 的值与导数。</div>
+</div>
+
+<table>
+  <tr><th>函数</th><th>公式</th><th>值域</th><th>导数特点</th><th>主要问题 / 适用场景</th></tr>
+  <tr><td class="fn-sigmoid">sigmoid</td><td><code>1/(1+e⁻ˣ)</code></td><td>(0, 1)</td><td>两端饱和，导数最大 0.25</td><td>梯度消失；二分类输出层</td></tr>
+  <tr><td class="fn-tanh">tanh</td><td><code>(eˣ−e⁻ˣ)/(eˣ+e⁻ˣ)</code></td><td>(−1, 1)</td><td>零中心，两端饱和</td><td>梯度消失；RNN 常用</td></tr>
+  <tr><td class="fn-relu">ReLU</td><td><code>max(0, x)</code></td><td>[0, ∞)</td><td>正区恒为 1，负区为 0</td><td>神经元死亡；隐藏层默认选择</td></tr>
+  <tr><td class="fn-leaky">LeakyReLU</td><td><code>x&gt;0?x:0.1x</code></td><td>(−∞, ∞)</td><td>负区有微小梯度 0.1</td><td>缓解死亡；ReLU 变体</td></tr>
+  <tr><td class="fn-gelu">GELU</td><td><code>x·Φ(x)</code></td><td>(≈−0.17, ∞)</td><td>0 附近平滑过渡</td><td>Transformer 标配</td></tr>
+</table>
+
+<footer>
+  数据来源：基于 12-激活函数家族 教程（大纲第二篇 Ch12）<br>
+  本可视化对应 <a href="12-激活函数家族.md">深度学习从0到Transformer教程 第12章</a>
+</footer>
+
+<script>
+const fns={
+  sigmoid:{name:'sigmoid',color:'#3498db',f:x=>1/(1+Math.exp(-x)),d:x=>{const e=Math.exp(-x);return e/((1+e)*(1+e));}},
+  tanh:{name:'tanh',color:'#e74c3c',f:x=>Math.tanh(x),d:x=>1-Math.tanh(x)**2},
+  relu:{name:'ReLU',color:'#27ae60',f:x=>x>0?x:0,d:x=>x>0?1:0},
+  leaky:{name:'LeakyReLU',color:'#f39c12',f:x=>x>0?x:0.1*x,d:x=>x>0?1:0.1},
+  gelu:{name:'GELU',color:'#9b59b6',
+    f:x=>0.5*x*(1+Math.tanh(Math.sqrt(2/Math.PI)*(x+0.044715*x**3))),
+    d:x=>{const c=Math.sqrt(2/Math.PI);const t=c*(x+0.044715*x**3);const se=1/Math.cosh(t)**2;return 0.5*(1+Math.tanh(t))+0.5*x*se*c*(1+0.134145*x**2);}}
+};
+let showDeriv=false;
+let mouseX=null;
+
+const cv=document.getElementById('cv');
+const ctx=cv.getContext('2d');
+const W=cv.width,H=cv.height;
+const XR=[-6,6];
+const YR_D=[-1.2,1.2];
+const YR_F=[-1.5,3];
+
+function activeFns(){
+  const out=[];
+  ['sigmoid','tanh','relu','leaky','gelu'].forEach(k=>{ if(document.getElementById('f-'+k).checked) out.push(k); });
+  return out;
+}
+function yRange(){ return showDeriv?YR_D:YR_F; }
+function X(x){ return 40+(x-XR[0])/(XR[1]-XR[0])*(W-50); }
+function Y(y){ const r=yRange(); return H-30-(y-r[0])/(r[1]-r[0])*(H-45); }
+function invX(px){ return XR[0]+(px-40)/(W-50)*(XR[1]-XR[0]); }
+
+function draw(){
+  const isDark=matchMedia('(prefers-color-scheme: dark)').matches;
+  const bg=isDark?'#16213e':'#fff', grid=isDark?'#2a3556':'#eee', axis=isDark?'#557':'#888', txt=isDark?'#e0e0e0':'#333';
+  const r=yRange();
+  ctx.clearRect(0,0,W,H); ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
+  // 网格
+  ctx.strokeStyle=grid; ctx.lineWidth=1; ctx.fillStyle=txt; ctx.font='11px system-ui';
+  for(let x=-6;x<=6;x+=2){ ctx.beginPath(); ctx.moveTo(X(x),Y(r[0])); ctx.lineTo(X(x),Y(r[1])); ctx.stroke(); ctx.fillText(x,X(x)-5,H-30+14); }
+  const step=r[1]-r[0]>4?1:0.5;
+  for(let y=Math.ceil(r[0]/step)*step;y<=r[1];y+=step){
+    ctx.beginPath(); ctx.moveTo(X(XR[0]),Y(y)); ctx.lineTo(X(XR[1]),Y(y)); ctx.stroke();
+    ctx.fillText(y.toFixed(step<1?1:0),8,Y(y)+4);
+  }
+  // 轴
+  ctx.strokeStyle=axis; ctx.lineWidth=1.4;
+  ctx.beginPath(); ctx.moveTo(X(XR[0]),Y(0)); ctx.lineTo(X(XR[1]),Y(0)); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(X(0),Y(r[0])); ctx.lineTo(X(0),Y(r[1])); ctx.stroke();
+  ctx.font='12px system-ui'; ctx.fillStyle=txt;
+  ctx.fillText('x', X(XR[1])-8, Y(0)-6);
+  ctx.fillText(showDeriv?'f′(x)':'f(x)', X(0)+6, Y(r[1])-2);
+  // 曲线
+  const af=activeFns();
+  af.forEach(k=>{
+    const fn=fns[k];
+    ctx.strokeStyle=fn.color; ctx.lineWidth=2.5; ctx.beginPath();
+    let started=false;
+    for(let x=XR[0];x<=XR[1];x+=0.04){
+      const v=showDeriv?fn.d(x):fn.f(x);
+      if(!isFinite(v)) continue;
+      const vv=Math.max(r[0]-1,Math.min(r[1]+1,v));
+      const Xp=X(x), Yp=Y(vv);
+      if(!started){ ctx.moveTo(Xp,Yp); started=true; } else ctx.lineTo(Xp,Yp);
+    }
+    ctx.stroke();
+  });
+  // 鼠标竖线
+  if(mouseX!=null){
+    const x=invX(mouseX);
+    ctx.strokeStyle=isDark?'#888':'#999'; ctx.lineWidth=1; ctx.setLineDash([4,3]);
+    ctx.beginPath(); ctx.moveTo(mouseX,Y(r[0])); ctx.lineTo(mouseX,Y(r[1])); ctx.stroke(); ctx.setLineDash([]);
+    // 各函数在该 x 的值
+    let info='x = <code>'+x.toFixed(2)+'</code>　';
+    af.forEach(k=>{
+      const fn=fns[k];
+      const v=showDeriv?fn.d(x):fn.f(x);
+      info+='<span style="color:'+fn.color+'">'+fn.name+'='+(isFinite(v)?v.toFixed(3):'—')+'</span>　';
+      // 点
+      if(isFinite(v)){
+        ctx.fillStyle=fn.color;
+        ctx.beginPath(); ctx.arc(mouseX,Y(v),4,0,Math.PI*2); ctx.fill();
+      }
+    });
+    document.getElementById('hoverInfo').innerHTML=info;
+  }
+}
+
+function toggleDeriv(){
+  showDeriv=!showDeriv;
+  const b=document.getElementById('btn-deriv');
+  b.textContent=showDeriv?'显示原函数':'显示导数';
+  b.classList.toggle('primary',showDeriv);
+  draw();
+}
+function resetView(){
+  ['sigmoid','tanh','relu','leaky','gelu'].forEach(k=>document.getElementById('f-'+k).checked=true);
+  showDeriv=false;
+  document.getElementById('btn-deriv').textContent='显示导数';
+  document.getElementById('btn-deriv').classList.remove('primary');
+  draw();
+}
+
+cv.addEventListener('mousemove',e=>{
+  const rect=cv.getBoundingClientRect();
+  mouseX=(e.clientX-rect.left)*(cv.width/rect.width);
+  draw();
+});
+cv.addEventListener('mouseleave',()=>{ mouseX=null; document.getElementById('hoverInfo').textContent='把鼠标移到图上查看各函数在该 x 的值与导数。'; draw(); });
+['f-sigmoid','f-tanh','f-relu','f-leaky','f-gelu'].forEach(id=>document.getElementById(id).addEventListener('change',draw));
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', draw);
+draw();
+</script>
+</body>
+</html>

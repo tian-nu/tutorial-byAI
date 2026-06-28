@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>ARP 请求-响应全过程</title>
+<style>
+:root{--bg:#f5f5f5;--card:#fff;--text:#333;--sub:#666;--border:#ccc;--hl:#3498db;--active:#2ecc71;--brd:#e74c3c}
+@media(prefers-color-scheme:dark){:root{--bg:#1a1a2e;--card:#16213e;--text:#e0e0e0;--sub:#aaa;--border:#444;--hl:#5dade2;--active:#58d68d;--brd:#ec7063}}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column;align-items:center;padding:20px;min-height:100vh}
+h1{font-size:1.4em;margin-bottom:4px;text-align:center}
+.desc{font-size:.85em;color:var(--sub);margin-bottom:14px;text-align:center;max-width:720px}
+.controls{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-bottom:14px}
+.controls button{padding:6px 16px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);cursor:pointer;font-size:.85em;transition:.15s}
+.controls button:hover{opacity:.8}
+.controls button.active{background:#3498db;color:#fff;border-color:#3498db}
+.topo{display:flex;align-items:center;justify-content:center;gap:30px;flex-wrap:wrap;margin-bottom:14px}
+.node{background:var(--card);border:2px solid var(--border);border-radius:10px;padding:12px 16px;text-align:center;min-width:140px;transition:all .4s}
+.node .title{font-weight:bold;font-size:.9em;margin-bottom:4px}
+.node .ip{font-size:.78em;color:var(--sub)}
+.node .mac{font-size:.72em;color:var(--sub);font-family:monospace}
+.node.hl{border-color:var(--hl);box-shadow:0 0 12px rgba(52,152,219,.4)}
+.switch-box{display:flex;flex-direction:column;align-items:center;min-width:80px}
+.switch-icon{font-size:2em;margin-bottom:4px}
+.switch-label{font-size:.72em;color:var(--sub)}
+.msg-log{width:100%;max-width:720px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:14px;min-height:200px}
+.msg-log h3{font-size:.95em;margin-bottom:8px;text-align:center}
+.msg{font-size:.82em;padding:6px 0;border-bottom:1px solid var(--border);opacity:.35;transition:opacity .4s}
+.msg.active{opacity:1;font-weight:500}
+.msg .tag{display:inline-block;padding:1px 6px;border-radius:4px;font-size:.72em;margin-right:6px;color:#fff}
+.tag-brd{background:#e74c3c} .tag-uni{background:#2ecc71} .tag-sys{background:#7f8c8d}
+footer{margin-top:20px;font-size:.7em;color:var(--sub);text-align:center;line-height:1.6}
+footer a{color:var(--sub)}
+</style>
+</head>
+<body>
+<h1>ARP 请求-响应全过程</h1>
+<p class="desc">PC-A 想知道 PC-B 的 MAC 地址 → 广播 ARP 请求 → PC-B 单播回复 → 写入 ARP 缓存。交换机转发所有帧。</p>
+<div class="controls">
+  <button id="btn-play" onclick="play()" class="active">▶ 逐步播放</button>
+  <button onclick="resetV()">↺ 重置</button>
+  <span id="stepInfo" style="font-size:.8em;color:var(--sub);align-self:center"></span>
+</div>
+<div class="topo">
+  <div class="node" id="pca"><div class="title">PC-A</div><div class="ip">192.168.1.3</div><div class="mac">AA:AA:AA:AA:AA:AA</div></div>
+  <div class="switch-box"><div class="switch-icon">🔀</div><div class="switch-label">交换机<br>（泛洪/转发）</div></div>
+  <div class="node" id="pcb"><div class="title">PC-B</div><div class="ip">192.168.1.5</div><div class="mac">BB:BB:BB:BB:BB:BB</div></div>
+  <div class="node" id="pcc"><div class="title">PC-C</div><div class="ip">192.168.1.7</div><div class="mac">CC:CC:CC:CC:CC:CC</div></div>
+</div>
+<div class="msg-log" id="msgLog">
+  <h3>ARP 交互日志</h3>
+  <div class="msg" id="m0"><span class="tag tag-sys">准备</span>PC-A 查看本机 ARP 缓存 — 没有 192.168.1.5 的记录</div>
+  <div class="msg" id="m1"><span class="tag tag-brd">广播</span>PC-A 广播 ARP 请求："谁是 192.168.1.5？"（目标 MAC = FF:FF:FF:FF:FF:FF）</div>
+  <div class="msg" id="m2"><span class="tag tag-brd">泛洪</span>交换机收到广播帧 → 泛洪到所有端口（除来源端口）</div>
+  <div class="msg" id="m3"><span class="tag tag-sys">检查</span>PC-B 收到：目标 IP = 192.168.1.5 ✓ 这就是我！PC-C 收到：目标 IP ≠ 自己 → 丢弃</div>
+  <div class="msg" id="m4"><span class="tag tag-uni">单播</span>PC-B 单播 ARP 响应："我是 192.168.1.5，MAC = BB:BB:BB:BB:BB:BB" → 发给 PC-A</div>
+  <div class="msg" id="m5"><span class="tag tag-uni">完成</span>PC-A 收到 ARP 响应 → 写入 ARP 缓存：192.168.1.5 → BB:BB:BB:BB:BB:BB</div>
+</div>
+<footer>
+  数据来源：基于 network_architecture_detailed_outline.md v2<br>
+  本可视化对应 <a href="#">网络架构与传输全解</a> 步骤08（ARP协议）
+</footer>
+
+<script>
+let steps=[
+  {msg:'m0',nodes:{pca:true},info:'步骤 1/6：PC-A 查询 ARP 缓存'},
+  {msg:'m1',nodes:{pca:true},info:'步骤 2/6：PC-A 广播 ARP 请求'},
+  {msg:'m2',nodes:{},info:'步骤 3/6：交换机泛洪'},
+  {msg:'m3',nodes:{pcb:true,pcc:'dim'},info:'步骤 4/6：PC-B 接收，PC-C 丢弃'},
+  {msg:'m4',nodes:{pcb:true},info:'步骤 5/6：PC-B 单播回复'},
+  {msg:'m5',nodes:{pca:true},info:'步骤 6/6：PC-A 写入 ARP 缓存'},
+];
+let cur=0,timer=null;
+function highlight(id,v){
+  let el=document.getElementById(id);
+  if(v===true)el.classList.add('hl');
+  else if(v==='dim')el.style.opacity='0.4';
+  else el.classList.remove('hl'),el.style.opacity='';
+}
+function play(){
+  clearInterval(timer);
+  if(cur>=steps.length){cur=0;resetV()}
+  document.getElementById('btn-play').classList.add('active');
+  timer=setInterval(()=>{
+    if(cur>=steps.length){clearInterval(timer);document.getElementById('btn-play').classList.remove('active');return}
+    let s=steps[cur];
+    resetHighlights();
+    document.querySelectorAll('.msg').forEach(m=>m.classList.remove('active'));
+    document.getElementById(s.msg).classList.add('active');
+    for(let[k,v] of Object.entries(s.nodes))highlight(k,v);
+    document.getElementById('stepInfo').textContent=s.info;
+    cur++;
+    if(cur>=steps.length){clearInterval(timer);document.getElementById('btn-play').classList.remove('active')}
+  },1800);
+}
+function resetHighlights(){
+  ['pca','pcb','pcc'].forEach(id=>{let e=document.getElementById(id);e.classList.remove('hl');e.style.opacity=''})
+}
+function resetV(){
+  clearInterval(timer);cur=0;
+  resetHighlights();
+  document.querySelectorAll('.msg').forEach(m=>m.classList.remove('active'));
+  document.getElementById('btn-play').classList.add('active');
+  document.getElementById('stepInfo').textContent='';
+}
+</script>
+</body>
+</html>

@@ -20,7 +20,7 @@
 
 就像你手机上的输入法，你打"我今天心情很"，输入法会联想"好"、"糟糕"、"一般"。LLM就是这种联想的**超级加强版**——它读完了大半个互联网的内容，所以它"猜"得极其准确。
 
-> 📊 可视化演示见 [LLM工作原理动画](../.project/docs/tutorials/ai_coding_llm_visual.html)
+> 📊 可视化演示见 [LLM工作原理动画](ai_coding_llm_visual.html)
 
 ---
 

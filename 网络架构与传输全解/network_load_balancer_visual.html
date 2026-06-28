@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>负载均衡策略对比</title>
+<style>
+:root{--bg:#fff;--fg:#1a1a2e;--border:#d0d0d0;--card:#f8f9fa;--btn:#e9ecef;--btn-fg:#333;--shadow:0 2px 8px rgba(0,0,0,.1);--info-bg:#fff3cd;--info-bd:#ffc107;--clr-rr:#4a90d9;--clr-lc:#28a745;--clr-ip:#e91e63;--lb-clr:#f5a623}
+[data-theme="dark"]{--bg:#1a1a2e;--fg:#e0e0e0;--border:#444;--card:#2d2d44;--btn:#3a3a5a;--btn-fg:#ccc;--shadow:0 2px 8px rgba(0,0,0,.4);--info-bg:#3a2a10;--info-bd:#8a7a3a;--clr-rr:#5c9ce6;--clr-lc:#4caf50;--clr-ip:#f06292;--lb-clr:#ffc107}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--fg);min-height:100vh;transition:background .3s,color .3s}
+.header{max-width:960px;margin:0 auto;padding:20px 20px 0;display:flex;justify-content:space-between;align-items:center}
+.header h1{font-size:1.3em;font-weight:600}
+.theme-btn{background:var(--btn);color:var(--btn-fg);border:1px solid var(--border);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:.9em}
+.desc{max-width:960px;margin:0 auto;padding:6px 20px 10px;font-size:.85em;opacity:.75}
+.controls{max-width:960px;margin:0 auto 10px;padding:0 20px;display:flex;gap:8px;flex-wrap:wrap}
+.controls button{background:var(--btn);color:var(--btn-fg);border:1px solid var(--border);padding:8px 14px;border-radius:6px;cursor:pointer;font-size:.85em;transition:background .2s,transform .15s}
+.controls button:hover{transform:translateY(-1px)}
+.controls button.active{background:var(--lb-clr);color:#fff;border-color:var(--lb-clr)}
+.step-info{max-width:960px;margin:0 auto 16px;padding:12px 20px;background:var(--info-bg);border-radius:8px;border-left:4px solid var(--info-bd);font-size:.88em;line-height:1.6;min-height:48px}
+.canvas-wrap{max-width:960px;margin:0 auto;padding:0 20px 20px}
+canvas{width:100%;height:auto;border:1px solid var(--border);border-radius:10px;background:var(--card);box-shadow:var(--shadow)}
+.footer{max-width:960px;margin:0 auto;padding:10px 20px 20px;font-size:.78em;opacity:.6;text-align:center}
+.footer a{color:var(--fg)}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>负载均衡策略对比</h1>
+  <button class="theme-btn" onclick="toggleTheme()" title="切换暗色/亮色模式">🌓 切换主题</button>
+</div>
+<div class="desc">
+  本可视化对应 <a href="35-负载均衡.md" style="color:inherit">网络架构与传输全解 步骤 35（负载均衡）</a>。通过动画对比轮询、最少连接、IP Hash 三种算法的请求分配方式。
+</div>
+
+<div class="controls">
+  <button id="algo-rr" class="active" onclick="setAlgo('rr')">🔄 轮询 (Round Robin)</button>
+  <button id="algo-lc" onclick="setAlgo('lc')">📊 最少连接 (Least)</button>
+  <button id="algo-ip" onclick="setAlgo('ip')">🔗 IP Hash</button>
+  <button onclick="resetAnim()">⟳ 重置</button>
+</div>
+
+<div class="step-info" id="step-info">
+  <strong>轮询（Round Robin）</strong> — 请求依次分发给每台服务器，一人一次，简单公平。适合后端服务器配置相同的场景。
+</div>
+
+<div class="canvas-wrap">
+  <canvas id="cv" width="920" height="460"></canvas>
+</div>
+
+<div class="footer">
+  数据来源：基于 network_architecture_detailed_outline.md v2 | 
+  本可视化对应 <a href="35-负载均衡.md">网络架构与传输全解</a> 步骤 35
+</div>
+
+<script>
+let algo='rr';
+const descs={
+  rr:'<strong>轮询（Round Robin）</strong> — 请求依次分发给每台服务器，一人一次，简单公平。适合后端服务器配置相同的场景。',
+  lc:'<strong>最少连接（Least Connections）</strong> — 请求发给当前连接数最少的服务器。适合长连接场景（如 WebSocket），避免某台服务器过载。',
+  ip:'<strong>IP Hash</strong> — 对客户端 IP 计算哈希，同一 IP 的请求始终发到同一台服务器。适合需要会话保持（Session）的场景。⚠ NAT 环境下多个用户共享公网 IP 会失效。'
+};
+
+// Client positions
+const clients=['C1','C2','C3','C4','C5','C6'];
+// Server names
+const servers=['S1','S2','S3'];
+
+// Track assigned connections
+let conns=[0,0,0]; // per server
+let rrIdx=0;
+let ipMap={}; // IP → server index
+
+function toggleTheme(){
+  const h=document.documentElement;
+  h.setAttribute('data-theme',h.getAttribute('data-theme')==='dark'?'light':'dark');
+  draw();
+}
+
+function setAlgo(a){algo=a;document.querySelectorAll('.controls button[id^="algo"]').forEach(b=>b.classList.toggle('active',b.id==='algo-'+a));document.getElementById('step-info').innerHTML=descs[a];resetAnim();draw()}
+
+function resetAnim(){
+  conns=[0,0,0];rrIdx=0;ipMap={};
+  draw();
+}
+
+function assign(client,idx){
+  let s;
+  if(algo==='rr'){s=rrIdx%3;rrIdx++}
+  else if(algo==='lc'){let min=Math.min(...conns);s=conns.indexOf(min)}
+  else{s=ipMap[client];if(s===undefined){s=client.charCodeAt(1)%3;ipMap[client]=s}}
+  conns[s]++;
+  return s;
+}
+
+function draw(){
+  const c=document.getElementById('cv'),ctx=c.getContext('2d'),W=c.width,H=c.height;
+  const d=document.documentElement.getAttribute('data-theme')==='dark';
+  const cl=d?{
+    bg:'#1a1a2e',fg:'#e0e0e0',fgD:'#999',line:'#444',lbBg:'#2a2a1a',lbBd:'#8a7a3a',
+    svrBg:'#1a3a2a',svrBd:'#3a8a4a',cliBg:'#1a2a4a',cliBd:'#3a6a8a',
+    colRr:'#5c9ce6',colLc:'#4caf50',colIp:'#f06292',accent:'#ffc107'
+  }:{
+    bg:'#fff',fg:'#1a1a2e',fgD:'#888',line:'#ccc',lbBg:'#fff8e1',lbBd:'#f5a623',
+    svrBg:'#e8f5e9',svrBd:'#28a745',cliBg:'#e3f2fd',cliBd:'#4a90d9',
+    colRr:'#4a90d9',colLc:'#28a745',colIp:'#e91e63',accent:'#f5a623'
+  };
+  const arrowColor=algo==='rr'?cl.colRr:algo==='lc'?cl.colLc:cl.colIp;
+
+  ctx.clearRect(0,0,W,H);ctx.fillStyle=cl.bg;ctx.fillRect(0,0,W,H);
+
+  // Draw Load Balancer
+  ctx.fillStyle=cl.lbBg;ctx.strokeStyle=cl.lbBd;ctx.lineWidth=2.5;
+  roundRect(ctx,370,20,180,54,12);ctx.fill();ctx.stroke();
+  ctx.fillStyle=cl.fg;ctx.font='bold 14px sans-serif';
+  ctx.fillText('负载均衡器',390,46);
+  ctx.fillStyle=cl.fgD;ctx.font='10px sans-serif';
+  ctx.fillText('L4/L7 Load Balancer',395,64);
+
+  // Draw 3 Servers
+  const svrPos=[];
+  for(let i=0;i<3;i++){
+    const x=200+i*260,y=320,w=140,h=70;
+    svrPos.push({x:x+w/2,y:y});
+    ctx.fillStyle=cl.svrBg;ctx.strokeStyle=cl.svrBd;ctx.lineWidth=2;
+    roundRect(ctx,x,y,w,h,10);ctx.fill();ctx.stroke();
+    ctx.fillStyle=cl.fg;ctx.font='bold 12px sans-serif';
+    ctx.fillText(`${servers[i]}`,x+10,y+24);
+    ctx.fillStyle=cl.fgD;ctx.font='10px sans-serif';
+    ctx.fillText(`连接数: ${conns[i]}`,x+10,y+42);
+    ctx.fillText(`10.0.0.${10+i}:80`,x+10,y+58);
+  }
+
+  // Draw 6 Clients
+  for(let i=0;i<6;i++){
+    const x=20+i*150,y=110,w=110,h=36;
+    const s=assign(clients[i],i);
+    ctx.fillStyle=cl.cliBg;ctx.strokeStyle=cl.cliBd;ctx.lineWidth=2;
+    roundRect(ctx,x,y,w,h,8);ctx.fill();ctx.stroke();
+    ctx.fillStyle=cl.fg;ctx.font='bold 12px sans-serif';
+    ctx.fillText(`${clients[i]} (IP: 192.168.${i+1}.1)`,x+6,y+24);
+
+    // Arrow from client to LB
+    ctx.strokeStyle=arrowColor;ctx.fillStyle=arrowColor;ctx.lineWidth=2;
+    ctx.beginPath();ctx.moveTo(x+55,y+36);ctx.lineTo(460,20);ctx.stroke();
+
+    // Arrow from LB to assigned server
+    ctx.beginPath();ctx.moveTo(460,74);ctx.lineTo(svrPos[s].x,svrPos[s].y);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(svrPos[s].x,svrPos[s].y);
+    ctx.lineTo(svrPos[s].x-6,svrPos[s].y-12);
+    ctx.lineTo(svrPos[s].x+6,svrPos[s].y-12);
+    ctx.closePath();ctx.fill();
+  }
+
+  // LB→Server arrows summary label
+  ctx.fillStyle=arrowColor;ctx.font='bold 11px sans-serif';
+  ctx.fillText(`策略: ${algo==='rr'?'轮询':algo==='lc'?'最少连接':'IP Hash'}`,370,110);
+
+  // Server capacity bar
+  ctx.strokeStyle=cl.line;ctx.lineWidth=1;
+  for(let i=0;i<3;i++){
+    const x=200+i*260,y=400,w=140,h=16;
+    const pct=Math.min(conns[i]/3,1);
+    ctx.fillStyle=cl.svrBg;roundRect(ctx,x,y,w,h,6);ctx.fill();
+    ctx.strokeStyle=cl.svrBd;ctx.stroke();
+    ctx.fillStyle=arrowColor;roundRectF(ctx,x+2,y+2,(w-4)*pct,h-4,4);ctx.fill();
+  }
+
+  // Legend
+  ctx.fillStyle=cl.fgD;ctx.font='10px sans-serif';
+  ctx.fillText('■ 颜色深度 = 服务器当前连接负载',20,432);
+  ctx.fillText(`${algo==='rr'?'轮询':'':algo==='lc'?'最少连接':'':algo==='ip'?'IP Hash':''} 算法：${algo==='rr'?'C1→S1, C2→S2, C3→S3, C4→S1, …':algo==='lc'?'每次选连接数最小的服务器':'':'每次对客户端 IP 取哈希映射到固定服务器'}`,20,448);
+}
+
+function roundRect(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath()}
+function roundRectF(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath()}
+draw();
+</script>
+</body>
+</html>

@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Self-Attention 计算全过程 — 矩阵运算可视化</title>
+<style>
+:root {
+  --bg: #f5f5f5; --card: #fff; --text: #333; --sub: #666;
+  --border: #ddd; --blue: #3498db; --blue-light: #ebf5fb;
+  --green: #27ae60; --green-light: #eafaf1;
+  --orange: #f39c12; --orange-light: #fef5e7;
+  --purple: #9b59b6; --purple-light: #f5eef8;
+  --red: #e74c3c;
+  --shadow: 0 2px 8px rgba(0,0,0,.06);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1a1a2e; --card: #16213e; --text: #e0e0e0; --sub: #aaa;
+    --border: #333; --blue: #5dade2; --blue-light: rgba(93,173,226,.12);
+    --green: #2ecc71; --green-light: rgba(46,204,113,.12);
+    --orange: #f5b041; --orange-light: rgba(245,176,65,.12);
+    --purple: #bb8fce; --purple-light: rgba(187,143,206,.12);
+    --shadow: 0 2px 8px rgba(0,0,0,.3);
+  }
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,"PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column;align-items:center;padding:20px 16px;min-height:100vh}
+h1{font-size:1.35em;text-align:center;margin-bottom:4px}
+.desc{font-size:.82em;color:var(--sub);margin-bottom:14px;text-align:center;max-width:820px;line-height:1.6}
+.controls{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-bottom:14px;align-items:center}
+.controls button{padding:6px 16px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);cursor:pointer;font-size:.82em;transition:.15s}
+.controls button:hover{opacity:.85}
+.controls button.primary{background:var(--blue);color:#fff;border-color:var(--blue)}
+.controls button.primary:hover{opacity:.9}
+.controls button:disabled{opacity:.4;cursor:not-allowed}
+.step-indicator{font-size:.78em;color:var(--sub);min-width:90px;text-align:center}
+
+/* 流程图：横向 5 个矩阵阶段 */
+.flow{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:6px;width:100%;max-width:1020px;margin-bottom:12px}
+.stage{background:var(--card);border:2px solid var(--border);border-radius:10px;padding:10px 8px;min-width:140px;text-align:center;transition:all .35s;opacity:.45;position:relative}
+.stage.active{opacity:1;border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-light);transform:translateY(-2px)}
+.stage .label{font-weight:600;font-size:.78em;margin-bottom:4px;color:var(--blue)}
+.stage .formula{font-size:.7em;color:var(--sub);margin-bottom:6px;font-family:"Courier New",monospace}
+.stage .shape{font-size:.65em;color:var(--sub);font-style:italic}
+.stage .matrix{display:inline-block;margin-top:4px}
+.arrow-h{font-size:1.4em;color:var(--sub);opacity:.45;transition:opacity .35s}
+.arrow-h.active{opacity:1;color:var(--blue)}
+
+/* 矩阵单元格 */
+table.mx{border-collapse:collapse;font-family:"Courier New",monospace;font-size:.72em}
+table.mx td{border:1px solid var(--border);padding:3px 7px;text-align:center;min-width:38px;transition:background .3s}
+table.mx td.hot{background:var(--orange-light);font-weight:600;color:var(--orange)}
+table.mx td.diag{background:var(--blue-light)}
+table.mx td.result{background:var(--green-light);font-weight:600;color:var(--green)}
+
+/* 信息面板 */
+.info-panel{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px 16px;width:100%;max-width:820px;margin-bottom:10px;min-height:80px;transition:all .3s}
+.info-panel .step-title{font-weight:600;font-size:.85em;margin-bottom:6px;color:var(--blue)}
+.info-panel .step-desc{font-size:.78em;color:var(--sub);line-height:1.6}
+.info-panel .step-desc code{font-size:.9em;background:var(--blue-light);padding:1px 5px;border-radius:3px;color:var(--text)}
+.info-panel .calc{font-family:"Courier New",monospace;font-size:.78em;background:var(--bg);padding:8px 10px;border-radius:5px;margin-top:6px;border-left:3px solid var(--blue);white-space:pre-wrap;color:var(--text)}
+.info-panel .tip{margin-top:6px;font-size:.74em;color:var(--orange);padding:4px 8px;background:var(--orange-light);border-radius:4px}
+
+footer{margin-top:16px;font-size:.7em;color:var(--sub);text-align:center;line-height:1.6}
+footer a{color:var(--sub)}
+</style>
+</head>
+<body>
+<h1>Self-Attention 计算全过程</h1>
+<p class="desc">
+  把 3 个词（2 维嵌入）的 Self-Attention 从头算到尾：X 投影成 Q/K/V（这里 W=I，所以 Q=K=V=X），
+  算 QK^T，除以 √d_k，每行 softmax 得注意力权重 α，最后 α·V 得输出。
+  对应教程《29-Self-Attention 自己关注自己》的数值小例子。
+</p>
+
+<div class="controls">
+  <button id="btn-next" class="primary" onclick="nextStep()">▶ 下一步</button>
+  <button id="btn-auto" onclick="toggleAuto()">⏯ 自动播放</button>
+  <button id="btn-reset" onclick="resetAll()">↺ 重置</button>
+  <span class="step-indicator" id="stepInfo">0 / 7</span>
+</div>
+
+<!-- 流程图：5 个阶段 -->
+<div class="flow" id="flow">
+  <div class="stage" id="s0">
+    <div class="label">输入 X</div>
+    <div class="formula">X</div>
+    <div class="shape">(3, 2)</div>
+    <div class="matrix" id="m0"></div>
+  </div>
+  <div class="arrow-h" id="a0">→</div>
+  <div class="stage" id="s1">
+    <div class="label">投影 Q/K/V</div>
+    <div class="formula">Q=K=V=X·W=X</div>
+    <div class="shape">(3, 2) ×3</div>
+    <div class="matrix" id="m1"></div>
+  </div>
+  <div class="arrow-h" id="a1">→</div>
+  <div class="stage" id="s2">
+    <div class="label">点积 QK^T</div>
+    <div class="formula">Q·K^T</div>
+    <div class="shape">(3, 3)</div>
+    <div class="matrix" id="m2"></div>
+  </div>
+  <div class="arrow-h" id="a2">→</div>
+  <div class="stage" id="s3">
+    <div class="label">缩放 /√d_k</div>
+    <div class="formula">÷ √2 ≈ 1.414</div>
+    <div class="shape">(3, 3)</div>
+    <div class="matrix" id="m3"></div>
+  </div>
+  <div class="arrow-h" id="a3">→</div>
+  <div class="stage" id="s4">
+    <div class="label">softmax(每行)</div>
+    <div class="formula">α = softmax(·)</div>
+    <div class="shape">(3, 3)</div>
+    <div class="matrix" id="m4"></div>
+  </div>
+  <div class="arrow-h" id="a4">→</div>
+  <div class="stage" id="s5">
+    <div class="label">输出 α·V</div>
+    <div class="formula">out = α · V</div>
+    <div class="shape">(3, 2)</div>
+    <div class="matrix" id="m5"></div>
+  </div>
+</div>
+
+<div class="info-panel" id="info">
+  <div class="step-title">点击「下一步」开始逐步计算</div>
+  <div class="step-desc">本可视化用教程里的数字 <code>X = [[1.0,0.5],[0.3,0.7],[0.8,0.2]]</code>，简化假设 <code>W_Q=W_K=W_V=I</code>，所以 Q=K=V=X。<code>d_k=2, √d_k≈1.4142</code>。</div>
+</div>
+
+<footer>
+  数据来源：29-Self-Attention自己关注自己.md（数值小例子）｜
+  本可视化对应 <a href="29-Self-Attention自己关注自己.md">Ch29 · Self-Attention 自己关注自己</a> 步骤 1-4
+</footer>
+
+<script>
+// === 数据（来自教程，全精度保留 3 位小数）===
+const X = [[1.0,0.5],[0.3,0.7],[0.8,0.2]];
+const QKt = [[1.25,0.65,0.90],[0.65,0.58,0.38],[0.90,0.38,0.68]];
+const sqrt_dk = 1.4142;
+const scaled = QKt.map(r => r.map(v => +(v/sqrt_dk).toFixed(3)));
+const alpha = [[0.411,0.269,0.321],[0.345,0.385,0.271],[0.388,0.244,0.368]];
+const out = [[0.749,0.458],[0.532,0.481],[0.791,0.387]];
+
+// === 步骤定义 ===
+const steps = [
+  {title:"第 0 步：输入矩阵 X", desc:"3 个词，每个词 2 维嵌入。<code>X[0]=[1.0,0.5]</code> 是第 1 个词的向量表示。注意 X 的形状是 <code>(T=3, d_model=2)</code>。", tip:null,
+   render:()=>matrixHTML(X,[]),
+   calc:"X = [[1.0, 0.5],   # 词1\n     [0.3, 0.7],   # 词2\n     [0.8, 0.2]]   # 词3"},
+  {title:"第 1 步：投影成 Q/K/V", desc:"X 分别乘以权重矩阵 <code>W_Q, W_K, W_V</code>。本例简化假设三者都是单位矩阵 <code>I₂</code>，所以 <code>Q = K = V = X</code>。实际训练时这三个是可学习参数，让模型学会「以不同视角看自己」。", tip:"⚠️ 实际模型里 W_Q/W_K/W_V 各不相同，这里为突出 attention 结构才简化。",
+   render:()=>matrixHTML(X,[]),
+   calc:"Q = X · W_Q = X · I = X\nK = X · W_K = X · I = X\nV = X · W_V = X · I = X\n→ Q = K = V = [[1.0,0.5],[0.3,0.7],[0.8,0.2]]"},
+  {title:"第 2 步：算点积 QK^T", desc:"Q 乘以 K 的转置，得到 <code>(3,3)</code> 的得分矩阵。<code>[i][j]</code> 表示第 i 个 query 对第 j 个 key 的相似度。注意：因为 Q=K=X，矩阵是对称的。", tip:null,
+   render:()=>matrixHTML(QKt,[[0,0]]),
+   calc:"QK^T[0][0] = 1.0×1.0 + 0.5×0.5 = 1.0 + 0.25 = 1.25\nQK^T[0][1] = 1.0×0.3 + 0.5×0.7 = 0.3 + 0.35 = 0.65\nQK^T[0][2] = 1.0×0.8 + 0.5×0.2 = 0.8 + 0.10 = 0.90\n（其余对称类推）\n\nQK^T = [[1.25, 0.65, 0.90],\n        [0.65, 0.58, 0.38],\n        [0.90, 0.38, 0.68]]"},
+  {title:"第 3 步：除以 √d_k 缩放", desc:"<code>d_k=2</code>，<code>√d_k≈1.4142</code>。除以它是为了把点积的方差拉回 1，防止 softmax 进入饱和区导致梯度消失。这是「√d_k 不是拍脑袋」的根因。", tip:"❌ 忘了除 √d_k → softmax 饱和、梯度消失。√d_k 是从方差分析严格推出来的。",
+   render:()=>matrixHTML(scaled,[[0,0]]),
+   calc:"QK^T / √d_k =\n[[1.25/1.414, 0.65/1.414, 0.90/1.414],\n [0.65/1.414, 0.58/1.414, 0.38/1.414],\n [0.90/1.414, 0.38/1.414, 0.68/1.414]]\n=\n[[0.884, 0.460, 0.636],\n [0.460, 0.410, 0.269],\n [0.636, 0.269, 0.481]]"},
+  {title:"第 4 步：对每行做 softmax", desc:"⚠️ 对<strong>每行</strong>做 softmax（每行是一个 query 对所有 key 的权重，和必须为 1），不是对整列做！这是最易错点。以第 1 行为例：减最大值→exp→归一化。", tip:"❌ softmax 维度搞错（对列做）→ 权重和不为 1，结果完全错。PyTorch 写 softmax(scores, dim=-1)。",
+   render:()=>matrixHTML(alpha,[[0,0]]),
+   calc:"第 1 行 [0.884, 0.460, 0.636]:\n  减最大值: [0, -0.424, -0.248]\n  exp:      [1.000, 0.654, 0.780]\n  和 = 2.434\n  α_1 = [1.000/2.434, 0.654/2.434, 0.780/2.434]\n      = [0.411, 0.269, 0.321]\n\n最终 α ≈\n[[0.411, 0.269, 0.321],\n [0.345, 0.385, 0.271],\n [0.388, 0.244, 0.368]]\n（每行和=1）"},
+  {title:"第 5 步：用 α 对 V 加权求和", desc:"<code>out = α · V</code>，因为 V=X，所以 <code>out = α · X</code>。每个位置的新表示是所有位置 V 的加权融合。看 out[0]：41.1% 来自自己 + 26.9% 来自词2 + 32.1% 来自词3。", tip:null,
+   render:()=>matrixHTML(out,[[0,0]]),
+   calc:"out[0][0] = 0.411×1.0 + 0.269×0.3 + 0.321×0.8\n            = 0.411 + 0.0807 + 0.2568 = 0.749\nout[0][1] = 0.411×0.5 + 0.269×0.7 + 0.321×0.2\n            = 0.2055 + 0.1883 + 0.0642 = 0.458\n\nout[0] ≈ [0.749, 0.458]  ✅ 与教程一致\n\n完整输出：\n[[0.749, 0.458],\n [0.532, 0.481],\n [0.791, 0.387]]"},
+  {title:"✅ 完成：Self-Attention 全流程结束", desc:"第 1 个词的原始表示 <code>[1.0, 0.5]</code> 被柔化成 <code>[0.749, 0.458]</code>——吸收了上下文信息。这就是 Transformer 「一步直达任意位置」的魔法所在：长距离依赖不再是瓶颈。", tip:"核心公式：Attention(Q,K,V) = softmax(QK^T/√d_k)·V",
+   render:()=>matrixHTML(out,[[0,0],[1,1]]),
+   calc:null}
+];
+
+// === 渲染矩阵为 HTML 表格 ===
+function matrixHTML(mat, hotCells){
+  let h = '<table class="mx">';
+  hotCells = hotCells || [];
+  for(let i=0;i<mat.length;i++){
+    h += '<tr>';
+    for(let j=0;j<mat[i].length;j++){
+      const isHot = hotCells.some(c=>c[0]===i&&c[1]===j);
+      h += `<td class="${isHot?'hot':''}">${mat[i][j]}</td>`;
+    }
+    h += '</tr>';
+  }
+  h += '</table>';
+  return h;
+}
+
+// === 状态机 ===
+let cur = -1;
+let autoTimer = null;
+const stageIds = ['s0','s1','s2','s3','s4','s5'];
+const arrowIds = ['a0','a1','a2','a3','a4'];
+const matrixIds = ['m0','m1','m2','m3','m4','m5'];
+
+function renderStep(){
+  // 高亮当前 stage
+  stageIds.forEach((id,idx)=>{
+    document.getElementById(id).classList.toggle('active', idx<=cur);
+  });
+  arrowIds.forEach((id,idx)=>{
+    document.getElementById(id).classList.toggle('active', idx<cur);
+  });
+  // 填充对应矩阵
+  if(cur>=0){
+    document.getElementById(matrixIds[cur]).innerHTML = steps[cur].render();
+  }
+  // 信息面板
+  const info = document.getElementById('info');
+  if(cur<0){
+    info.innerHTML = '<div class="step-title">点击「下一步」开始逐步计算</div>'+
+      '<div class="step-desc">本可视化用教程里的数字 <code>X = [[1.0,0.5],[0.3,0.7],[0.8,0.2]]</code>，简化假设 <code>W_Q=W_K=W_V=I</code>，所以 Q=K=V=X。<code>d_k=2, √d_k≈1.4142</code>。</div>';
+  } else {
+    let html = `<div class="step-title">${steps[cur].title}</div>`;
+    html += `<div class="step-desc">${steps[cur].desc}</div>`;
+    if(steps[cur].calc){
+      html += `<div class="calc">${steps[cur].calc}</div>`;
+    }
+    if(steps[cur].tip){
+      html += `<div class="tip">${steps[cur].tip}</div>`;
+    }
+    info.innerHTML = html;
+  }
+  // 步骤指示
+  document.getElementById('stepInfo').textContent = (cur+1) + ' / ' + steps.length;
+  // 按钮状态
+  document.getElementById('btn-next').disabled = (cur >= steps.length-1);
+}
+
+function nextStep(){
+  if(cur < steps.length-1){
+    cur++;
+    renderStep();
+  } else if(autoTimer){
+    toggleAuto();
+  }
+}
+
+function toggleAuto(){
+  if(autoTimer){
+    clearInterval(autoTimer);
+    autoTimer = null;
+    document.getElementById('btn-auto').textContent = '⏯ 自动播放';
+  } else {
+    if(cur >= steps.length-1) resetAll();
+    autoTimer = setInterval(()=>{
+      if(cur >= steps.length-1){
+        clearInterval(autoTimer);
+        autoTimer = null;
+        document.getElementById('btn-auto').textContent = '⏯ 自动播放';
+      } else {
+        nextStep();
+      }
+    }, 2200);
+    document.getElementById('btn-auto').textContent = '⏸ 暂停';
+  }
+}
+
+function resetAll(){
+  if(autoTimer){
+    clearInterval(autoTimer);
+    autoTimer = null;
+    document.getElementById('btn-auto').textContent = '⏯ 自动播放';
+  }
+  cur = -1;
+  matrixIds.forEach(id=>{ document.getElementById(id).innerHTML = ''; });
+  renderStep();
+}
+
+// 初始化
+resetAll();
+</script>
+</body>
+</html>

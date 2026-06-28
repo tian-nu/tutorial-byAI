@@ -13,10 +13,10 @@
     <div class="sb-section">
       <div class="sb-section-title">教程</div>
       <div class="sb-item active"><span class="sb-dot" style="background:var(--cat-backend)"></span>全部教程</div>
-      <div class="sb-item"><span class="sb-dot" style="background:var(--cat-backend)"></span>后端<span class="sb-count">3</span></div>
+      <div class="sb-item"><span class="sb-dot" style="background:var(--cat-backend)"></span>后端<span class="sb-count">4</span></div>
       <div class="sb-item"><span class="sb-dot" style="background:var(--cat-frontend)"></span>前端<span class="sb-count">1</span></div>
-      <div class="sb-item"><span class="sb-dot" style="background:var(--cat-tools)"></span>基础与工具<span class="sb-count">5</span></div>
-      <div class="sb-item"><span class="sb-dot" style="background:var(--cat-ai)"></span>AI与创业<span class="sb-count">2</span></div>
+      <div class="sb-item"><span class="sb-dot" style="background:var(--cat-tools)"></span>基础与工具<span class="sb-count">6</span></div>
+      <div class="sb-item"><span class="sb-dot" style="background:var(--cat-ai)"></span>AI与创业<span class="sb-count">3</span></div>
     </div>
     <div class="sb-section" style="margin-top:6px">
       <div class="sb-section-title">导航</div>
@@ -31,7 +31,7 @@
 
   <div class="page-head">
     <h2>全部教程</h2>
-    <p>11 套AI教程，覆盖后端、前端、基础学科、DevOps 和 AI</p>
+    <p>14 套AI教程，覆盖后端、前端、基础学科、DevOps、AI 和网络</p>
   </div>
 
   <div class="divider"><span class="divider-label">后端</span><span class="divider-line"></span></div>
@@ -61,6 +61,15 @@
       <div class="t-card-foot">
         <span class="t-tag t-tag-beginner">零基础</span>
         <span class="t-path">Java语法<span class="sep">/</span>Spring Boot<span class="sep">/</span>微服务<span class="sep">/</span>实战项目</span>
+      </div>
+    </a>
+
+    <a class="t-card" href="nodejs/">
+      <div class="t-card-head"><h3>Node.js速成后端</h3><span class="chapters">37 章</span></div>
+      <div class="t-card-desc">用Express从零搭建博客系统后端，涵盖中间件、JWT认证、SQLite数据库、文件上传与Docker部署。</div>
+      <div class="t-card-foot">
+        <span class="t-tag t-tag-beginner">零基础</span>
+        <span class="t-path">Express<span class="sep">/</span>中间件<span class="sep">/</span>SQLite<span class="sep">/</span>JWT<span class="sep">/</span>测试<span class="sep">/</span>部署</span>
       </div>
     </a>
 
@@ -128,6 +137,15 @@
       </div>
     </a>
 
+    <a class="t-card" href="network/">
+      <div class="t-card-head"><h3>网络架构与传输全解</h3><span class="chapters">43 章</span></div>
+      <div class="t-card-desc">从物理层到应用层，系统讲解网络协议栈：OSI/TCP-IP模型、TCP/UDP、HTTP/HTTPS、DNS、负载均衡与Wireshark实战抓包。</div>
+      <div class="t-card-foot">
+        <span class="t-tag t-tag-intermediate">有基础</span>
+        <span class="t-path">OSI模型<span class="sep">/</span>TCP<span class="sep">/</span>HTTP<span class="sep">/</span>DNS<span class="sep">/</span>Wireshark<span class="sep">/</span>负载均衡</span>
+      </div>
+    </a>
+
   </div>
 
   <div class="divider"><span class="divider-label">AI与创业</span><span class="divider-line"></span></div>
@@ -148,6 +166,15 @@
       <div class="t-card-foot">
         <span class="t-tag t-tag-intermediate">有基础</span>
         <span class="t-path">验证<span class="sep">/</span>团队<span class="sep">/</span>产品<span class="sep">/</span>增长<span class="sep">/</span>融资</span>
+      </div>
+    </a>
+
+    <a class="t-card" href="dl/">
+      <div class="t-card-head"><h3>从0到Transformer深度学习</h3><span class="chapters">47 章</span></div>
+      <div class="t-card-desc">从高中数学到Transformer，零基础手推前向传播、反向传播、LSTM、Self-Attention，含20个可视化动画和41个Python代码文件。</div>
+      <div class="t-card-foot">
+        <span class="t-tag t-tag-intermediate">有基础</span>
+        <span class="t-path">线性回归<span class="sep">/</span>神经网络<span class="sep">/</span>RNN<span class="sep">/</span>LSTM<span class="sep">/</span>Attention<span class="sep">/</span>Transformer</span>
       </div>
     </a>
 

@@ -9,7 +9,7 @@
 
 ---
 
-> 📊 可视化演示见 [python_29_docker_visual.html](../../.project/docs/tutorials/python_29_docker_visual.html)
+> 📊 可视化演示见 python_29_docker_visual.html
 
 ## 一、目标与完成效果
 
@@ -84,7 +84,7 @@ curl https://yourdomain.com/docs
 - **Dockerfile**：写你这个集装箱怎么打包的说明书。
 - **Docker Compose**：如果有多个集装箱（应用 + 数据库 + 缓存...），用它来一键启动所有集装箱。
 
-> 📊 可视化演示见 [python_29_docker_visual.html](../../.project/docs/tutorials/python_29_docker_visual.html)
+> 📊 可视化演示见 python_29_docker_visual.html
 
 **类比表格**：
 

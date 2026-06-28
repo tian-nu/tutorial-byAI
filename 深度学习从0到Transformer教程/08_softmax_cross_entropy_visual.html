@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Softmax 与交叉熵 — 从 logits 到概率到损失</title>
+<!-- 纯 Canvas + HTML 滑块，无外部依赖，可离线运行 -->
+<style>
+:root {
+  --bg: #f5f5f5; --card: #fff; --text: #333; --sub: #666;
+  --border: #ddd; --blue: #3498db; --blue-light: #ebf5fb;
+  --green: #27ae60; --red: #e74c3c; --orange: #f39c12; --purple: #9b59b6;
+  --shadow: 0 2px 8px rgba(0,0,0,.06);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1a1a2e; --card: #16213e; --text: #e0e0e0; --sub: #aaa;
+    --border: #333; --blue: #5dade2; --blue-light: rgba(93,173,226,.1);
+    --shadow: 0 2px 8px rgba(0,0,0,.3);
+  }
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column;align-items:center;padding:20px 16px;min-height:100vh}
+h1{font-size:1.35em;text-align:center;margin-bottom:4px}
+.desc{font-size:.82em;color:var(--sub);margin-bottom:14px;text-align:center;max-width:760px;line-height:1.6}
+
+.layout{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;width:100%;max-width:880px;margin-bottom:10px}
+.panel{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px;box-shadow:var(--shadow);flex:1;min-width:340px}
+.panel h2{font-size:.95em;margin-bottom:8px;color:var(--blue)}
+.panel .note{font-size:.74em;color:var(--sub);margin-bottom:8px;line-height:1.5}
+
+.sliders{display:flex;flex-direction:column;gap:8px;margin-bottom:10px}
+.slider-row{display:flex;align-items:center;gap:8px;font-size:.78em}
+.slider-row label{min-width:46px;color:var(--sub)}
+.slider-row input[type=range]{flex:1;accent-color:var(--blue)}
+.slider-row .val{min-width:54px;text-align:right;font-family:ui-monospace,monospace;font-size:.85em}
+.slider-row .val code{background:var(--blue-light);padding:1px 4px;border-radius:3px;color:var(--text)}
+
+.bars{display:flex;align-items:flex-end;justify-content:center;gap:18px;height:170px;padding:6px 4px;border-bottom:1px solid var(--border)}
+.bar-col{display:flex;flex-direction:column;align-items:center;gap:4px;width:54px}
+.bar{width:100%;border-radius:4px 4px 0 0;transition:height .12s,background .12s;display:flex;align-items:flex-start;justify-content:center;color:#fff;font-size:.72em;padding-top:3px;min-height:2px}
+.bar.true-cls{box-shadow:0 0 0 2px var(--text)}
+.bar-label{font-size:.74em;color:var(--sub)}
+
+canvas{display:block;max-width:100%}
+
+.controls{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-bottom:10px;align-items:center}
+.controls button,.controls label{padding:5px 12px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);cursor:pointer;font-size:.8em;transition:.15s}
+.controls button:hover{opacity:.8}
+.controls button.primary{background:var(--blue);color:#fff;border-color:var(--blue)}
+.controls .seg{display:flex;gap:0}
+.controls .seg input{display:none}
+.controls .seg label{border-radius:0;border-right:none}
+.controls .seg label:first-child{border-radius:6px 0 0 6px}
+.controls .seg label:last-child{border-radius:0 6px 6px 0;border-right:1px solid var(--border)}
+.controls .seg input:checked + label{background:var(--blue);color:#fff;border-color:var(--blue)}
+
+.info-panel{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px 16px;width:100%;max-width:880px;margin-bottom:10px;min-height:50px}
+.info-panel .step-title{font-weight:600;font-size:.85em;margin-bottom:4px;color:var(--blue)}
+.info-panel .step-desc{font-size:.78em;color:var(--sub);line-height:1.6}
+.info-panel code{font-size:.9em;background:var(--blue-light);padding:1px 5px;border-radius:3px}
+
+footer{margin-top:6px;font-size:.7em;color:var(--sub);text-align:center;line-height:1.6}
+footer a{color:var(--sub)}
+</style>
+</head>
+<body>
+<h1>Softmax 与交叉熵 — 从 logits 到概率到损失</h1>
+<p class="desc">
+  左侧：三个 logits 经 softmax 变成概率（和为 1）。拖动滑块改变 logits，观察概率分布如何此消彼长。
+  右侧：交叉熵损失 L = −log(p_真实类) 随「预测对真实类的概率」变化的曲线。选中真实类后，红点会落在曲线上对应位置。
+</p>
+
+<div class="layout">
+  <div class="panel">
+    <h2>① Softmax：logits → 概率</h2>
+    <div class="note">pᵢ = exp(zᵢ) / Σⱼ exp(zⱼ)。先减最大值防溢出。三个概率之和恒为 1。</div>
+    <div class="sliders" id="sliders"></div>
+    <div class="bars" id="bars"></div>
+    <div style="text-align:center;font-size:.76em;color:var(--sub);margin-top:6px">
+      Σ p = <code id="sumP" style="background:var(--blue-light);padding:1px 5px;border-radius:3px">1.000</code>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>② 交叉熵损失曲线</h2>
+    <div class="note">L = −log(p_真实类)。预测越接近真实（p→1），损失越小；预测错得越离谱（p→0），损失趋向 ∞。</div>
+    <canvas id="cv" width="360" height="220"></canvas>
+    <div style="text-align:center;font-size:.78em;color:var(--sub);margin-top:6px">
+      当前：p_真实类 = <code id="pTrue" style="background:var(--blue-light);padding:1px 5px;border-radius:3px">—</code>，
+      L = <code id="lossVal" style="background:var(--blue-light);padding:1px 5px;border-radius:3px">—</code>
+    </div>
+  </div>
+</div>
+
+<div class="controls">
+  <span style="font-size:.8em;color:var(--sub)">真实类：</span>
+  <div class="seg" id="trueCls">
+    <input type="radio" name="tc" id="tc0" checked><label for="tc0">类 0</label>
+    <input type="radio" name="tc" id="tc1"><label for="tc1">类 1</label>
+    <input type="radio" name="tc" id="tc2"><label for="tc2">类 2</label>
+  </div>
+  <button onclick="resetLogits()">↺ 重置 logits</button>
+  <button class="primary" onclick="makeConfident()">✓ 预测正确</button>
+  <button onclick="makeWrong()" style="border-color:var(--red);color:var(--red)">✗ 预测错误</button>
+</div>
+
+<div class="info-panel" id="infoPanel">
+  <div class="step-title">交互说明</div>
+  <div class="step-desc">
+    拖动左侧三个滑块改变 logits，观察概率柱状图变化；切换「真实类」后，右侧交叉熵曲线上的红点会移动到当前预测概率对应的位置。
+    点击「预测正确」让真实类 logit 远大于其他类，损失趋近 0；「预测错误」则让真实类 logit 远小于其他，损失急剧增大（这就是为什么分类用交叉熵而非 MSE）。
+  </div>
+</div>
+
+<footer>
+  数据来源：基于 08-逻辑回归分类问题入门 教程（大纲第一篇 Ch08）<br>
+  本可视化对应 <a href="08-逻辑回归分类问题入门.md">深度学习从0到Transformer教程 第08章</a>
+</footer>
+
+<script>
+const DEFAULT = [2.0, 1.0, 0.1];
+let logits = [...DEFAULT];
+let trueCls = 0;
+const colors = ['#3498db','#27ae60','#f39c12'];
+
+const slidersEl = document.getElementById('sliders');
+const barsEl = document.getElementById('bars');
+
+// 构建滑块
+function buildSliders(){
+  slidersEl.innerHTML='';
+  logits.forEach((z,i)=>{
+    const row=document.createElement('div');
+    row.className='slider-row';
+    row.innerHTML='<label>z'+sub(i)+'</label>'
+      +'<input type="range" min="-3" max="5" step="0.1" value="'+z+'" data-i="'+i+'" oninput="onSlider(this)">'
+      +'<span class="val"><code id="zv'+i+'">'+z.toFixed(1)+'</code></span>';
+    slidersEl.appendChild(row);
+  });
+}
+function sub(i){ return ['₀','₁','₂'][i]; }
+
+function onSlider(el){
+  const i=+el.dataset.i;
+  logits[i]=+el.value;
+  document.getElementById('zv'+i).textContent=logits[i].toFixed(1);
+  render();
+}
+
+function softmax(z){
+  const m=Math.max(...z);
+  const e=z.map(v=>Math.exp(v-m));
+  const s=e.reduce((a,b)=>a+b,0);
+  return e.map(v=>v/s);
+}
+
+function render(){
+  const p=softmax(logits);
+  // 柱状图
+  barsEl.innerHTML='';
+  p.forEach((pi,i)=>{
+    const col=document.createElement('div');
+    col.className='bar-col';
+    const bar=document.createElement('div');
+    bar.className='bar'+(i===trueCls?' true-cls':'');
+    bar.style.height=Math.max(2,pi*150)+'px';
+    bar.style.background=colors[i];
+    bar.textContent=pi.toFixed(2);
+    col.appendChild(bar);
+    const lab=document.createElement('div');
+    lab.className='bar-label';
+    lab.textContent='p'+sub(i)+(i===trueCls?' (真实)':'');
+    col.appendChild(lab);
+    barsEl.appendChild(col);
+  });
+  document.getElementById('sumP').textContent=p.reduce((a,b)=>a+b,0).toFixed(3);
+  // 交叉熵
+  const pt=p[trueCls];
+  const L = pt>1e-12 ? -Math.log(pt) : 35;
+  document.getElementById('pTrue').textContent=pt.toFixed(3);
+  document.getElementById('lossVal').textContent=pt>1e-12?L.toFixed(3):'∞';
+  drawCurve(pt, L);
+  // 信息面板
+  const sorted=[...p].map((v,i)=>[v,i]).sort((a,b)=>b[0]-a[0]);
+  const topCls=sorted[0][1];
+  const correct = topCls===trueCls;
+  document.getElementById('infoPanel').innerHTML=
+    '<div class="step-title">'+(correct?'✓ 当前预测正确':'✗ 当前预测错误')+'</div>'
+    +'<div class="step-desc">logits = ['+logits.map(v=>v.toFixed(2)).join(', ')+']　→　'
+    +'概率 = ['+p.map(v=>v.toFixed(3)).join(', ')+']<br>'
+    +'真实类 = 类 '+trueCls+'，模型给它分配的概率 p'+sub(trueCls)+' = '+pt.toFixed(3)
+    +'，交叉熵损失 L = −log('+pt.toFixed(3)+') = '+(pt>1e-12?L.toFixed(3):'∞ (预测概率为0，log 爆炸，故代码里加 1e-15 兜底)')+'。<br>'
+    +(correct?'预测正确时损失小，梯度也小，模型趋于稳定。':'⚠ 预测错误且概率极低时损失趋向无穷——这正是交叉熵「重罚错判」的特性，比 MSE 更适合分类。')+'</div>';
+}
+
+// 交叉熵曲线
+const cv=document.getElementById('cv');
+const ctx=cv.getContext('2d');
+function drawCurve(pt, L){
+  const isDark=matchMedia('(prefers-color-scheme: dark)').matches;
+  const bg=isDark?'#16213e':'#fff', grid=isDark?'#2a3556':'#eee', axis=isDark?'#557':'#888', txt=isDark?'#e0e0e0':'#333';
+  const W=cv.width,H=cv.height;
+  const pad=32;
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
+  // 坐标系：x: p∈[0.001,1], y: L∈[0,5]
+  const xMin=0.001, xMax=1, yMin=0, yMax=5;
+  const X=p=>pad+(Math.log(p)-Math.log(xMin))/(Math.log(xMax)-Math.log(xMin))*(W-pad-12);
+  const Y=l=>H-pad-(l-yMin)/(yMax-yMin)*(H-pad-12);
+  // 网格
+  ctx.strokeStyle=grid; ctx.lineWidth=1;
+  ctx.font='10px system-ui'; ctx.fillStyle=txt;
+  [0.01,0.1,0.2,0.5,0.8,1].forEach(p=>{
+    ctx.beginPath(); ctx.moveTo(X(p),Y(yMin)); ctx.lineTo(X(p),Y(yMax)); ctx.stroke();
+    ctx.fillText(p.toFixed(p<0.1?2:1), X(p)-8, H-pad+12);
+  });
+  for(let l=1;l<=5;l++){
+    ctx.beginPath(); ctx.moveTo(X(xMin),Y(l)); ctx.lineTo(X(xMax),Y(l)); ctx.stroke();
+    ctx.fillText(l, pad-14, Y(l)+3);
+  }
+  // 轴
+  ctx.strokeStyle=axis; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.moveTo(X(xMin),Y(yMin)); ctx.lineTo(X(xMax),Y(yMin)); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(X(xMin),Y(yMin)); ctx.lineTo(X(xMin),Y(yMax)); ctx.stroke();
+  // 轴标签
+  ctx.font='11px system-ui'; ctx.fillStyle=txt;
+  ctx.fillText('p (真实类概率)', X(0.05)-10, H-6);
+  ctx.save(); ctx.translate(10, H/2); ctx.rotate(-Math.PI/2); ctx.fillText('L = −log(p)', 0, 0); ctx.restore();
+  // 曲线 L=-log(p)，截断到 yMax
+  ctx.strokeStyle=isDark?'#5dade2':'#3498db'; ctx.lineWidth=2.5;
+  ctx.beginPath();
+  let first=true;
+  for(let p=xMin;p<=xMax;p+=0.002){
+    const l=-Math.log(p);
+    if(l>yMax) continue;
+    const xx=X(p), yy=Y(l);
+    if(first){ ctx.moveTo(xx,yy); first=false; } else ctx.lineTo(xx,yy);
+  }
+  ctx.stroke();
+  // 当前点
+  const lp = pt<xMin?xMin:pt;
+  const lval = pt<xMin?yMax:Math.min(L,yMax);
+  ctx.fillStyle='#e74c3c';
+  ctx.beginPath(); ctx.arc(X(lp),Y(lval),6,0,Math.PI*2); ctx.fill();
+  ctx.strokeStyle=isDark?'#fff':'#fff'; ctx.lineWidth=1.5; ctx.stroke();
+  // 标注
+  ctx.font='10px system-ui'; ctx.fillStyle='#e74c3c';
+  ctx.fillText('当前 L='+(pt>=xMin?L.toFixed(2):'∞'), X(lp)+8, Y(lval)-6);
+}
+
+function resetLogits(){ logits=[...DEFAULT]; buildSliders(); render(); }
+function makeConfident(){
+  logits=logits.map((_,i)=> i===trueCls?4.0:-1.0);
+  buildSliders(); render();
+}
+function makeWrong(){
+  logits=logits.map((_,i)=> i===trueCls?-2.0:3.5);
+  buildSliders(); render();
+}
+
+['tc0','tc1','tc2'].forEach((id,i)=>{
+  document.getElementById(id).addEventListener('change',()=>{ trueCls=i; render(); });
+});
+
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', ()=>render());
+buildSliders();
+render();
+</script>
+</body>
+</html>

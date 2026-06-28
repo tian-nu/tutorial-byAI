@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DNS 递归解析全过程</title>
+<style>
+:root{--bg:#fff;--fg:#1a1a2e;--border:#d0d0d0;--card:#f8f9fa;--btn:#e9ecef;--btn-fg:#333;--shadow:0 2px 8px rgba(0,0,0,.1);--info-bg:#fff3cd;--info-bd:#ffc107;--node-client:#e3f2fd;--node-local:#e8f5e9;--node-root:#fce4ec;--node-tld:#fff8e1;--node-auth:#f3e5f5;--arrow:#ff6b6b;--active:#ffe0b2}
+[data-theme="dark"]{--bg:#1a1a2e;--fg:#e0e0e0;--border:#444;--card:#2d2d44;--btn:#3a3a5a;--btn-fg:#ccc;--shadow:0 2px 8px rgba(0,0,0,.4);--info-bg:#3a2a10;--info-bd:#8a7a3a;--node-client:#1a2a4a;--node-local:#1a3a2a;--node-root:#3a1a2a;--node-tld:#3a3a1a;--node-auth:#2a1a3a;--active:#5a4020}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--fg);min-height:100vh;transition:background .3s,color .3s}
+.header{max-width:960px;margin:0 auto;padding:20px 20px 0;display:flex;justify-content:space-between;align-items:center}
+.header h1{font-size:1.3em;font-weight:600}
+.theme-btn{background:var(--btn);color:var(--btn-fg);border:1px solid var(--border);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:.9em}
+.desc{max-width:960px;margin:0 auto;padding:6px 20px 10px;font-size:.85em;opacity:.75}
+.controls{max-width:960px;margin:0 auto 10px;padding:0 20px;display:flex;gap:8px;flex-wrap:wrap}
+.controls button{background:var(--btn);color:var(--btn-fg);border:1px solid var(--border);padding:8px 14px;border-radius:6px;cursor:pointer;font-size:.85em;transition:background .2s,transform .15s}
+.controls button:hover{transform:translateY(-1px)}
+.controls button.active{background:var(--arrow);color:#fff;border-color:var(--arrow)}
+.step-info{max-width:960px;margin:0 auto 16px;padding:12px 20px;background:var(--info-bg);border-radius:8px;border-left:4px solid var(--info-bd);font-size:.88em;line-height:1.6;min-height:48px}
+.canvas-wrap{max-width:960px;margin:0 auto;padding:0 20px 20px}
+canvas{width:100%;height:auto;border:1px solid var(--border);border-radius:10px;background:var(--card);box-shadow:var(--shadow)}
+.footer{max-width:960px;margin:0 auto;padding:10px 20px 20px;font-size:.78em;opacity:.6;text-align:center}
+.footer a{color:var(--fg)}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>DNS 递归解析全过程</h1>
+  <button class="theme-btn" onclick="toggleTheme()" title="切换暗色/亮色模式">🌓 切换主题</button>
+</div>
+<div class="desc">
+  本可视化对应 <a href="20-DNS-上.md" style="color:inherit">网络架构与传输全解 步骤 20（DNS 上）</a>。演示从浏览器到权威 DNS 服务器的完整 8 跳解析链路（递归+迭代混合模式）。
+</div>
+
+<div class="controls">
+  <button id="btn0" class="active" onclick="goTo(0)">① 浏览器查缓存</button>
+  <button id="btn1" onclick="goTo(1)">② 本地 DNS 接收</button>
+  <button id="btn2" onclick="goTo(2)">③ 问根域名服务器</button>
+  <button id="btn3" onclick="goTo(3)">④ 根返回 TLD 地址</button>
+  <button id="btn4" onclick="goTo(4)">⑤ 问 .com TLD</button>
+  <button id="btn5" onclick="goTo(5)">⑥ TLD 返回权威 DNS</button>
+  <button id="btn6" onclick="goTo(6)">⑦ 问权威 DNS</button>
+  <button id="btn7" onclick="goTo(7)">⑧ 权威返回 A 记录</button>
+  <button id="btn-reset" onclick="goTo(0)">⟳ 重置</button>
+</div>
+
+<div class="step-info" id="step-info">
+  <strong>步骤 ①：浏览器/OS 查本地缓存</strong> — 用户在浏览器输入 <code>www.baidu.com</code>，先查本地 hosts 文件和 DNS 缓存。未命中，交给本地 DNS 服务器。
+</div>
+
+<div class="canvas-wrap">
+  <canvas id="cv" width="920" height="520"></canvas>
+</div>
+
+<div class="footer">
+  数据来源：基于 network_architecture_detailed_outline.md v2 | 
+  本可视化对应 <a href="20-DNS-上.md">网络架构与传输全解</a> 步骤 20
+</div>
+
+<script>
+let step=0;
+const steps=[
+  '<strong>步骤 ①：浏览器/OS 查本地缓存</strong> — 用户在浏览器输入 <code>www.baidu.com</code>，先查本地 hosts 文件和 DNS 缓存。缓存未命中，交给本地 DNS 服务器。',
+  '<strong>步骤 ②：本地 DNS 服务器接收请求</strong> — 本地 DNS（通常由 ISP 或路由器提供）收到查询请求，检查自身缓存。若缓存也无，开始递归/迭代解析。',
+  '<strong>步骤 ③：本地 DNS → 根域名服务器</strong> — 查询："<code>www.baidu.com</code> 的 IP 是什么？"<br>根域名服务器回复："我不知道，但 <code>.com</code> 归那些 TLD 服务器管，去问它们。"',
+  '<strong>步骤 ④：根返回 .com TLD 地址</strong> — 根域名服务器返回 <code>.com</code> 顶级域名服务器的 NS 记录和 IP 地址列表。',
+  '<strong>步骤 ⑤：本地 DNS → .com TLD 服务器</strong> — 查询："<code>baidu.com</code> 归谁管？"<br>.com TLD 回复："<code>baidu.com</code> 的权威 DNS 是 <code>ns.baidu.com</code>，去问它。"',
+  '<strong>步骤 ⑥：.com TLD 返回权威 DNS 地址</strong> — TLD 服务器返回 <code>baidu.com</code> 的权威 DNS 服务器地址。',
+  '<strong>步骤 ⑦：本地 DNS → 权威 DNS 服务器</strong> — 查询："<code>www.baidu.com</code> 的 A 记录是什么？"<br>权威 DNS 回复："A 记录：<code>110.242.68.66</code> 和 <code>110.242.68.67</code>"',
+  '<strong>步骤 ⑧：本地 DNS 缓存结果并返回客户端</strong> — 本地 DNS 将 A 记录缓存（TTL 时间内有效），返回给浏览器。浏览器拿到 IP，可以建立 TCP 连接了！'
+];
+
+function toggleTheme(){
+  const h=document.documentElement;
+  h.setAttribute('data-theme',h.getAttribute('data-theme')==='dark'?'light':'dark');
+  draw();
+}
+
+function goTo(n){step=n;document.querySelectorAll('.controls button[id^="btn"]').forEach((b,i)=>{b.classList.toggle('active',i===n)});document.getElementById('step-info').innerHTML=steps[n];draw()}
+
+function draw(){
+  const c=document.getElementById('cv'),ctx=c.getContext('2d'),W=c.width,H=c.height;
+  const d=document.documentElement.getAttribute('data-theme')==='dark';
+  const cl=d?{
+    bg:'#1a1a2e',fg:'#e0e0e0',fgD:'#999',
+    client:'#1a2a4a',clientB:'#3a6a8a',
+    local:'#1a3a2a',localB:'#3a8a4a',
+    root:'#3a1a2a',rootB:'#8a4a5a',
+    tld:'#3a3a1a',tldB:'#8a8a3a',
+    auth:'#2a1a3a',authB:'#6a3a8a',
+    arrow:'#ff6b6b',line:'#555',infoFill:'rgba(255,107,107,0.12)'
+  }:{
+    bg:'#fff',fg:'#1a1a2e',fgD:'#888',
+    client:'#e3f2fd',clientB:'#4a90d9',
+    local:'#e8f5e9',localB:'#28a745',
+    root:'#fce4ec',rootB:'#e91e63',
+    tld:'#fff8e1',tldB:'#f5a623',
+    auth:'#f3e5f5',authB:'#9c27b0',
+    arrow:'#ff6b6b',line:'#ccc',infoFill:'rgba(255,107,107,0.08)'
+  };
+
+  ctx.clearRect(0,0,W,H);ctx.fillStyle=cl.bg;ctx.fillRect(0,0,W,H);
+
+  // Nodes positioned left-to-right then back
+  const nodes=[
+    {x:50,y:60,w:130,h:46,label:'浏览器',sub:'Chrome/Firefox',color:cl.client,border:cl.clientB},
+    {x:250,y:60,w:150,h:46,label:'本地 DNS 缓存',sub:'hosts + OS 缓存',color:cl.client,border:cl.clientB},
+    {x:470,y:50,w:170,h:56,label:'本地 DNS 服务器',sub:'ISP / 路由器',color:cl.local,border:cl.localB},
+    {x:130,y:220,w:170,h:46,label:'根域名服务器',sub:'Root (a-m.root-servers.net)',color:cl.root,border:cl.rootB},
+    {x:380,y:220,w:170,h:46,label:'.com TLD 服务器',sub:'TLD (Top Level Domain)',color:cl.tld,border:cl.tldB},
+    {x:640,y:220,w:200,h:46,label:'权威 DNS 服务器',sub:'ns.baidu.com',color:cl.auth,border:cl.authB},
+    {x:470,y:420,w:170,h:56,label:'本地 DNS 服务器',sub:'缓存结果并返回',color:cl.local,border:cl.localB},
+    {x:150,y:420,w:130,h:56,label:'浏览器',sub:'拿到 IP，发起 TCP',color:cl.client,border:cl.clientB},
+  ];
+
+  // Draw all nodes
+  for(let i=0;i<nodes.length;i++){
+    const n=nodes[i];
+    ctx.fillStyle=n.color;ctx.strokeStyle=n.border;ctx.lineWidth=2;
+    roundRect(ctx,n.x,n.y,n.w,n.h,10);
+    ctx.fill();ctx.stroke();
+    ctx.fillStyle=cl.fg;ctx.font='bold 13px sans-serif';
+    ctx.fillText(n.label,n.x+10,n.y+20);
+    ctx.fillStyle=cl.fgD;ctx.font='10px sans-serif';
+    ctx.fillText(n.sub,n.x+10,n.y+36);
+  }
+
+  // Step-specific arrows & highlights
+  function arrow(x1,y1,x2,y2,color,lbl,lblOffset){
+    ctx.strokeStyle=color;ctx.fillStyle=color;ctx.lineWidth=2.5;ctx.setLineDash([]);
+    ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
+    const a=Math.atan2(y2-y1,x2-x1);
+    ctx.beginPath();ctx.moveTo(x2,y2);
+    ctx.lineTo(x2-7*Math.cos(a-Math.PI/6),y2-7*Math.sin(a-Math.PI/6));
+    ctx.lineTo(x2-7*Math.cos(a+Math.PI/6),y2-7*Math.sin(a+Math.PI/6));
+    ctx.closePath();ctx.fill();
+    if(lbl){
+      ctx.font='bold 11px sans-serif';
+      ctx.fillText(lbl,(x1+x2)/2-ctx.measureText(lbl).width/2,(y1+y2)/2+lblOffset);
+    }
+  }
+
+  function infoBox(x,y,txt){
+    ctx.fillStyle=cl.infoFill;roundRect(ctx,x,y,260,40,6);ctx.fill();
+    ctx.strokeStyle=cl.arrow;ctx.lineWidth=1.5;
+    roundRect(ctx,x,y,260,40,6);ctx.stroke();
+    ctx.fillStyle=cl.arrow;ctx.font='11px sans-serif';
+    txt.split('\n').forEach((l,i)=>{ctx.fillText(l,x+10,y+16+i*16)});
+  }
+
+  const n=nodes;
+  // Arrows between static node layout connections shown progressively
+  if(step>=0){arrow(180,83,250,83,cl.line,'查询 →',-8)} // browser->cache
+  if(step>=1){arrow(400,83,470,78,cl.line,'→',-8)} // cache->localDNS
+  if(step>=2){arrow(520,106,215,220,cl.arrow,'"谁是 baidu.com？"',-8);infoBox(530,140,'迭代查询：本地 DNS 代劳\n向根域名服务器发起查询')}
+  if(step>=3){arrow(215,243,380,243,cl.arrow,'"去问 .com TLD"',-8);infoBox(130,280,'根返回 .com TLD NS 记录\n（a.gtld-servers.net ...）')}
+  if(step>=4){arrow(465,266,550,243,cl.arrow,'"baidu.com 归谁管？"',-8);infoBox(470,300,'迭代查询：本地 DNS\n再向 .com TLD 发起查询')}
+  if(step>=5){arrow(640,243,740,243,cl.arrow,'"去问 ns.baidu.com"',-8);infoBox(620,280,'TLD 返回 baidu.com\n的权威 DNS 服务器地址')}
+  if(step>=6){arrow(740,266,555,420,cl.arrow,'"www.baidu.com 的 A 记录？"',-8);infoBox(620,340,'最终查询：本地 DNS\n向权威 DNS 查询 A 记录')}
+  if(step>=7){
+    arrow(555,448,280,448,cl.arrow,'A 记录：110.242.68.66',-10);
+    infoBox(300,380,'✅ 解析完成！\n本地 DNS 缓存结果并返回给浏览器');
+    // Highlight final state
+    ctx.strokeStyle='#4caf50';ctx.lineWidth=3;
+    roundRect(ctx,n[7].x-2,n[7].y-2,n[7].w+4,n[7].h+4,11);ctx.stroke();
+  }
+
+  // Legend
+  const ly=H-35;
+  [{c:cl.clientB,t:'客户端'},{c:cl.localB,t:'本地 DNS'},{c:cl.rootB,t:'根服务器'},{c:cl.tldB,t:'TLD'},{c:cl.authB,t:'权威 DNS'},{c:cl.arrow,t:'查询方向',arr:1}].forEach((it,i)=>{
+    const lx=30+i*130;
+    if(it.arr){ctx.strokeStyle=it.c;ctx.lineWidth=2.5;ctx.beginPath();ctx.moveTo(lx,ly+8);ctx.lineTo(lx+20,ly+8);ctx.stroke();ctx.fillStyle=it.c;ctx.beginPath();ctx.arc(lx+20,ly+8,4,0,Math.PI*2);ctx.fill()}else{ctx.fillStyle=it.c;ctx.fillRect(lx,ly,14,14);ctx.strokeStyle=cl.fgD;ctx.lineWidth=1;ctx.strokeRect(lx,ly,14,14)}
+    ctx.fillStyle=cl.fgD;ctx.font='10px sans-serif';ctx.fillText(it.t,lx+24,ly+12)
+  });
+}
+
+function roundRect(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath()}
+
+draw();
+</script>
+</body>
+</html>

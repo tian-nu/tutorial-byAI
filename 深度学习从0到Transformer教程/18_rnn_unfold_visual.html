@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>RNN 的结构与展开 — 沿时间展开</title>
+<style>
+:root{
+  --bg:#f5f5f5;--card:#fff;--text:#333;--sub:#666;
+  --border:#ddd;--blue:#3498db;--blue-light:#ebf5fb;
+  --green:#27ae60;--green-light:#e8f6ef;
+  --red:#e74c3c;--red-light:#fdedec;
+  --orange:#f39c12;--purple:#8e44ad;
+  --shadow:0 2px 8px rgba(0,0,0,.06);
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#1a1a2e;--card:#16213e;--text:#e0e0e0;--sub:#aaa;
+    --border:#333;--blue:#5dade2;--blue-light:rgba(93,173,226,.12);
+    --green:#2ecc71;--green-light:rgba(46,204,113,.12);
+    --red:#e74c3c;--red-light:rgba(231,76,60,.12);
+    --orange:#f1c40f;--purple:#bb8fce;
+    --shadow:0 2px 8px rgba(0,0,0,.3);
+  }
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column;align-items:center;padding:20px 16px;min-height:100vh}
+h1{font-size:1.35em;text-align:center;margin-bottom:4px}
+.desc{font-size:.82em;color:var(--sub);margin-bottom:14px;text-align:center;max-width:840px;line-height:1.6}
+.controls{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-bottom:14px;align-items:center}
+.controls button{padding:6px 14px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);cursor:pointer;font-size:.82em;transition:.15s}
+.controls button:hover{opacity:.85}
+.controls button.primary{background:var(--blue);color:#fff;border-color:var(--blue)}
+.step-indicator{font-size:.78em;color:var(--sub);min-width:90px;text-align:center}
+.mode-toggle{position:fixed;top:10px;right:14px;font-size:.72em;color:var(--sub);cursor:pointer;background:var(--card);border:1px solid var(--border);border-radius:6px;padding:4px 10px}
+.viz{width:100%;max-width:920px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;box-shadow:var(--shadow);margin-bottom:10px;overflow-x:auto}
+.viz svg{display:block;margin:0 auto;width:100%;height:auto;max-width:900px;min-width:680px}
+.legend{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;font-size:.74em;color:var(--sub);margin-top:8px}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+.legend .swatch{width:14px;height:4px;border-radius:2px;display:inline-block}
+.info-panel{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px 16px;width:100%;max-width:840px;min-height:70px}
+.info-panel .step-title{font-weight:600;font-size:.85em;margin-bottom:4px;color:var(--blue)}
+.info-panel .step-desc{font-size:.78em;color:var(--sub);line-height:1.6}
+.info-panel .step-desc code{font-size:.9em;background:var(--blue-light);padding:1px 5px;border-radius:3px;color:var(--text)}
+.info-panel .step-desc b{color:var(--text)}
+footer{margin-top:14px;font-size:.7em;color:var(--sub);text-align:center;line-height:1.6}
+footer a{color:var(--sub)}
+text{font-family:system-ui,sans-serif}
+</style>
+</head>
+<body>
+<div class="mode-toggle" id="modeToggle" onclick="toggleTheme()">🌙 暗色</div>
+<h1>RNN 的结构与展开 — 沿时间展开</h1>
+<p class="desc">
+  左侧是一个 RNN 单元：隐藏状态 h 在每一步接收输入 x，更新自身，输出预测 ŷ。
+  “自环箭头”表示 hₜ 依赖 hₜ₋₁。把它沿时间轴展开（unroll），就得到右侧的链式结构：
+  同一组参数（W_xh, W_hh, W_hy）在每个时间步被<b>重复使用</b>，用相同颜色标注。
+</p>
+
+<div class="controls">
+  <button id="btn-next" class="primary" onclick="nextStep()">▶ 下一步</button>
+  <button id="btn-auto" onclick="toggleAuto()">⏯ 自动播放</button>
+  <button id="btn-reset" onclick="resetAll()">↺ 重置</button>
+  <span class="step-indicator" id="stepInfo">步骤 0 / 5</span>
+</div>
+
+<div class="viz">
+  <svg id="rnnSvg" viewBox="0 0 900 380" xmlns="http://www.w3.org/2000/svg"></svg>
+  <div class="legend">
+    <span><span class="swatch" style="background:#e67e22"></span>W_xh（输入→隐藏，共享）</span>
+    <span><span class="swatch" style="background:#8e44ad"></span>W_hh（隐藏→隐藏，共享）</span>
+    <span><span class="swatch" style="background:#16a085"></span>W_hy（隐藏→输出，共享）</span>
+    <span>高亮 = 当前时间步</span>
+  </div>
+</div>
+
+<div class="info-panel" id="info">
+  <div class="step-title">准备开始</div>
+  <div class="step-desc">点击「下一步」逐步观察 RNN 如何沿时间展开。</div>
+</div>
+
+<footer>
+  数据来源：基于 18-RNN的结构与展开.md<br>
+  本可视化对应 <a href="18-RNN的结构与展开.md">18-RNN的结构与展开.md</a> 步骤 1-5
+</footer>
+
+<script>
+/* ---- 主题切换 ---- */
+function toggleTheme(){
+  const isDark=document.body.classList.toggle('force-dark');
+  const r=document.documentElement.style;
+  if(isDark){
+    r.setProperty('--bg','#1a1a2e');r.setProperty('--card','#16213e');r.setProperty('--text','#e0e0e0');r.setProperty('--sub','#aaa');
+    r.setProperty('--border','#333');r.setProperty('--blue','#5dade2');r.setProperty('--blue-light','rgba(93,173,226,.12)');
+    r.setProperty('--green','#2ecc71');r.setProperty('--green-light','rgba(46,204,113,.12)');
+    r.setProperty('--red','#e74c3c');r.setProperty('--red-light','rgba(231,76,60,.12)');
+    r.setProperty('--orange','#f1c40f');r.setProperty('--purple','#bb8fce');
+    r.setProperty('--shadow','0 2px 8px rgba(0,0,0,.3)');
+    document.getElementById('modeToggle').textContent='☀️ 亮色';
+  }else{
+    r.setProperty('--bg','#f5f5f5');r.setProperty('--card','#fff');r.setProperty('--text','#333');r.setProperty('--sub','#666');
+    r.setProperty('--border','#ddd');r.setProperty('--blue','#3498db');r.setProperty('--blue-light','#ebf5fb');
+    r.setProperty('--green','#27ae60');r.setProperty('--green-light','#e8f6ef');
+    r.setProperty('--red','#e74c3c');r.setProperty('--red-light','#fdedec');
+    r.setProperty('--orange','#f39c12');r.setProperty('--purple','#8e44ad');
+    r.setProperty('--shadow','0 2px 8px rgba(0,0,0,.06)');
+    document.getElementById('modeToggle').textContent='🌙 暗色';
+  }
+  draw();
+}
+
+const svg=document.getElementById('rnnSvg');
+const SVGNS='http://www.w3.org/2000/svg';
+function el(tag,attrs){
+  const e=document.createElementNS(SVGNS,tag);
+  for(const k in attrs) e.setAttribute(k,attrs[k]);
+  return e;
+}
+function cssVar(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim();}
+
+let step=0;
+const STEPS=[
+  {title:'步骤 1：单个 RNN 单元（折叠视图）',
+   desc:'左侧显示一个 RNN 单元。输入 <b>xₜ</b> 与上一步隐藏状态 <b>hₜ₋₁</b> 通过 <code>hₜ = tanh(W_xh·xₜ + W_hh·hₜ₋₁ + b)</code> 计算新的 hₜ，再由 <code>ŷₜ = W_hy·hₜ</code> 输出。环形箭头表示时间自环。',
+   phase:'folded'},
+  {title:'步骤 2：展开 t=1（初始步）',
+   desc:'沿时间展开：第一步 t=1。h₀ 通常初始化为 0。此时输入 x₁，得到 h₁ 与 ŷ₁。当前步高亮。',
+   phase:'t1'},
+  {title:'步骤 3：展开 t=2',
+   desc:'t=2 接收 x₂ 与上一步的 h₁，计算 h₂、ŷ₂。注意 <b>W_xh、W_hh、W_hy 颜色与 t=1 完全一致</b>——它们是同一组参数，只是被复用。',
+   phase:'t2'},
+  {title:'步骤 4：展开 t=3',
+   desc:'t=3 同理：h₃ = tanh(W_xh·x₃ + W_hh·h₂)。隐藏状态像「滚雪球」一样把过去信息往右传。',
+   phase:'t3'},
+  {title:'步骤 5：展开 t=4（完整序列）',
+   desc:'完整 4 步展开后的链式图。这就是 BPTT 反向传播要走过的路径：梯度沿 W_hh 从右往左连乘 T 次。等价于：一个深度为 T 的网络，但所有层<b>共享参数</b>。',
+   phase:'t4'}
+];
+
+/* ---- 折叠单元位置 ---- */
+const FOLDED={cx:120, cy:180, r:46};
+/* ---- 展开后各时间步位置 ---- */
+const TS=[1,2,3,4].map((t,i)=>({t, cx:250+i*150, cy:180, r:42}));
+
+function draw(){
+  svg.innerHTML='';
+  const blue=cssVar('--blue'),red=cssVar('--red'),green=cssVar('--green'),sub=cssVar('--sub'),text=cssVar('--text'),border=cssVar('--border');
+  const orange='#e67e22', purple='#8e44ad', teal='#16a085';
+  const ph=STEPS[step-1]&&STEPS[step-1].phase;
+
+  if(ph==='folded'){
+    drawFolded();
+    return;
+  }
+  // 展开模式：根据当前步数显示
+  const showCount = ph==='t1'?1:(ph==='t2'?2:(ph==='t3'?3:4));
+  const curIdx = showCount-1;
+
+  // 左侧保留折叠小图作为「等价提示」
+  drawFoldedMini(60, 180, 30);
+
+  // "展开"箭头
+  const arr=el('text',{x:130,y:186,'font-size':22,fill:sub,'text-anchor':'middle'});
+  arr.textContent='⇉';
+  svg.appendChild(arr);
+  const arrLbl=el('text',{x:130,y:206,'font-size':10,fill:sub,'text-anchor':'middle'});
+  arrLbl.textContent='展开';
+  svg.appendChild(arrLbl);
+
+  // 画 h0（初始）
+  const h0x=TS[0].cx-90, h0y=180;
+  const h0=el('circle',{cx:h0x,cy:h0y,r:24,fill:'var(--card)',stroke:border,'stroke-width':1.5,'stroke-dasharray':'4 3'});
+  svg.appendChild(h0);
+  const h0t=el('text',{x:h0x,y:h0y+4,'font-size':11,fill:sub,'text-anchor':'middle'});
+  h0t.textContent='h₀=0';
+  svg.appendChild(h0t);
+
+  for(let i=0;i<showCount;i++){
+    const n=TS[i];
+    const active = (i===curIdx);
+    // 输入 x_i
+    const xi=el('rect',{x:n.cx-30,y:280,width:60,height:34,rx:8,fill:active?'var(--blue-light)':'var(--card)',stroke:active?blue:border,'stroke-width':active?2:1.5});
+    svg.appendChild(xi);
+    const xit=el('text',{x:n.cx,y:301,'font-size':11,fill:text,'text-anchor':'middle','font-weight':600});
+    xit.textContent='x'+sub_(n.t);
+    svg.appendChild(xit);
+    // x -> h 边（W_xh 橙色）
+    drawEdge(n.cx,280, n.cx, n.cy+n.r, orange, active?2.5:1.5, active?.95:.7);
+    const wxhLbl=el('text',{x:n.cx+18,y:n.cy+n.r+22,'font-size':10,fill:orange,'text-anchor':'start','font-weight':600});
+    wxhLbl.textContent='W_xh';
+    svg.appendChild(wxhLbl);
+
+    // 隐藏状态 h_i
+    const hc=el('circle',{cx:n.cx,cy:n.cy,r:n.r,fill:active?'var(--blue-light)':'var(--card)',stroke:active?blue:border,'stroke-width':active?2.5:1.5});
+    svg.appendChild(hc);
+    const ht=el('text',{x:n.cx,y:n.cy-2,'font-size':12,fill:text,'text-anchor':'middle','font-weight':600});
+    ht.textContent='h'+sub_(n.t);
+    svg.appendChild(ht);
+    const hsub=el('text',{x:n.cx,y:n.cy+14,'font-size':9,fill:sub,'text-anchor':'middle'});
+    hsub.textContent='tanh';
+    svg.appendChild(hsub);
+
+    // 上一步 h -> 当前 h（W_hh 紫色）
+    if(i===0){
+      // h0 -> h1
+      drawEdge(h0x+24, h0y, n.cx-n.r, n.cy, purple, active?2.5:1.5, active?.95:.7);
+    }else{
+      const prev=TS[i-1];
+      drawEdge(prev.cx+prev.r, prev.cy, n.cx-n.r, n.cy, purple, active?2.5:1.5, active?.95:.7);
+    }
+    // W_hh 标签
+    if(i===curIdx){
+      const lbl=el('text',{x:(i===0?(h0x+n.cx)/2:(TS[i-1].cx+n.cx)/2),y:n.cy-18,'font-size':10,fill:purple,'text-anchor':'middle','font-weight':600});
+      lbl.textContent='W_hh';
+      svg.appendChild(lbl);
+    }
+
+    // 输出 ŷ_i
+    const yo=el('rect',{x:n.cx-30,y:60,width:60,height:34,rx:8,fill:active?'var(--green-light)':'var(--card)',stroke:active?green:border,'stroke-width':active?2:1.5});
+    svg.appendChild(yo);
+    const yot=el('text',{x:n.cx,y:81,'font-size':11,fill:text,'text-anchor':'middle','font-weight':600});
+    yot.textContent='ŷ'+sub_(n.t);
+    svg.appendChild(yot);
+    // h -> y 边（W_hy 青绿）
+    drawEdge(n.cx, n.cy-n.r, n.cx, 94, teal, active?2.5:1.5, active?.95:.7);
+    const whyLbl=el('text',{x:n.cx+18,y:n.cy-n.r-10,'font-size':10,fill:teal,'text-anchor':'start','font-weight':600});
+    whyLbl.textContent='W_hy';
+    svg.appendChild(whyLbl);
+
+    // 时间步标签
+    const tLbl=el('text',{x:n.cx,y:350,'font-size':11,fill:sub,'text-anchor':'middle'});
+    tLbl.textContent='t='+n.t;
+    svg.appendChild(tLbl);
+  }
+
+  // 提示：参数共享
+  if(showCount>=2){
+    const t=el('text',{x:TS[Math.floor(showCount/2)].cx||450,y:30,'font-size':12,fill:purple,'text-anchor':'middle','font-weight':600});
+    t.textContent='同色 = 同一组参数（权重共享）';
+    svg.appendChild(t);
+  }
+}
+
+function sub_(t){
+  // 简易下标用 unicode
+  const map={'0':'₀','1':'₁','2':'₂','3':'₃','4':'₄'};
+  return String(t).split('').map(c=>map[c]||c).join('');
+}
+
+function drawEdge(x1,y1,x2,y2,color,width,opacity){
+  const ln=el('line',{x1,y1,x2,y2,stroke:color,'stroke-width':width,opacity,'stroke-linecap':'round'});
+  svg.appendChild(ln);
+}
+
+function drawFolded(){
+  const cx=FOLDED.cx, cy=FOLDED.cy, r=FOLDED.r;
+  // x 输入
+  const xi=el('rect',{x:cx-30,y:cy+r+30,width:60,height:34,rx:8,fill:'var(--blue-light)',stroke:cssVar('--blue'),'stroke-width':1.5});
+  svg.appendChild(xi);
+  const xit=el('text',{x:cx,y:cy+r+51,'font-size':11,fill:cssVar('--text'),'text-anchor':'middle','font-weight':600});
+  xit.textContent='xₜ';
+  svg.appendChild(xit);
+  drawEdge(cx, cy+r+30, cx, cy+r, '#e67e22', 2, .95);
+  const wxhLbl=el('text',{x:cx+18,y:cy+r+22,'font-size':10,fill:'#e67e22','text-anchor':'start','font-weight':600});
+  wxhLbl.textContent='W_xh';
+  svg.appendChild(wxhLbl);
+
+  // 隐藏状态圆
+  const hc=el('circle',{cx,cy,r,fill:'var(--blue-light)',stroke:cssVar('--blue'),'stroke-width':2});
+  svg.appendChild(hc);
+  const ht=el('text',{x:cx,y:cy-2,'font-size':14,fill:cssVar('--text'),'text-anchor':'middle','font-weight':600});
+  ht.textContent='hₜ';
+  svg.appendChild(ht);
+  const hsub=el('text',{x:cx,y:cy+14,'font-size':10,fill:cssVar('--sub'),'text-anchor':'middle'});
+  hsub.textContent='tanh';
+  svg.appendChild(hsub);
+
+  // 自环（W_hh）
+  const loop=el('path',{d:`M ${cx-r+6} ${cy-r+4} C ${cx-r-30} ${cy-r-30}, ${cx+r+30} ${cy-r-30}, ${cx+r-6} ${cy-r+4}`,fill:'none',stroke:'#8e44ad','stroke-width':2.2});
+  svg.appendChild(loop);
+  // 箭头三角
+  const tri=el('polygon',{points:`${cx+r-6},${cy-r+4} ${cx+r-12},${cy-r-4} ${cx+r+2},${cy-r-4}`,fill:'#8e44ad'});
+  svg.appendChild(tri);
+  const whhLbl=el('text',{x:cx,y:cy-r-26,'font-size':10,fill:'#8e44ad','text-anchor':'middle','font-weight':600});
+  whhLbl.textContent='W_hh（自环）';
+  svg.appendChild(whhLbl);
+
+  // 上一步 h_{t-1} 入边（虚线）
+  const hin=el('line',{x1:cx-r-50,y1:cy,x2:cx-r,y2:cy,stroke:'#8e44ad','stroke-width':1.5,'stroke-dasharray':'4 3',opacity:.7});
+  svg.appendChild(hin);
+  const hinLbl=el('text',{x:cx-r-25,y:cy-8,'font-size':10,fill:'#8e44ad','text-anchor':'middle'});
+  hinLbl.textContent='hₜ₋₁';
+  svg.appendChild(hinLbl);
+
+  // 输出 ŷ
+  const yo=el('rect',{x:cx-30,y:cy-r-64,width:60,height:34,rx:8,fill:'var(--green-light)',stroke:cssVar('--green'),'stroke-width':1.5});
+  svg.appendChild(yo);
+  const yot=el('text',{x:cx,y:cy-r-43,'font-size':11,fill:cssVar('--text'),'text-anchor':'middle','font-weight':600});
+  yot.textContent='ŷₜ';
+  svg.appendChild(yot);
+  drawEdge(cx, cy-r, cx, cy-r-30, '#16a085', 2, .95);
+  const whyLbl=el('text',{x:cx+18,y:cy-r-22,'font-size':10,fill:'#16a085','text-anchor':'start','font-weight':600});
+  whyLbl.textContent='W_hy';
+  svg.appendChild(whyLbl);
+
+  // 右侧提示
+  const tip=el('text',{x:cx,y:330,'font-size':12,fill:cssVar('--sub'),'text-anchor':'middle'});
+  tip.textContent='↑ 折叠视图：一个单元 + 自环。下一步开始沿时间展开。';
+  svg.appendChild(tip);
+}
+
+function drawFoldedMini(cx,cy,r){
+  const hc=el('circle',{cx,cy,r,fill:'var(--card)',stroke:cssVar('--border'),'stroke-width':1.5});
+  svg.appendChild(hc);
+  const ht=el('text',{x:cx,y:cy+4,'font-size':11,fill:cssVar('--text'),'text-anchor':'middle','font-weight':600});
+  ht.textContent='hₜ';
+  svg.appendChild(ht);
+  // 自环
+  const loop=el('path',{d:`M ${cx-r+4} ${cy-r+3} C ${cx-r-18} ${cy-r-18}, ${cx+r+18} ${cy-r-18}, ${cx+r-4} ${cy-r+3}`,fill:'none',stroke:'#8e44ad','stroke-width':1.6,opacity:.6});
+  svg.appendChild(loop);
+  const lbl=el('text',{x:cx,y:cy+r+18,'font-size':9,fill:cssVar('--sub'),'text-anchor':'middle'});
+  lbl.textContent='折叠';
+  svg.appendChild(lbl);
+}
+
+/* ---- 控制 ---- */
+function updateInfo(){
+  document.getElementById('stepInfo').textContent='步骤 '+step+' / 5';
+  const inf=document.getElementById('info');
+  if(step===0){
+    inf.innerHTML='<div class="step-title">准备开始</div><div class="step-desc">点击「下一步」逐步观察 RNN 如何沿时间展开。</div>';
+  }else{
+    const s=STEPS[step-1];
+    inf.innerHTML='<div class="step-title">'+s.title+'</div><div class="step-desc">'+s.desc+'</div>';
+  }
+}
+function nextStep(){
+  if(step<5){step++;draw();updateInfo();}
+}
+let autoTimer=null;
+function toggleAuto(){
+  const btn=document.getElementById('btn-auto');
+  if(autoTimer){clearInterval(autoTimer);autoTimer=null;btn.textContent='⏯ 自动播放';return;}
+  btn.textContent='⏸ 暂停';
+  autoTimer=setInterval(()=>{
+    if(step>=5){clearInterval(autoTimer);autoTimer=null;document.getElementById('btn-auto').textContent='⏯ 自动播放';return;}
+    nextStep();
+  },1800);
+}
+function resetAll(){
+  if(autoTimer){clearInterval(autoTimer);autoTimer=null;document.getElementById('btn-auto').textContent='⏯ 自动播放';}
+  step=0;draw();updateInfo();
+}
+
+draw();
+updateInfo();
+</script>
+</body>
+</html>

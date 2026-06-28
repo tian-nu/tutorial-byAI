@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TLS 握手全过程 (TLS 1.3)</title>
+<style>
+:root{--bg:#fff;--fg:#1a1a2e;--border:#d0d0d0;--card:#f8f9fa;--btn:#e9ecef;--btn-fg:#333;--shadow:0 2px 8px rgba(0,0,0,.1);--info-bg:#fff3cd;--info-bd:#ffc107;--cl-bg:#e3f2fd;--cl-bd:#4a90d9;--sv-bg:#fce4ec;--sv-bd:#e91e63;--key-sym:#4caf50;--key-asym:#ff9800;--arr:#ff6b6b}
+[data-theme="dark"]{--bg:#1a1a2e;--fg:#e0e0e0;--border:#444;--card:#2d2d44;--btn:#3a3a5a;--btn-fg:#ccc;--shadow:0 2px 8px rgba(0,0,0,.4);--info-bg:#3a2a10;--info-bd:#8a7a3a;--cl-bg:#1a2a4a;--cl-bd:#3a6a8a;--sv-bg:#3a1a2a;--sv-bd:#8a4a5a;--key-sym:#66bb6a;--key-asym:#ffb74d;--arr:#ff6b6b}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--fg);min-height:100vh;transition:background .3s,color .3s}
+.header{max-width:960px;margin:0 auto;padding:20px 20px 0;display:flex;justify-content:space-between;align-items:center}
+.header h1{font-size:1.3em;font-weight:600}
+.theme-btn{background:var(--btn);color:var(--btn-fg);border:1px solid var(--border);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:.9em}
+.desc{max-width:960px;margin:0 auto;padding:6px 20px 10px;font-size:.85em;opacity:.75}
+.controls{max-width:960px;margin:0 auto 10px;padding:0 20px;display:flex;gap:8px;flex-wrap:wrap}
+.controls button{background:var(--btn);color:var(--btn-fg);border:1px solid var(--border);padding:8px 14px;border-radius:6px;cursor:pointer;font-size:.85em;transition:background .2s,transform .15s}
+.controls button:hover{transform:translateY(-1px)}
+.controls button.active{background:var(--arr);color:#fff;border-color:var(--arr)}
+.step-info{max-width:960px;margin:0 auto 16px;padding:12px 20px;background:var(--info-bg);border-radius:8px;border-left:4px solid var(--info-bd);font-size:.88em;line-height:1.6;min-height:48px}
+.canvas-wrap{max-width:960px;margin:0 auto;padding:0 20px 20px}
+canvas{width:100%;height:auto;border:1px solid var(--border);border-radius:10px;background:var(--card);box-shadow:var(--shadow)}
+.footer{max-width:960px;margin:0 auto;padding:10px 20px 20px;font-size:.78em;opacity:.6;text-align:center}
+.footer a{color:var(--fg)}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>TLS 握手全过程 (TLS 1.3)</h1>
+  <button class="theme-btn" onclick="toggleTheme()" title="切换暗色/亮色模式">🌓 切换主题</button>
+</div>
+<div class="desc">
+  本可视化对应 <a href="25-HTTPS与TLS.md" style="color:inherit">网络架构与传输全解 步骤 25（HTTPS 与 TLS）</a>。展示 TLS 1.3 握手中 Client 与 Server 的消息交换、密钥生成和使用（对称/非对称加密配合）。
+</div>
+
+<div class="controls">
+  <button id="btn0" class="active" onclick="goTo(0)">① Client Hello</button>
+  <button id="btn1" onclick="goTo(1)">② Server Hello</button>
+  <button id="btn2" onclick="goTo(2)">③ 密钥生成</button>
+  <button id="btn3" onclick="goTo(3)">④ Finished</button>
+  <button id="btn-reset" onclick="goTo(0)">⟳ 重置</button>
+</div>
+
+<div class="step-info" id="step-info">
+  <strong>步骤 ①：Client Hello</strong> — 客户端发送支持的加密套件列表（如 TLS_AES_256_GCM_SHA384）和密钥共享材料（DH 公钥参数），开始握手。
+</div>
+
+<div class="canvas-wrap">
+  <canvas id="cv" width="920" height="520"></canvas>
+</div>
+
+<div class="footer">
+  数据来源：基于 network_architecture_detailed_outline.md v2 | 
+  本可视化对应 <a href="25-HTTPS与TLS.md">网络架构与传输全解</a> 步骤 25
+</div>
+
+<script>
+let step=0;
+const steps=[
+  '<strong>步骤 ①：Client Hello</strong> — 客户端发送支持的加密套件列表（如 <code>TLS_AES_256_GCM_SHA384</code>）、随机数和密钥共享材料（DH 公钥）。浏览器说："我能用这些加密方式，这是我的公钥材料。"',
+  '<strong>步骤 ②：Server Hello</strong> — 服务器选定加密套件 <code>TLS_AES_256_GCM_SHA384</code>，发回服务器证书（含服务器公钥）、随机数和密钥共享材料。客户端验证证书链。',
+  '<strong>步骤 ③：双方各自生成会话密钥</strong> — 双方用 DH 密钥交换算法，结合自己的私钥和对方的公钥材料，独立计算出<strong>相同的</strong>会话密钥（对称密钥）。🔑 用非对称加密（DH）安全地交换了对称密钥！',
+  '<strong>步骤 ④：Finished — 握手完成！</strong> — 双方互相发送 Finished 消息（用会话密钥加密），验证握手完整性。后续所有数据用对称密钥加密传输（⚡ 对称加密快，非对称加密只在握手中用一次）。'
+];
+
+function toggleTheme(){
+  const h=document.documentElement;
+  h.setAttribute('data-theme',h.getAttribute('data-theme')==='dark'?'light':'dark');
+  draw();
+}
+
+function goTo(n){step=n;document.querySelectorAll('.controls button[id^="btn"]').forEach((b,i)=>{b.classList.toggle('active',i===n)});document.getElementById('step-info').innerHTML=steps[n];draw()}
+
+function draw(){
+  const c=document.getElementById('cv'),ctx=c.getContext('2d'),W=c.width,H=c.height;
+  const d=document.documentElement.getAttribute('data-theme')==='dark';
+  const cl=d?{
+    bg:'#1a1a2e',fg:'#e0e0e0',fgD:'#999',line:'#444',
+    clBg:'#1a2a4a',clBd:'#3a6a8a',svBg:'#3a1a2a',svBd:'#8a4a5a',
+    keySym:'#66bb6a',keyAsym:'#ffb74d',arr:'#ff6b6b',
+    certBg:'#1a4a3a',certBd:'#4caf50',done:'#4caf50'
+  }:{
+    bg:'#fff',fg:'#1a1a2e',fgD:'#888',line:'#ccc',
+    clBg:'#e3f2fd',clBd:'#4a90d9',svBg:'#fce4ec',svBd:'#e91e63',
+    keySym:'#4caf50',keyAsym:'#ff9800',arr:'#ff6b6b',
+    certBg:'#e8f5e9',certBd:'#4caf50',done:'#4caf50'
+  };
+
+  ctx.clearRect(0,0,W,H);ctx.fillStyle=cl.bg;ctx.fillRect(0,0,W,H);
+
+  // Drawing helpers
+  function rbox(x,y,w,h,f,b,r){ctx.fillStyle=f;ctx.strokeStyle=b;ctx.lineWidth=2;roundRect(ctx,x,y,w,h,r||10);ctx.fill();ctx.stroke()}
+  function txt(text,x,y,c,font,size){ctx.fillStyle=c||cl.fg;ctx.font=(font||'sans-serif');ctx.font=`${size||13}px ${font||'sans-serif'}`;ctx.fillText(text,x,y)}
+
+  function arrow(x1,y1,x2,y2,color,lbl,offX,offY){
+    ctx.strokeStyle=color;ctx.fillStyle=color;ctx.lineWidth=2.5;ctx.setLineDash([]);
+    ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
+    const a=Math.atan2(y2-y1,x2-x1);
+    ctx.beginPath();ctx.moveTo(x2,y2);
+    ctx.lineTo(x2-8*Math.cos(a-Math.PI/6),y2-8*Math.sin(a-Math.PI/6));
+    ctx.lineTo(x2-8*Math.cos(a+Math.PI/6),y2-8*Math.sin(a+Math.PI/6));
+    ctx.closePath();ctx.fill();
+    if(lbl){ctx.font='bold 11px sans-serif';const mx=(x1+x2)/2+offX,my=(y1+y2)/2+offY;ctx.fillText(lbl,mx-ctx.measureText(lbl).width/2,my)}
+  }
+
+  // ── Layout: Client (left col), Server (right col) ──
+  const clientX=30,serverX=W-260;
+  const colW=230;
+
+  // Client box
+  rbox(clientX,20,colW,130,cl.clBg,cl.clBd,12);
+  txt('客户端 (Client)',clientX+10,48,cl.fg,'bold sans-serif',14);
+  txt('浏览器 / curl / 应用',clientX+10,68,cl.fgD,'sans-serif',10);
+  txt('支持的加密套件:',clientX+10,88,cl.fgD,'sans-serif',10);
+  txt('TLS_AES_256_GCM_SHA384',clientX+20,102,cl.keySym,'monospace',9);
+  txt('TLS_CHACHA20_POLY1305',clientX+20,114,cl.fgD,'monospace',9);
+  txt('...等',clientX+20,126,cl.fgD,'monospace',9);
+
+  // Server box
+  rbox(serverX,20,colW,130,cl.svBg,cl.svBd,12);
+  txt('服务端 (Server)',serverX+10,48,cl.fg,'bold sans-serif',14);
+  txt('Nginx / Apache / 应用',serverX+10,68,cl.fgD,'sans-serif',10);
+  txt('证书: *.baidu.com',serverX+10,88,cl.fgD,'sans-serif',10);
+  txt('有效期至: 2027-08-15',serverX+10,102,cl.fgD,'sans-serif',10);
+
+  // ── KEY PANELS (middle-bottom, step 2+) ──
+  // Asymmetric key area
+  const asymY=170;
+  if(step>=0){
+    rbox(clientX,asymY,colW,65,cl.clBg,'#ff9800',8);
+    txt('🔑 非对称密钥材料',clientX+10,asymY+20,cl.keyAsym,'bold sans-serif',11);
+    txt('DH 私钥: (本地生成)',clientX+10,asymY+38,cl.fgD,'monospace',9);
+    txt('DH 公钥: (发送给服务器)',clientX+10,asymY+52,cl.fgD,'monospace',9);
+
+    rbox(serverX,asymY,colW,65,cl.svBg,'#ff9800',8);
+    txt('🔑 非对称密钥材料',serverX+10,asymY+20,cl.keyAsym,'bold sans-serif',11);
+    txt('DH 私钥: (本地生成)',serverX+10,asymY+38,cl.fgD,'monospace',9);
+    txt('DH 公钥: (发送给客户端)',serverX+10,asymY+52,cl.fgD,'monospace',9);
+  }
+
+  // Symmetric key area (step 2+)
+  const symY=260;
+  if(step>=2){
+    rbox(clientX,symY,colW,65,cl.clBg,cl.keySym,8);
+    txt('🔒 会话密钥 (对称)',clientX+10,symY+20,cl.keySym,'bold sans-serif',12);
+    txt('双方独立计算，结果相同!',clientX+10,symY+38,cl.keySym,'sans-serif',10);
+    txt('算法: AES-256-GCM',clientX+10,symY+52,cl.fgD,'monospace',9);
+
+    rbox(serverX,symY,colW,65,cl.svBg,cl.keySym,8);
+    txt('🔒 会话密钥 (对称)',serverX+10,symY+20,cl.keySym,'bold sans-serif',12);
+    txt('双方独立计算，结果相同!',serverX+10,symY+38,cl.keySym,'sans-serif',10);
+    txt('算法: AES-256-GCM',serverX+10,symY+52,cl.fgD,'monospace',9);
+  }
+
+  // ── MESSAGE ARROWS (center) ──
+  const midX=W/2;
+  // Step 0: Client Hello
+  if(step>=0){
+    arrow(clientX+colW,90,serverX,90,cl.arr,'Client Hello',0,-12);
+    ctx.fillStyle=cl.arr;ctx.font='10px sans-serif';
+    ctx.fillText('加密套件 + 随机数 + DH 公钥',midX-95,105);
+  }
+
+  // Step 1: Server Hello
+  if(step>=1){
+    arrow(serverX,150,clientX+colW,150,cl.arr,'Server Hello',0,-12);
+    ctx.fillStyle=cl.arr;ctx.font='10px sans-serif';
+    ctx.fillText('选定套件 + 证书 + DH 公钥',midX-95,165);
+    // Certificate chain indicator
+    ctx.fillStyle=cl.certBg;ctx.strokeStyle=cl.certBd;ctx.lineWidth=2;
+    roundRect(ctx,midX-60,95,120,36,8);ctx.fill();ctx.stroke();
+    ctx.fillStyle=cl.certBd;ctx.font='bold 11px sans-serif';
+    ctx.fillText('证书链验证',midX-42,115);
+    ctx.fillStyle=cl.fgD;ctx.font='10px sans-serif';
+    ctx.fillText('根 CA → 中间 CA → 服务器证书',midX-54,130);
+  }
+
+  // Step 2: Key generation arrows (internal computation)
+  if(step>=2){
+    // Dashed arrows showing internal computation
+    ctx.strokeStyle=cl.keySym;ctx.lineWidth=2;ctx.setLineDash([5,3]);
+    ctx.beginPath();ctx.moveTo(clientX+colW/2,asymY+65);ctx.lineTo(clientX+colW/2,symY);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(serverX+colW/2,asymY+65);ctx.lineTo(serverX+colW/2,symY);ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle=cl.keySym;ctx.font='bold 10px sans-serif';
+    ctx.fillText('DH 计算 →',clientX+colW/2-35,270);
+    ctx.fillText('DH 计算 →',serverX+colW/2-35,270);
+
+    // "same key" indicator
+    ctx.fillStyle=cl.keySym;ctx.font='bold 12px sans-serif';
+    ctx.fillText('⟺ 双方算出相同的会话密钥 ⟺',midX-130,310);
+  }
+
+  // Step 3: Finished
+  if(step>=3){
+    arrow(clientX+colW,350,serverX,350,cl.done,'Finished',0,-12);
+    arrow(serverX,390,clientX+colW,390,cl.done,'Finished',0,-12);
+    ctx.fillStyle=cl.done;ctx.font='bold 11px sans-serif';
+    ctx.fillText('（用会话密钥加密验证）',midX-80,408);
+
+    // Big checkmark
+    ctx.fillStyle=cl.done;ctx.font='bold 20px sans-serif';
+    ctx.fillText('✅ TLS 安全通道已建立！',midX-115,440);
+    ctx.fillStyle=cl.fgD;ctx.font='11px sans-serif';
+    ctx.fillText('后续数据全部用 AES-256-GCM 对称加密',midX-130,460);
+    ctx.fillText('（对称加密快速，非对称加密只在握手用一次）',midX-128,478);
+  }
+
+  // ── CONNECTION STATUS ──
+  const statusY=380;
+  ctx.fillStyle=step>=3?cl.done:cl.fgD;
+  ctx.font='bold 13px sans-serif';
+  ctx.fillText('状态: '+(step>=3?'🔒 加密通信中':'⏳ 握手协商中...'),30,statusY);
+
+  // Legend
+  const ly=H-22;
+  [{c:cl.arr,t:'消息交换'},{c:cl.keyAsym,t:'非对称加密 (DH)'},{c:cl.keySym,t:'对称加密 (AES)'},{c:cl.certBd,t:'证书'},{c:cl.done,t:'安全通道'}].forEach((it,i)=>{
+    const lx=30+i*145;
+    ctx.fillStyle=it.c;ctx.fillRect(lx,ly,14,14);
+    ctx.strokeStyle=cl.fgD;ctx.lineWidth=1;ctx.strokeRect(lx,ly,14,14);
+    ctx.fillStyle=cl.fgD;ctx.font='10px sans-serif';ctx.fillText(it.t,lx+20,ly+12);
+  });
+}
+
+function roundRect(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath()}
+draw();
+</script>
+</body>
+</html>

@@ -4,7 +4,7 @@
 >
 > **前置条件**：Git已安装，会基本的Git分支操作，项目已初始化Git仓库。
 >
-> 📊 可视化演示见 [ai_coding_agent_visual.html](../.project/docs/tutorials/ai_coding_agent_visual.html)
+> 📊 可视化演示见 [ai_coding_agent_visual.html](ai_coding_agent_visual.html)
 
 如果说Tab补全是"帮你写半句话"，Chat是"你和AI一对一对话"，Composer是"帮你生成多个文件"——那么**Agent模式**就是**AI自动驾驶**。
 

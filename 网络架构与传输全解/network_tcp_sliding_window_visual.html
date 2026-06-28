@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>TCP 滑动窗口动态演示</title>
+<style>
+:root{--bg:#f5f5f5;--card:#fff;--text:#333;--sub:#666;--border:#ccc;--sent:#3498db;--acked:#2ecc71;--unsent:#ccc;--lost:#e74c3c}
+@media(prefers-color-scheme:dark){:root{--bg:#1a1a2e;--card:#16213e;--text:#e0e0e0;--sub:#aaa;--border:#444;--unsent:#555}}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column;align-items:center;padding:16px;min-height:100vh}
+h1{font-size:1.3em;text-align:center;margin-bottom:4px}
+.desc{font-size:.8em;color:var(--sub);margin-bottom:10px;text-align:center;max-width:720px}
+.controls{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-bottom:10px}
+.controls button{padding:5px 14px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);cursor:pointer;font-size:.82em;transition:.15s}
+.controls button:hover{opacity:.8}
+.controls button.active{background:#3498db;color:#fff;border-color:#3498db}
+.info-bar{display:flex;gap:16px;flex-wrap:wrap;justify-content:center;font-size:.78em;margin-bottom:10px}
+.info-bar span{background:var(--card);padding:4px 10px;border-radius:4px;border:1px solid var(--border)}
+.window-area{width:100%;max-width:780px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:10px}
+.window-area h3{font-size:.88em;text-align:center;margin-bottom:6px}
+.seg-row{display:flex;gap:3px;flex-wrap:wrap;justify-content:center;margin:6px 0}
+.seg{width:32px;height:32px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:.65em;font-weight:bold;color:#fff;transition:background .3s;cursor:default;position:relative}
+.seg.acked{background:var(--acked)}
+.seg.sent{background:var(--sent)}
+.seg.pending{background:var(--unsent);color:#888}
+.seg.future{background:var(--bg);border:1px dashed var(--border);color:var(--sub)}
+.seg.lost{background:var(--lost);animation:blink .5s 3}
+@keyframes blink{50%{opacity:.4}}
+.seg .num{font-size:.62em;position:absolute;top:-12px;color:var(--sub)}
+.win-bracket{display:flex;align-items:center;justify-content:center;gap:2px;font-size:.68em;color:var(--sub);margin:2px 0}
+.win-bracket .lbl{border:1px dashed var(--hl,#3498db);padding:2px 6px;border-radius:3px;font-size:.7em}
+.legend{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;font-size:.7em;color:var(--sub);margin-top:6px}
+.packet-row{display:flex;align-items:center;justify-content:center;gap:4px;font-size:.72em;margin:4px 0;font-family:monospace}
+.flow{display:flex;justify-content:center;align-items:center;gap:14px;margin:8px 0}
+.flow-node{text-align:center;font-size:.75em}
+.flow-node .box{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:6px 10px;min-width:60px}
+.flow-arrow{font-size:1.2em}
+.msg-box{width:100%;max-width:780px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px;min-height:60px;font-size:.78em;color:var(--sub)}
+footer{margin-top:14px;font-size:.7em;color:var(--sub);text-align:center;line-height:1.6}
+footer a{color:var(--sub)}
+</style>
+</head>
+<body>
+<h1>TCP 滑动窗口 — 动态演示</h1>
+<p class="desc">窗口大小=4000字节，MSS=1000字节。发送方持续发送数据段，收到 ACK 后窗口左沿右移（窗口"滑动"）。</p>
+<div class="controls">
+  <button id="btn-play" onclick="play()" class="active">▶ 逐步播放</button>
+  <button onclick="simLoss()">⚠ 模拟丢包</button>
+  <button onclick="resetV()">↺ 重置</button>
+  <span id="stepLabel" style="font-size:.76em;color:var(--sub);align-self:center"></span>
+</div>
+<div class="info-bar">
+  <span>窗口大小: <b id="winSize">4000</b> 字节</span>
+  <span>已确认: <b id="ackedBytes">0</b></span>
+  <span>已发送未确认: <b id="inflight">0</b></span>
+  <span>可发送: <b id="available">4000</b></span>
+</div>
+<div class="window-area">
+  <h3>发送方：数据缓冲区（字节 1~9999）</h3>
+  <div class="win-bracket">
+    <span>← 已确认</span><span class="lbl">██ 窗口覆盖范围 ██</span><span>还不能发 →</span>
+  </div>
+  <div class="seg-row" id="senderSegs"></div>
+  <div class="packet-row" id="pktInfo"></div>
+</div>
+<div class="flow">
+  <div class="flow-node"><div class="box">发送方<br><small>Sender</small></div></div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-node" id="midPkt"><div class="box">等待<br>播放</div></div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-node"><div class="box">接收方<br><small>Receiver</small></div></div>
+</div>
+<div class="msg-box" id="msgBox">初始化：窗口覆盖字节 1~4000（窗口大小 = 4000 字节），可以发送 4 段</div>
+<footer>
+  数据来源：基于 network_architecture_detailed_outline.md v2<br>
+  本可视化对应 <a href="#">网络架构与传输全解</a> 步骤16（TCP数据传输 — 滑动窗口）
+</footer>
+
+<script>
+const WIN=4000,MSS=1000,TOTAL=9999,MAX_SEG=TOTAL/MSS;
+let sentPtr=1,ackPtr=1,segState={},lossSeg=null,timer=null,stepIx=0;
+// segState[s]= 'acked'|'sent'|'pending'|'future'|'lost'
+
+function init(){
+  sentPtr=1;ackPtr=1;segState={};lossSeg=null;stepIx=0;
+  for(let s=1;s<=MAX_SEG;s++) segState[s]=s*MSS<=WIN?'pending':'future';
+  segState[1]='pending';
+}
+function render(){
+  let h='';
+  for(let s=1;s<=MAX_SEG;s++){
+    let st=segState[s]||'future';
+    let cls='seg '+st;
+    let lbl=s*MSS;
+    h+='<div class="'+cls+'" title="字节 '+(s*MSS-MSS+1)+'~'+Math.min(s*MSS,TOTAL)+'">S'+s+'<span class="num">'+lbl+'</span></div>';
+  }
+  document.getElementById('senderSegs').innerHTML=h;
+  let acked=sentPtr>1?(sentPtr-1)*MSS:0;
+  let inFlight=0,pend=0;
+  for(let s=1;s<=MAX_SEG;s++){if(segState[s]==='sent'||segState[s]==='lost')inFlight++;if(segState[s]==='pending')pend++}
+  document.getElementById('ackedBytes').textContent=acked;
+  document.getElementById('inflight').textContent=inFlight;
+  document.getElementById('available').textContent=pend*MSS;
+}
+function sendSeg(s){
+  if(segState[s]!=='pending')return;
+  segState[s]='sent';
+  render();
+  document.getElementById('midPkt').innerHTML='<div class="box">📦 seq='+(s*MSS-MSS+1)+'<br><small>('+MSS+'B)</small></div>';
+  document.getElementById('pktInfo').innerHTML='→ 已发送段 S'+s+'（字节 '+(s*MSS-MSS+1)+'~'+s*MSS+'），等待 ACK...';
+}
+function ackSeg(s){
+  if(segState[s]==='lost'){document.getElementById('msgBox').textContent='⏳ 段 S'+s+' 超时！触发超时重传 (RTO)'; return}
+  if(segState[s]!=='sent')return;
+  segState[s]='acked';
+  sentPtr=Math.max(sentPtr,s*MSS+1);
+  // slide: update pending
+  for(let i=1;i<=MAX_SEG;i++){
+    if(segState[i]==='pending'||segState[i]==='future'){
+      segState[i]=i*MSS<sentPtr?'acked':i*MSS<sentPtr+WIN?'pending':'future';
+    }
+  }
+  render();
+  document.getElementById('midPkt').innerHTML='<div class="box">✅ ACK='+sentPtr+'<br><small>确认</small></div>';
+  document.getElementById('pktInfo').innerHTML='← 收到 ACK='+sentPtr+'，确认了字节 '+s*MSS+'！窗口右移';
+  document.getElementById('msgBox').textContent='窗口滑动：已确认至 '+sentPtr+'（窗口左沿右移），窗口现在覆盖 '+sentPtr+'~'+(sentPtr+WIN-1);
+}
+
+function play(){
+  clearInterval(timer);
+  if(stepIx>=MAX_SEG*2+1){stepIx=0;resetV()}
+  document.getElementById('btn-play').classList.add('active');
+  timer=setInterval(()=>{
+    let phase=Math.floor(stepIx/2);
+    let isSend=stepIx%2===0;
+    let seg=phase+1;
+    if(stepIx>=MAX_SEG*2){clearInterval(timer);document.getElementById('btn-play').classList.remove('active');document.getElementById('stepLabel').textContent='演示完成';return}
+    document.getElementById('stepLabel').textContent='步骤 '+(stepIx+1)+'/'+(MAX_SEG*2);
+    if(isSend){
+      // send
+      if(segState[seg]==='pending'){sendSeg(seg)}
+      else if(segState[seg]==='sent'){sendSeg(seg+1)} // skip
+    }else{
+      // ack
+      if(segState[seg]==='sent'||segState[seg]==='lost'){
+        if(seg===lossSeg){
+          // loss: retransmit
+          segState[seg]='sent';
+          render();
+          document.getElementById('msgBox').textContent='🔄 超时重传！段 S'+seg+' 重新发送';
+          document.getElementById('midPkt').innerHTML='<div class="box">🔄 seq='+(seg*MSS-MSS+1)+'<br><small>重传</small></div>';
+        }else{
+          ackSeg(seg);
+        }
+      }
+    }
+    stepIx++;
+    if(stepIx>=MAX_SEG*2){clearInterval(timer);document.getElementById('btn-play').classList.remove('active')}
+  },1500);
+}
+function simLoss(){
+  if(timer){clearInterval(timer);timer=null}
+  // find the next unsent segment to mark as loss
+  for(let s=1;s<=MAX_SEG;s++){
+    if(segState[s]==='sent'){lossSeg=s;segState[s]='lost';render();document.getElementById('msgBox').textContent='⚠ 模拟丢包：段 S'+s+' 丢失（ACK 未到达）— 将触发超时重传';break}
+  }
+}
+function resetV(){
+  clearInterval(timer);timer=null;
+  init();render();stepIx=0;
+  document.getElementById('btn-play').classList.add('active');
+  document.getElementById('stepLabel').textContent='';
+  document.getElementById('pktInfo').innerHTML='';
+  document.getElementById('midPkt').innerHTML='<div class="box">等待<br>播放</div>';
+  document.getElementById('msgBox').textContent='初始化：窗口覆盖字节 1~4000（窗口大小 = 4000 字节），可以发送 4 段';
+  document.getElementById('winSize').textContent='4000';
+}
+init();render();
+</script>
+</body>
+</html>

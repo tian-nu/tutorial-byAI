@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Positional Encoding 位置编码 — 波形与矩阵</title>
+<style>
+:root {
+  --bg: #f5f5f5; --card: #fff; --text: #333; --sub: #666;
+  --border: #ddd; --blue: #3498db; --blue-light: #ebf5fb;
+  --green: #27ae60; --green-light: #eafaf1;
+  --orange: #f39c12; --orange-light: #fef5e7;
+  --purple: #9b59b6; --purple-light: #f5eef8;
+  --red: #e74c3c; --teal: #1abc9c;
+  --shadow: 0 2px 8px rgba(0,0,0,.06);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1a1a2e; --card: #16213e; --text: #e0e0e0; --sub: #aaa;
+    --border: #333; --blue: #5dade2; --blue-light: rgba(93,173,226,.12);
+    --green: #2ecc71; --green-light: rgba(46,204,113,.12);
+    --orange: #f5b041; --orange-light: rgba(245,176,65,.12);
+    --purple: #bb8fce; --purple-light: rgba(187,143,206,.12);
+    --teal: #48c9b0;
+    --shadow: 0 2px 8px rgba(0,0,0,.3);
+  }
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,"PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column;align-items:center;padding:20px 16px;min-height:100vh}
+h1{font-size:1.35em;text-align:center;margin-bottom:4px}
+.desc{font-size:.82em;color:var(--sub);margin-bottom:14px;text-align:center;max-width:880px;line-height:1.6}
+
+/* 控制区 */
+.controls{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;margin-bottom:14px;align-items:center;width:100%;max-width:980px}
+.controls .grp{display:flex;align-items:center;gap:6px;background:var(--card);padding:6px 12px;border:1px solid var(--border);border-radius:8px;font-size:.78em}
+.controls label{color:var(--sub);font-size:.82em}
+.controls input[type=range]{width:200px;cursor:pointer}
+.controls .pos-val{font-weight:600;color:var(--blue);min-width:32px;display:inline-block;text-align:center}
+.controls .dim-cbs{display:flex;gap:8px;flex-wrap:wrap}
+.controls .dim-cbs label{display:inline-flex;align-items:center;gap:3px;cursor:pointer;padding:2px 6px;border-radius:4px;font-size:.74em}
+.controls .dim-cbs label.sel-sin{background:var(--blue-light);color:var(--blue)}
+.controls .dim-cbs label.sel-cos{background:var(--green-light);color:var(--green)}
+.controls button{padding:6px 16px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);cursor:pointer;font-size:.82em;transition:.15s}
+.controls button:hover{opacity:.85}
+
+/* 主体两栏 */
+.main{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;width:100%;max-width:980px;margin-bottom:12px}
+.panel{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px;box-shadow:var(--shadow)}
+.panel.wave{flex:1;min-width:380px}
+.panel.heat{flex:1;min-width:300px}
+.panel h3{font-size:.88em;margin-bottom:8px;color:var(--blue);text-align:center}
+.panel .sub{font-size:.72em;color:var(--sub);text-align:center;margin-bottom:8px;line-height:1.5}
+canvas{display:block;background:var(--bg);border-radius:6px}
+
+/* 热力图 */
+.heatmap-wrap{display:flex;flex-direction:column;align-items:center}
+.heatmap{display:grid;gap:1px;font-family:"Courier New",monospace;font-size:.66em}
+.heatmap .cell{padding:3px 4px;text-align:center;border-radius:2px;min-width:30px;color:#fff;transition:outline .2s}
+.heatmap .cell.cur-pos{outline:2px solid var(--orange);outline-offset:1px;font-weight:700}
+.heatmap .col-label{font-size:.7em;color:var(--sub);text-align:center;padding-bottom:4px;min-width:30px}
+.heatmap .row-label{font-size:.7em;color:var(--sub);text-align:right;padding-right:5px;min-width:28px}
+.heatmap .corner{font-size:.65em;color:var(--sub);text-align:right;padding-right:5px}
+
+/* 颜色条 */
+.colorbar{display:flex;align-items:center;gap:6px;margin-top:8px;font-size:.66em;color:var(--sub)}
+.colorbar .bar{width:120px;height:10px;background:linear-gradient(to right,#1a5276,#5dade2,#fff);border-radius:3px}
+.colorbar .bar.neg{background:linear-gradient(to right,#fff,#e74c3c,#7b241c)}
+
+/* 当前位置向量显示 */
+.pos-vec{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 14px;width:100%;max-width:980px;margin-bottom:10px;font-size:.78em}
+.pos-vec .ttl{font-weight:600;color:var(--blue);margin-bottom:5px}
+.pos-vec .vec{font-family:"Courier New",monospace;background:var(--bg);padding:8px 10px;border-radius:5px;border-left:3px solid var(--blue);white-space:pre-wrap;color:var(--text);line-height:1.6}
+.pos-vec .legend{margin-top:6px;font-size:.72em;color:var(--sub)}
+.pos-vec .legend span{display:inline-block;width:10px;height:10px;border-radius:2px;vertical-align:middle;margin:0 3px 0 8px}
+.pos-vec .legend .sin{background:var(--blue)}
+.pos-vec .legend .cos{background:var(--green)}
+
+footer{margin-top:16px;font-size:.7em;color:var(--sub);text-align:center;line-height:1.6}
+footer a{color:var(--sub)}
+</style>
+</head>
+<body>
+<h1>Positional Encoding 位置编码 — 波形与矩阵</h1>
+<p class="desc">
+  正弦位置编码公式：<code>PE(pos, 2i)=sin(pos/10000^(2i/d_model))</code>，<code>PE(pos, 2i+1)=cos(...)</code>。
+  左侧是各维度的 sin/cos 波形（低维高频、高维低频），右侧是 PE 矩阵热力图。
+  拖动滑块看不同位置的编码向量，勾选维度在波形上高亮。
+  对应教程《31-Positional Encoding 给序列加位置感》。
+</p>
+
+<div class="controls">
+  <div class="grp">
+    <label>pos =</label>
+    <input type="range" id="posSlider" min="0" max="49" value="1" oninput="update()">
+    <span class="pos-val" id="posVal">1</span>
+  </div>
+  <div class="grp">
+    <label>d_model =</label>
+    <select id="dmodelSel" onchange="rebuild()">
+      <option value="4">4</option>
+      <option value="8">8</option>
+      <option value="16" selected>16</option>
+      <option value="32">32</option>
+    </select>
+  </div>
+  <div class="grp">
+    <label>显示前 N 个位置：</label>
+    <select id="rowsSel" onchange="rebuild()">
+      <option value="10">10</option>
+      <option value="20" selected>20</option>
+      <option value="49">49</option>
+    </select>
+  </div>
+  <button onclick="toggleAllDims()">全选/全不选维度</button>
+</div>
+
+<div class="main">
+  <div class="panel wave">
+    <h3>各维度 sin/cos 波形（pos=0~49）</h3>
+    <div class="sub">偶数维（sin）蓝色 · 奇数维（cos）绿色 · 滑块当前位置以橙色竖线标记<br>低维（i 小）频率高、变化快；高维（i 大）频率低、变化慢</div>
+    <canvas id="waveCanvas" width="560" height="320"></canvas>
+    <div class="dim-cbs" id="dimCbs"></div>
+  </div>
+  <div class="panel heat">
+    <h3>PE 矩阵热力图（pos × d_model）</h3>
+    <div class="sub">每行是一个位置的编码向量，颜色深浅表示数值大小（蓝=正、红=负）<br>橙色边框 = 当前滑块选中的 pos</div>
+    <div class="heatmap-wrap">
+      <div class="heatmap" id="heatmap"></div>
+    </div>
+    <div class="colorbar">
+      <span>-1</span>
+      <div class="bar neg"></div>
+      <span>0</span>
+      <div class="bar"></div>
+      <span>+1</span>
+    </div>
+  </div>
+</div>
+
+<div class="pos-vec">
+  <div class="ttl">当前位置 PE(<span id="curPosLabel">1</span>) 的编码向量</div>
+  <div class="vec" id="posVec"></div>
+  <div class="legend">
+    <span class="sin"></span>偶数维 = sin (高频→低频)
+    <span class="cos"></span>奇数维 = cos (高频→低频)
+    <span style="margin-left:14px;color:var(--orange);font-weight:600">●</span> 当前 pos
+  </div>
+</div>
+
+<footer>
+  数据来源：31-Positional-Encoding给序列加位置感.md（公式与 d_model=4 数值小例子）｜
+  本可视化对应 <a href="31-Positional-Encoding给序列加位置感.md">Ch31 · Positional Encoding 给序列加位置感</a>
+</footer>
+
+<script>
+// === 状态 ===
+let dModel = 16;
+let maxRows = 20;
+let curPos = 1;
+let showDims = new Set(); // 选中的维度索引
+let allDimsOn = true;
+
+// === 计算 PE ===
+function pe(pos, d){
+  const v = new Array(d);
+  for(let i=0;i<d/2;i++){
+    const div = Math.pow(10000, (2*i)/d);
+    v[2*i] = Math.sin(pos/div);
+    v[2*i+1] = Math.cos(pos/div);
+  }
+  return v;
+}
+
+// === 颜色映射 ===
+function valueColor(v){
+  // v in [-1, 1]
+  if(v>=0){
+    const t = Math.min(1, v);
+    const r = Math.round(93 + (255-93)*(1-t));
+    const g = Math.round(173 + (255-173)*(1-t));
+    const b = Math.round(226 + (255-226)*(1-t));
+    return `rgb(${r},${g},${b})`;
+  } else {
+    const t = Math.min(1, -v);
+    const r = Math.round(255 + (123-255)*t);
+    const g = Math.round(255 + (36-255)*t);
+    const b = Math.round(255 + (28-255)*t);
+    return `rgb(${r},${g},${b})`;
+  }
+}
+
+// === 渲染热力图 ===
+function renderHeatmap(){
+  const container = document.getElementById('heatmap');
+  // 列宽由 dModel 决定
+  const cols = dModel;
+  const rows = Math.min(maxRows, 49);
+  container.style.gridTemplateColumns = `auto repeat(${cols}, 1fr)`;
+
+  let html = '';
+  // 表头
+  html += '<div class="corner">pos</div>';
+  for(let j=0;j<cols;j++){
+    const cls = j%2===0 ? 'sel-sin' : 'sel-cos';
+    html += `<div class="col-label" style="color:${j%2===0?'var(--blue)':'var(--green)'}">${j}</div>`;
+  }
+  // 行
+  for(let p=0;p<rows;p++){
+    const v = pe(p, dModel);
+    html += `<div class="row-label">${p}</div>`;
+    for(let j=0;j<cols;j++){
+      const isCur = (p===curPos);
+      html += `<div class="cell${isCur?' cur-pos':''}" style="background:${valueColor(v[j])}" title="pos=${p}, dim=${j}, val=${v[j].toFixed(3)}">${v[j].toFixed(2)}</div>`;
+    }
+  }
+  container.innerHTML = html;
+}
+
+// === 渲染波形 ===
+function renderWave(){
+  const canvas = document.getElementById('waveCanvas');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0,0,W,H);
+
+  // 背景
+  ctx.fillStyle = getCss('--bg');
+  ctx.fillRect(0,0,W,H);
+
+  // 坐标轴
+  const padL=30, padR=10, padT=10, padB=24;
+  const plotW = W - padL - padR;
+  const plotH = H - padT - padB;
+  const midY = padT + plotH/2;
+
+  ctx.strokeStyle = getCss('--border');
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(padL, midY); ctx.lineTo(W-padR, midY);  // x轴
+  ctx.moveTo(padL, padT); ctx.lineTo(padL, H-padB);  // y轴
+  ctx.stroke();
+
+  // y轴刻度
+  ctx.fillStyle = getCss('--sub');
+  ctx.font = '10px monospace';
+  ctx.textAlign = 'right';
+  ctx.fillText('+1', padL-3, padT+8);
+  ctx.fillText(' 0', padL-3, midY+3);
+  ctx.fillText('-1', padL-3, H-padB);
+
+  // x轴刻度
+  ctx.textAlign = 'center';
+  for(let p=0; p<=49; p+=10){
+    const x = padL + (p/49)*plotW;
+    ctx.fillText(p, x, H-padB+12);
+    ctx.strokeStyle = getCss('--border');
+    ctx.globalAlpha = 0.3;
+    ctx.beginPath();
+    ctx.moveTo(x, padT); ctx.lineTo(x, H-padB);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  // 画每个维度（最多画 8 条避免太挤）
+  const dimsToDraw = [];
+  const half = dModel/2;
+  // 选 4 个代表维度：i=0, i=half/4, i=half/2, i=half-1
+  const indices = [0, Math.floor(half/4), Math.floor(half/2), half-1];
+  indices.forEach(i=>{
+    if(i>=0 && i<half){
+      dimsToDraw.push({i:i, dim:2*i, isSin:true});
+      dimsToDraw.push({i:i, dim:2*i+1, isSin:false});
+    }
+  });
+
+  dimsToDraw.forEach(({i, dim, isSin})=>{
+    if(!allDimsOn && !showDims.has(dim)) return;
+    const div = Math.pow(10000, (2*i)/dModel);
+    ctx.strokeStyle = isSin ? getCss('--blue') : getCss('--green');
+    ctx.lineWidth = (dim<4) ? 2 : 1.2;
+    ctx.globalAlpha = (dim<4) ? 0.95 : 0.55;
+    ctx.beginPath();
+    for(let p=0; p<=49; p++){
+      const x = padL + (p/49)*plotW;
+      const y = midY - (isSin ? Math.sin(p/div) : Math.cos(p/div)) * (plotH/2)*0.92;
+      if(p===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  });
+
+  // 当前 pos 竖线
+  const cx = padL + (curPos/49)*plotW;
+  ctx.strokeStyle = getCss('--orange');
+  ctx.lineWidth = 2;
+  ctx.setLineDash([4,3]);
+  ctx.beginPath();
+  ctx.moveTo(cx, padT); ctx.lineTo(cx, H-padB);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // 当前 pos 在每条曲线上的点
+  dimsToDraw.forEach(({i, dim, isSin})=>{
+    if(!allDimsOn && !showDims.has(dim)) return;
+    const div = Math.pow(10000, (2*i)/dModel);
+    const y = midY - (isSin ? Math.sin(curPos/div) : Math.cos(curPos/div)) * (plotH/2)*0.92;
+    ctx.fillStyle = getCss('--orange');
+    ctx.beginPath();
+    ctx.arc(cx, y, 3, 0, Math.PI*2);
+    ctx.fill();
+  });
+
+  // 图例
+  ctx.font = '11px sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillStyle = getCss('--blue');
+  ctx.fillText('● sin(偶数维)', padL+4, padT+12);
+  ctx.fillStyle = getCss('--green');
+  ctx.fillText('● cos(奇数维)', padL+90, padT+12);
+  ctx.fillStyle = getCss('--orange');
+  ctx.fillText('● 当前 pos='+curPos, padL+184, padT+12);
+}
+
+function getCss(varName){
+  return getComputedStyle(document.documentElement).getPropertyValue(varName).trim() || '#888';
+}
+
+// === 渲染当前 pos 向量 ===
+function renderPosVec(){
+  const v = pe(curPos, dModel);
+  let html = `PE(${curPos}) = [`;
+  for(let j=0;j<dModel;j++){
+    const val = v[j].toFixed(3);
+    const color = j%2===0 ? 'var(--blue)' : 'var(--green)';
+    html += `<span style="color:${color}">${val}</span>`;
+    if(j<dModel-1) html += ', ';
+  }
+  html += ']';
+  // 维度标注
+  html += '\n维度:  ';
+  for(let j=0;j<dModel;j++){
+    html += (j%2===0?'sin':'cos').padStart(5,' ');
+    if(j<dModel-1) html += ', ';
+  }
+  document.getElementById('posVec').innerHTML = html;
+  document.getElementById('curPosLabel').textContent = curPos;
+}
+
+// === 渲染维度复选框 ===
+function renderDimCbs(){
+  const c = document.getElementById('dimCbs');
+  let html = '';
+  for(let j=0;j<dModel;j++){
+    const isSin = j%2===0;
+    const i = Math.floor(j/2);
+    const div = Math.pow(10000, (2*i)/dModel).toFixed(2);
+    const freq = (1/div).toFixed(4);
+    const cls = isSin ? 'sel-sin' : 'sel-cos';
+    const checked = allDimsOn || showDims.has(j) ? 'checked' : '';
+    html += `<label class="${cls}"><input type="checkbox" ${checked} onchange="toggleDim(${j}, this.checked)">dim${j}(${isSin?'sin':'cos'},freq=${freq})</label>`;
+  }
+  c.innerHTML = html;
+}
+
+function toggleDim(dim, on){
+  if(on){ showDims.add(dim); }
+  else { showDims.delete(dim); }
+  if(showDims.size === dModel){ allDimsOn = true; }
+  else { allDimsOn = false; }
+  renderWave();
+}
+
+function toggleAllDims(){
+  if(allDimsOn || showDims.size>0){
+    allDimsOn = false;
+    showDims.clear();
+  } else {
+    allDimsOn = true;
+    showDims.clear();
+  }
+  renderDimCbs();
+  renderWave();
+}
+
+// === 更新（滑块拖动）===
+function update(){
+  curPos = parseInt(document.getElementById('posSlider').value);
+  document.getElementById('posVal').textContent = curPos;
+  renderWave();
+  renderHeatmap();
+  renderPosVec();
+}
+
+function rebuild(){
+  dModel = parseInt(document.getElementById('dmodelSel').value);
+  maxRows = parseInt(document.getElementById('rowsSel').value);
+  // 限制 pos 滑块最大 49
+  if(curPos>49) curPos=49;
+  showDims.clear();
+  allDimsOn = true;
+  renderDimCbs();
+  renderWave();
+  renderHeatmap();
+  renderPosVec();
+}
+
+// 初始化
+rebuild();
+update();
+</script>
+</body>
+</html>

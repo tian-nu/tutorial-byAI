@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>梯度下降寻找最优解 — 学习率对比</title>
+<!-- 纯 Canvas 实现，无外部依赖，可离线运行 -->
+<style>
+:root {
+  --bg: #f5f5f5; --card: #fff; --text: #333; --sub: #666;
+  --border: #ddd; --blue: #3498db; --blue-light: #ebf5fb;
+  --green: #27ae60; --red: #e74c3c; --orange: #f39c12; --purple: #9b59b6;
+  --shadow: 0 2px 8px rgba(0,0,0,.06);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1a1a2e; --card: #16213e; --text: #e0e0e0; --sub: #aaa;
+    --border: #333; --blue: #5dade2; --blue-light: rgba(93,173,226,.1);
+    --shadow: 0 2px 8px rgba(0,0,0,.3);
+  }
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column;align-items:center;padding:20px 16px;min-height:100vh}
+h1{font-size:1.35em;text-align:center;margin-bottom:4px}
+.desc{font-size:.82em;color:var(--sub);margin-bottom:14px;text-align:center;max-width:760px;line-height:1.6}
+.controls{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-bottom:14px;align-items:center}
+.controls button{padding:5px 14px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);cursor:pointer;font-size:.82em;transition:.15s}
+.controls button:hover{opacity:.8}
+.controls button.primary{background:var(--blue);color:#fff;border-color:var(--blue)}
+.controls button.primary:hover{opacity:.85}
+.step-indicator{font-size:.78em;color:var(--sub);min-width:60px;text-align:center}
+
+.canvas-wrap{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px;box-shadow:var(--shadow);margin-bottom:12px}
+canvas{display:block;max-width:100%}
+.legend{display:flex;gap:18px;flex-wrap:wrap;justify-content:center;margin-top:8px;font-size:.78em}
+.legend-item{display:flex;align-items:center;gap:5px}
+.legend-dot{width:12px;height:12px;border-radius:50%;display:inline-block}
+.legend-dot.small{background:var(--orange)}
+.legend-dot.mid{background:var(--green)}
+.legend-dot.large{background:var(--red)}
+
+.stats{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;width:100%;max-width:680px;margin-bottom:10px}
+.stat-card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px 12px;flex:1;min-width:200px;font-size:.78em}
+.stat-card .st-title{font-weight:600;margin-bottom:4px;display:flex;align-items:center;gap:6px}
+.stat-card .st-row{color:var(--sub);line-height:1.5}
+.stat-card code{background:var(--blue-light);padding:1px 5px;border-radius:3px;color:var(--text)}
+
+.info-panel{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px 16px;width:100%;max-width:680px;margin-bottom:10px;min-height:60px}
+.info-panel .step-title{font-weight:600;font-size:.85em;margin-bottom:4px;color:var(--blue)}
+.info-panel .step-desc{font-size:.78em;color:var(--sub);line-height:1.5}
+.info-panel .step-desc code{font-size:.9em;background:var(--blue-light);padding:1px 5px;border-radius:3px}
+
+footer{margin-top:8px;font-size:.7em;color:var(--sub);text-align:center;line-height:1.6}
+footer a{color:var(--sub)}
+</style>
+</head>
+<body>
+<h1>梯度下降寻找最优解 — 学习率对比</h1>
+<p class="desc">
+  损失函数 L = (w₁−2)² + (w₂−3)² 是一个碗形曲面（等高线为同心圆，谷底在 (2,3)）。
+  三个红/绿/橙点从同一起点 (−4,−4) 出发，分别用「太小 / 合适 / 太大」三种学习率沿负梯度方向下滑。
+  观察学习率如何决定收敛速度与稳定性。
+</p>
+
+<div class="controls">
+  <button id="btn-start" class="primary" onclick="togglePlay()">▶ 开始</button>
+  <button id="btn-step" onclick="stepOnce()">⏭ 单步</button>
+  <button id="btn-reset" onclick="resetAll()">↺ 重置</button>
+  <span class="step-indicator" id="stepInfo">步数 0</span>
+</div>
+
+<div class="canvas-wrap">
+  <canvas id="cv" width="680" height="460"></canvas>
+  <div class="legend">
+    <span class="legend-item"><span class="legend-dot small"></span>太小 lr=0.05（缓慢爬行）</span>
+    <span class="legend-item"><span class="legend-dot mid"></span>合适 lr=0.25（快速稳定）</span>
+    <span class="legend-item"><span class="legend-dot large"></span>太大 lr=0.95（来回震荡）</span>
+  </div>
+</div>
+
+<div class="stats">
+  <div class="stat-card">
+    <div class="st-title"><span class="legend-dot small"></span>太小 lr=0.05</div>
+    <div class="st-row">w = <code id="w-s">(−4.00, −4.00)</code></div>
+    <div class="st-row">L = <code id="l-s">89.000</code></div>
+  </div>
+  <div class="stat-card">
+    <div class="st-title"><span class="legend-dot mid"></span>合适 lr=0.25</div>
+    <div class="st-row">w = <code id="w-m">(−4.00, −4.00)</code></div>
+    <div class="st-row">L = <code id="l-m">89.000</code></div>
+  </div>
+  <div class="stat-card">
+    <div class="st-title"><span class="legend-dot large"></span>太大 lr=0.95</div>
+    <div class="st-row">w = <code id="w-l">(−4.00, −4.00)</code></div>
+    <div class="st-row">L = <code id="l-l">89.000</code></div>
+  </div>
+</div>
+
+<div class="info-panel" id="infoPanel">
+  <div class="step-title">准备就绪</div>
+  <div class="step-desc">点击「开始」观察三种学习率下的梯度下降轨迹。公式：<code>w ← w − lr · ∇L</code>，其中 <code>∇L = (2(w₁−2), 2(w₂−3))</code>。谷底在 (2, 3)。</div>
+</div>
+
+<footer>
+  数据来源：基于 07-梯度下降最核心的优化思想 教程（大纲第一篇 Ch07）<br>
+  本可视化对应 <a href="07-梯度下降最核心的优化思想.md">深度学习从0到Transformer教程 第07章</a>
+</footer>
+
+<script>
+// 损失函数 L = (w1-2)^2 + (w2-3)^2，谷底 (2,3)
+const TARGET = [2, 3];
+function loss(w){ return (w[0]-TARGET[0])**2 + (w[1]-TARGET[1])**2; }
+function grad(w){ return [2*(w[0]-TARGET[0]), 2*(w[1]-TARGET[1])]; }
+
+const START = [-4, -4];
+// 三种学习率配置
+const cfgs = [
+  {key:'s', lr:0.05, color:'#f39c12', name:'太小'},
+  {key:'m', lr:0.25, color:'#27ae60', name:'合适'},
+  {key:'l', lr:0.95, color:'#e74c3c', name:'太大'},
+];
+let runners = [];
+let step = 0;
+let playing = false;
+let timer = null;
+
+function resetAll(){
+  if(timer){ clearInterval(timer); timer=null; }
+  playing=false;
+  document.getElementById('btn-start').textContent='▶ 开始';
+  document.getElementById('btn-start').classList.add('primary');
+  step=0;
+  runners = cfgs.map(c=>({cfg:c, w:[...START], trail:[[...START]], diverged:false}));
+  document.getElementById('stepInfo').textContent='步数 0';
+  document.getElementById('infoPanel').innerHTML='<div class="step-title">准备就绪</div><div class="step-desc">点击「开始」观察三种学习率下的梯度下降轨迹。公式：<code>w ← w − lr · ∇L</code>，其中 <code>∇L = (2(w₁−2), 2(w₂−3))</code>。谷底在 (2, 3)。</div>';
+  updateStats();
+  draw();
+}
+
+function stepOnce(){
+  step++;
+  runners.forEach(r=>{
+    if(r.diverged) return;
+    const g = grad(r.w);
+    r.w[0] = r.w[0] - r.cfg.lr*g[0];
+    r.w[1] = r.w[1] - r.cfg.lr*g[1];
+    r.trail.push([...r.w]);
+    // 发散判定：loss 变大且超过起点 5 倍
+    if(loss(r.w) > loss(START)*5 || !isFinite(loss(r.w))) r.diverged=true;
+  });
+  document.getElementById('stepInfo').textContent='步数 '+step;
+  updateInfo();
+  updateStats();
+  draw();
+}
+
+function togglePlay(){
+  if(playing){
+    clearInterval(timer); timer=null; playing=false;
+    document.getElementById('btn-start').textContent='▶ 开始';
+    document.getElementById('btn-start').classList.add('primary');
+    return;
+  }
+  playing=true;
+  document.getElementById('btn-start').textContent='⏸ 暂停';
+  document.getElementById('btn-start').classList.remove('primary');
+  timer=setInterval(()=>{
+    stepOnce();
+    // 全部收敛或发散则停止
+    const allDone = runners.every(r=> loss(r.w)<0.001 || r.diverged);
+    if(allDone){ clearInterval(timer); timer=null; playing=false;
+      document.getElementById('btn-start').textContent='▶ 开始';
+      document.getElementById('btn-start').classList.add('primary');
+    }
+  }, 280);
+}
+
+function updateStats(){
+  runners.forEach(r=>{
+    const fmt = v=>'('+v[0].toFixed(2)+', '+v[1].toFixed(2)+')';
+    const l = r.diverged ? '∞ (发散)' : loss(r.w).toFixed(3);
+    const we = document.getElementById('w-'+r.cfg.key);
+    const le = document.getElementById('l-'+r.cfg.key);
+    if(we) we.textContent = r.diverged ? '(溢出)' : fmt(r.w);
+    if(le) le.textContent = l;
+  });
+}
+
+function updateInfo(){
+  const parts = runners.map(r=>{
+    const l = r.diverged ? '发散' : loss(r.w).toFixed(3);
+    return r.cfg.name+'(lr='+r.cfg.lr+'): L='+l;
+  }).join('　|　');
+  let note='';
+  const big = runners.find(r=>r.cfg.key==='l');
+  if(big && big.diverged) note='<br>⚠ 学习率太大导致 <code>|w|</code> 越来越大，loss 不降反升——这就是「发散」。应减半学习率重新尝试。';
+  document.getElementById('infoPanel').innerHTML='<div class="step-title">第 '+step+' 步：w ← w − lr · ∇L</div><div class="step-desc">'+parts+note+'</div>';
+}
+
+// ---- 绘图 ----
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+const W = cv.width, H = cv.height;
+// 数据范围 x:[-6,6] y:[-6,8] -> 画布
+const XR=[-6,6], YR=[-6,8];
+function px(x){ return 40 + (x-XR[0])/(XR[1]-XR[0])*(W-70); }
+function py(y){ return H-40 - (y-YR[0])/(YR[1]-YR[0])*(H-70); }
+function cssVar(name){
+  const s = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return s || '#888';
+}
+
+function draw(){
+  const isDark = matchMedia('(prefers-color-scheme: dark)').matches;
+  const bg = isDark ? '#16213e' : '#fff';
+  const grid = isDark ? '#2a3556' : '#eee';
+  const axis = isDark ? '#557' : '#888';
+  const txt = isDark ? '#e0e0e0' : '#333';
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
+
+  // 等高线 L = c (同心圆)
+  const levels=[1,4,9,16,25,36,49,64,81];
+  levels.forEach(c=>{
+    const r = Math.sqrt(c);
+    ctx.beginPath();
+    ctx.ellipse(px(TARGET[0]), py(TARGET[1]), (px(TARGET[0]+r)-px(TARGET[0])), (py(TARGET[1])-(py(TARGET[1]+r))), 0, 0, Math.PI*2);
+    const alpha = isDark ? 0.5-c/200 : 0.6-c/180;
+    ctx.strokeStyle = isDark ? 'rgba(93,173,226,'+Math.max(0.1,alpha)+')' : 'rgba(52,152,219,'+Math.max(0.15,alpha)+')';
+    ctx.lineWidth=1;
+    ctx.stroke();
+  });
+
+  // 网格 + 坐标轴
+  ctx.strokeStyle=grid; ctx.lineWidth=1;
+  ctx.font='11px system-ui'; ctx.fillStyle=txt;
+  for(let x=-6;x<=6;x+=2){
+    ctx.beginPath(); ctx.moveTo(px(x),py(YR[0])); ctx.lineTo(px(x),py(YR[1])); ctx.stroke();
+    ctx.fillText(x, px(x)-6, py(YR[0])+15);
+  }
+  for(let y=-6;y<=8;y+=2){
+    ctx.beginPath(); ctx.moveTo(px(XR[0]),py(y)); ctx.lineTo(px(XR[1]),py(y)); ctx.stroke();
+    ctx.fillText(y, px(XR[0])-22, py(y)+4);
+  }
+  // 轴线
+  ctx.strokeStyle=axis; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.moveTo(px(0),py(YR[0])); ctx.lineTo(px(0),py(YR[1])); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(px(XR[0]),py(0)); ctx.lineTo(px(XR[1]),py(0)); ctx.stroke();
+
+  // 谷底标记
+  ctx.fillStyle = isDark ? '#5dade2' : '#3498db';
+  ctx.beginPath(); ctx.arc(px(TARGET[0]),py(TARGET[1]),5,0,Math.PI*2); ctx.fill();
+  ctx.font='12px system-ui';
+  ctx.fillText('谷底 (2,3) L=0', px(TARGET[0])+8, py(TARGET[1])-8);
+
+  // 轴标签
+  ctx.font='12px system-ui'; ctx.fillStyle=txt;
+  ctx.fillText('w₁', px(XR[1])-18, py(0)-6);
+  ctx.fillText('w₂', px(0)+6, py(YR[1])+14);
+
+  // 轨迹
+  runners.forEach(r=>{
+    if(r.trail.length<1) return;
+    ctx.strokeStyle=r.cfg.color; ctx.lineWidth=2;
+    ctx.beginPath();
+    r.trail.forEach((p,i)=>{
+      const X=px(p[0]), Y=py(p[1]);
+      if(i===0) ctx.moveTo(X,Y); else ctx.lineTo(X,Y);
+    });
+    ctx.stroke();
+    // 当前点
+    const last=r.trail[r.trail.length-1];
+    if(!r.diverged && isFinite(last[0]) && isFinite(last[1])){
+      ctx.fillStyle=r.cfg.color;
+      ctx.beginPath(); ctx.arc(px(last[0]),py(last[1]),6,0,Math.PI*2); ctx.fill();
+      ctx.strokeStyle=isDark?'#fff':'#fff'; ctx.lineWidth=1.5; ctx.stroke();
+    }
+  });
+
+  // 起点标记
+  ctx.fillStyle = isDark ? '#aaa' : '#666';
+  ctx.font='11px system-ui';
+  ctx.fillText('起点 (−4,−4)', px(START[0])-10, py(START[1])-10);
+}
+
+// 主题变化时重绘
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', draw);
+resetAll();
+</script>
+</body>
+</html>

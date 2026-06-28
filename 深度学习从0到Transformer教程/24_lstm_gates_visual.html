@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>LSTM 三个门与细胞状态 — 信号流动</title>
+<style>
+:root{
+  --bg:#f5f5f5;--card:#fff;--text:#333;--sub:#666;
+  --border:#ddd;--blue:#3498db;--blue-light:#ebf5fb;
+  --green:#27ae60;--green-light:#e8f6ef;
+  --red:#e74c3c;--red-light:#fdedec;
+  --orange:#f39c12;--purple:#8e44ad;
+  --teal:#16a085;
+  --shadow:0 2px 8px rgba(0,0,0,.06);
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#1a1a2e;--card:#16213e;--text:#e0e0e0;--sub:#aaa;
+    --border:#333;--blue:#5dade2;--blue-light:rgba(93,173,226,.12);
+    --green:#2ecc71;--green-light:rgba(46,204,113,.12);
+    --red:#e74c3c;--red-light:rgba(231,76,60,.12);
+    --orange:#f1c40f;--purple:#bb8fce;--teal:#1abc9c;
+    --shadow:0 2px 8px rgba(0,0,0,.3);
+  }
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column;align-items:center;padding:20px 16px;min-height:100vh}
+h1{font-size:1.35em;text-align:center;margin-bottom:4px}
+.desc{font-size:.82em;color:var(--sub);margin-bottom:14px;text-align:center;max-width:880px;line-height:1.6}
+.controls{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-bottom:14px;align-items:center}
+.controls button{padding:6px 14px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);cursor:pointer;font-size:.82em;transition:.15s}
+.controls button:hover{opacity:.85}
+.controls button.primary{background:var(--blue);color:#fff;border-color:var(--blue)}
+.step-indicator{font-size:.78em;color:var(--sub);min-width:90px;text-align:center}
+.mode-toggle{position:fixed;top:10px;right:14px;font-size:.72em;color:var(--sub);cursor:pointer;background:var(--card);border:1px solid var(--border);border-radius:6px;padding:4px 10px}
+.viz{width:100%;max-width:940px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;box-shadow:var(--shadow);margin-bottom:10px;overflow-x:auto}
+.viz svg{display:block;margin:0 auto;width:100%;height:auto;max-width:920px;min-width:760px}
+.legend{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;font-size:.74em;color:var(--sub);margin-top:8px}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+.legend .swatch{width:14px;height:14px;border-radius:3px;display:inline-block;border:1px solid rgba(0,0,0,.1)}
+.info-panel{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px 16px;width:100%;max-width:880px;min-height:80px}
+.info-panel .step-title{font-weight:600;font-size:.85em;margin-bottom:4px;color:var(--blue)}
+.info-panel .step-desc{font-size:.78em;color:var(--sub);line-height:1.7}
+.info-panel .step-desc code{font-size:.9em;background:var(--blue-light);padding:1px 5px;border-radius:3px;color:var(--text)}
+.info-panel .step-desc b{color:var(--text)}
+footer{margin-top:14px;font-size:.7em;color:var(--sub);text-align:center;line-height:1.6}
+footer a{color:var(--sub)}
+text{font-family:system-ui,sans-serif}
+</style>
+</head>
+<body>
+<div class="mode-toggle" id="modeToggle" onclick="toggleTheme()">🌙 暗色</div>
+<h1>LSTM 三个门与细胞状态 — 信号流动</h1>
+<p class="desc">
+  LSTM 单元通过三个「门」精确控制信息流：
+  <b style="color:#e67e22">遗忘门 fₜ</b>（决定丢弃多少旧记忆）、
+  <b style="color:#27ae60">输入门 iₜ</b>（决定写入多少新候选）、
+  <b style="color:#8e44ad">输出门 oₜ</b>（决定输出多少细胞状态）。
+  细胞状态 Cₜ 像一条传送带，梯度可沿其上的加法无损反传——这就是 LSTM 缓解梯度消失的关键。
+</p>
+
+<div class="controls">
+  <button class="primary" onclick="nextStep()">▶ 下一步</button>
+  <button id="btn-auto" onclick="toggleAuto()">⏯ 自动播放</button>
+  <button onclick="resetAll()">↺ 重置</button>
+  <span class="step-indicator" id="stepInfo">步骤 0 / 6</span>
+</div>
+
+<div class="viz">
+  <svg id="lstmSvg" viewBox="0 0 920 420" xmlns="http://www.w3.org/2000/svg"></svg>
+  <div class="legend">
+    <span><span class="swatch" style="background:#e67e22"></span>遗忘门 fₜ（σ）</span>
+    <span><span class="swatch" style="background:#27ae60"></span>输入门 iₜ（σ）</span>
+    <span><span class="swatch" style="background:#8e44ad"></span>输出门 oₜ（σ）</span>
+    <span><span class="swatch" style="background:#16a085"></span>候选 C̃ₜ（tanh）</span>
+    <span><span class="swatch" style="background:#3498db"></span>细胞状态 Cₜ</span>
+    <span><span class="swatch" style="background:#e74c3c"></span>当前步激活</span>
+  </div>
+</div>
+
+<div class="info-panel" id="info">
+  <div class="step-title">准备开始</div>
+  <div class="step-desc">点击「下一步」逐个点亮 LSTM 的门与数据流。每一步显示对应的公式与信号路径。</div>
+</div>
+
+<footer>
+  数据来源：基于 24-LSTM的三个门与细胞状态.md<br>
+  本可视化对应 <a href="24-LSTM的三个门与细胞状态.md">24-LSTM的三个门与细胞状态.md</a> 步骤 1-6
+</footer>
+
+<script>
+/* ---- 主题切换 ---- */
+function toggleTheme(){
+  const isDark=document.body.classList.toggle('force-dark');
+  const r=document.documentElement.style;
+  if(isDark){
+    r.setProperty('--bg','#1a1a2e');r.setProperty('--card','#16213e');r.setProperty('--text','#e0e0e0');r.setProperty('--sub','#aaa');
+    r.setProperty('--border','#333');r.setProperty('--blue','#5dade2');r.setProperty('--blue-light','rgba(93,173,226,.12)');
+    r.setProperty('--green','#2ecc71');r.setProperty('--green-light','rgba(46,204,113,.12)');
+    r.setProperty('--red','#e74c3c');r.setProperty('--red-light','rgba(231,76,60,.12)');
+    r.setProperty('--orange','#f1c40f');r.setProperty('--purple','#bb8fce');r.setProperty('--teal','#1abc9c');
+    r.setProperty('--shadow','0 2px 8px rgba(0,0,0,.3)');
+    document.getElementById('modeToggle').textContent='☀️ 亮色';
+  }else{
+    r.setProperty('--bg','#f5f5f5');r.setProperty('--card','#fff');r.setProperty('--text','#333');r.setProperty('--sub','#666');
+    r.setProperty('--border','#ddd');r.setProperty('--blue','#3498db');r.setProperty('--blue-light','#ebf5fb');
+    r.setProperty('--green','#27ae60');r.setProperty('--green-light','#e8f6ef');
+    r.setProperty('--red','#e74c3c');r.setProperty('--red-light','#fdedec');
+    r.setProperty('--orange','#f39c12');r.setProperty('--purple','#8e44ad');r.setProperty('--teal','#16a085');
+    r.setProperty('--shadow','0 2px 8px rgba(0,0,0,.06)');
+    document.getElementById('modeToggle').textContent='🌙 暗色';
+  }
+  draw();
+}
+
+const svg=document.getElementById('lstmSvg');
+const SVGNS='http://www.w3.org/2000/svg';
+function el(tag,attrs){const e=document.createElementNS(SVGNS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);return e;}
+function cssVar(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim();}
+
+let step=0;
+const STEPS=[
+  {title:'步骤 1：输入与上一步隐藏状态',
+   desc:'LSTM 在时间步 t 接收两个输入：<b>xₜ</b>（当前输入）与 <b>hₜ₋₁</b>（上一步隐藏状态）以及 <b>Cₜ₋₁</b>（上一步细胞状态）。三者拼接 [hₜ₋₁, xₜ] 后送入三个门。',
+   phase:'inputs'},
+  {title:'步骤 2：遗忘门 fₜ',
+   desc:'<code>fₜ = σ(W_f·[hₜ₋₁, xₜ] + b_f)</code>。橙色路径。σ 输出 0~1，逐元素乘 Cₜ₋₁，决定每一维旧记忆保留多少。<b>fₜ→0 表示遗忘，→1 表示完全保留</b>。',
+   phase:'f'},
+  {title:'步骤 3：输入门 iₜ 与候选 C̃ₜ',
+   desc:'<code>iₜ = σ(W_i·[hₜ₋₁, xₜ] + b_i)</code>（绿色）控制写入多少；<code>C̃ₜ = tanh(W_C·[hₜ₋₁, xₜ] + b_C)</code>（青绿）生成新候选值（-1~1）。',
+   phase:'i'},
+  {title:'步骤 4：更新细胞状态 Cₜ',
+   desc:'<code>Cₜ = fₜ ⊙ Cₜ₋₁ + iₜ ⊙ C̃ₜ</code>。旧的（被 fₜ 缩放）+ 新的（被 iₜ 缩放）。注意这里是<b>加法</b>——梯度反传时加法的局部导数为 1，不会衰减，这是 LSTM 抗梯度消失的根本原因。',
+   phase:'C'},
+  {title:'步骤 5：输出门 oₜ',
+   desc:'<code>oₜ = σ(W_o·[hₜ₋₁, xₜ] + b_o)</code>（紫色）决定细胞状态的哪一部分被读出。',
+   phase:'o'},
+  {title:'步骤 6：隐藏状态 hₜ 输出',
+   desc:'<code>hₜ = oₜ ⊙ tanh(Cₜ)</code>。tanh 把 Cₜ 压回 -1~1，输出门决定输出哪些维度。hₜ 同时作为本步输出 ŷₜ 和下一步的隐藏输入。完整 LSTM 前向传播结束。',
+   phase:'h'}
+];
+
+/* ---- 布局：LSTM 单元框 + 内部门 ---- */
+const CELL={x:160,y:60,w:600,h:300};
+// 关键点坐标
+const P={
+  // 输入
+  x_in: {x:60, y:280},      // xₜ
+  h_prev: {x:60, y:140},    // hₜ₋₁
+  c_prev: {x:80, y:90},     // Cₜ₋₁
+  // 门（在单元内）
+  f_gate:{x:260,y:140},     // 遗忘门
+  i_gate:{x:380,y:140},     // 输入门
+  cCand: {x:380,y:240},     // 候选 C̃
+  o_gate:{x:520,y:140},     // 输出门
+  // 细胞状态主路（水平线）
+  cPath:{y:90},
+  // 关键运算点
+  mul_f:  {x:260,y:90},      // fₜ ⊙ Cₜ₋₁
+  mul_i:  {x:460,y:90},      // iₜ ⊙ C̃ₜ
+  add_c:  {x:540,y:90},      // Cₜ = +
+  tanh_c:{x:620,y:90},       // tanh(Cₜ)
+  mul_o:  {x:680,y:140},     // oₜ ⊙ tanh(Cₜ)
+  // 输出
+  c_out: {x:780,y:90},
+  h_out: {x:780,y:140}
+};
+
+function draw(){
+  svg.innerHTML='';
+  const blue=cssVar('--blue'),red=cssVar('--red'),green=cssVar('--green'),sub=cssVar('--sub'),text=cssVar('--text'),border=cssVar('--border');
+  const orange='#e67e22', purple='#8e44ad', teal='#16a085';
+  const ph=STEPS[step-1]&&STEPS[step-1].phase;
+
+  // 单元外框
+  const rect=el('rect',{x:CELL.x,y:CELL.y,width:CELL.w,height:CELL.h,rx:14,fill:'none',stroke:border,'stroke-width':1.5,'stroke-dasharray':'6 4',opacity:.6});
+  svg.appendChild(rect);
+  const cellLbl=el('text',{x:CELL.x+12,y:CELL.y+18,'font-size':11,fill:sub,'font-weight':600});
+  cellLbl.textContent='LSTM 单元（时间步 t）';
+  svg.appendChild(cellLbl);
+
+  // 细胞状态主路（C 传送带）始终绘制，但仅在对应步骤高亮
+  const cActive = (ph==='f'||ph==='i'||ph==='C'||ph==='o'||ph==='h');
+  const cColor = blue;
+  drawLine(P.c_prev.x,P.c_prev.y, P.c_out.x, P.c_out.y, cColor, cActive?2.5:1.2, cActive?.9:.35, true);
+
+  // 输入节点
+  const showInputs = !ph || ph==='inputs';
+  drawNodeBox(P.x_in.x, P.x_in.y, 'xₜ', '输入', showInputs, blue);
+  drawNodeBox(P.h_prev.x, P.h_prev.y, 'hₜ₋₁', '上一步隐藏', showInputs, blue);
+  drawNodeBox(P.c_prev.x, P.c_prev.y, 'Cₜ₋₁', '上一步细胞', showInputs||cActive, blue);
+
+  // 输出节点
+  const showOut = ph==='h';
+  drawNodeBox(P.c_out.x, P.c_out.y, 'Cₜ', '细胞状态', showOut||cActive, blue);
+  drawNodeBox(P.h_out.x, P.h_out.y, 'hₜ', '隐藏输出', showOut, red);
+
+  // [hₜ₋₁, xₜ] 拼接总线（简化为竖线）
+  const busX=170;
+  drawLine(busX, P.h_prev.y, busX, P.x_in.y, sub, 1.2, showInputs?.7:.3);
+  // 总线到各门的分支
+  drawBranchToGate(busX, P.f_gate, showInputs||ph==='f', orange);
+  drawBranchToGate(busX, P.i_gate, showInputs||ph==='i', green);
+  drawBranchToGate(busX, P.cCand, showInputs||ph==='i', teal);
+  drawBranchToGate(busX, P.o_gate, showInputs||ph==='o', purple);
+
+  // 遗忘门
+  drawGate(P.f_gate, 'fₜ', 'σ', orange, ph==='f');
+  // 输入门
+  drawGate(P.i_gate, 'iₜ', 'σ', green, ph==='i');
+  // 候选
+  drawGate(P.cCand, 'C̃ₜ', 'tanh', teal, ph==='i');
+  // 输出门
+  drawGate(P.o_gate, 'oₜ', 'σ', purple, ph==='o');
+
+  // 乘法节点 f ⊙ C
+  drawMul(P.mul_f, ph==='f'||ph==='C', orange);
+  drawLine(P.f_gate.x, P.f_gate.y+22, P.mul_f.x, P.mul_f.y-10, orange, (ph==='f'||ph==='C')?2:1, (ph==='f'||ph==='C')?.9:.3);
+  drawLine(P.mul_f.x, P.mul_f.y-10, P.mul_f.x, P.mul_f.y-6, orange, (ph==='f'||ph==='C')?2:1, (ph==='f'||ph==='C')?.9:.3);
+
+  // 乘法节点 i ⊙ C̃
+  drawMul(P.mul_i, ph==='i'||ph==='C', green);
+  drawLine(P.i_gate.x, P.i_gate.y+22, P.mul_i.x, P.mul_i.y+10, green, (ph==='i'||ph==='C')?2:1, (ph==='i'||ph==='C')?.9:.3);
+  drawLine(P.cCand.x, P.cCand.y+22, P.mul_i.x, P.mul_i.y+10, teal, (ph==='i'||ph==='C')?2:1, (ph==='i'||ph==='C')?.9:.3);
+  // i⊙C̃ 上行到加法点
+  drawLine(P.mul_i.x, P.mul_i.y-10, P.mul_i.x, P.add_c.y+10, green, (ph==='C')?2:1, (ph==='C')?.9:.3);
+
+  // 加法节点（更新 C）
+  drawAdd(P.add_c, ph==='C'||ph==='o'||ph==='h', blue);
+  // C_prev 经过 f⊙ 后到加法（沿主路）
+
+  // tanh(C_t)
+  drawGate({x:P.tanh_c.x,y:P.tanh_c.y}, 'tanh', '', blue, ph==='o'||ph==='h', 'var(--blue-light)');
+
+  // 输出门到乘法
+  drawMul(P.mul_o, ph==='o'||ph==='h', purple);
+  drawLine(P.o_gate.x, P.o_gate.y+22, P.mul_o.x, P.mul_o.y-10, purple, (ph==='o'||ph==='h')?2:1, (ph==='o'||ph==='h')?.9:.3);
+  // tanh(C) 到 o⊙
+  drawLine(P.tanh_c.x, P.tanh_c.y+10, P.mul_o.x, P.mul_o.y-10, blue, (ph==='h')?2:1, (ph==='h')?.9:.3);
+  // o⊙ 到 h_out
+  drawLine(P.mul_o.x+14, P.mul_o.y, P.h_out.x-22, P.h_out.y, red, ph==='h'?2:1, ph==='h'?.9:.3);
+
+  // 顶部步骤提示
+  if(ph){
+    const titleMap={inputs:'输入与上一时刻状态',f:'遗忘门 fₜ',i:'输入门 iₜ 与候选 C̃ₜ',C:'更新细胞状态 Cₜ',o:'输出门 oₜ',h:'输出隐藏状态 hₜ'};
+    const colorMap={inputs:blue,f:orange,i:green,C:blue,o:purple,h:red};
+    const t=el('text',{x:460,y:30,'font-size':13,fill:colorMap[ph],'text-anchor':'middle','font-weight':600});
+    t.textContent='▶ 当前信号路径：'+titleMap[ph];
+    svg.appendChild(t);
+  }
+}
+
+function drawNodeBox(x,y,label,sub,active,color){
+  const fill = active?(color===cssVar('--blue')?'var(--blue-light)':'var(--red-light)'):'var(--card)';
+  const stroke = active?color:cssVar('--border');
+  const r=el('rect',{x:x-30,y:y-18,width:60,height:36,rx:8,fill:fill,stroke:stroke,'stroke-width':active?2:1.3});
+  svg.appendChild(r);
+  const t=el('text',{x:x,y:y-2,'font-size':12,fill:cssVar('--text'),'text-anchor':'middle','font-weight':600});
+  t.textContent=label;
+  svg.appendChild(t);
+  const s=el('text',{x:x,y:y+11,'font-size':8,fill:cssVar('--sub'),'text-anchor':'middle'});
+  s.textContent=sub;
+  svg.appendChild(s);
+}
+
+function drawGate(p, label, op, color, active, fillOverride){
+  const fill = active?(fillOverride||color+'22'):'var(--card)';
+  // 小圆
+  const c=el('circle',{cx:p.x,cy:p.y,r:22,fill:fill,stroke:color,'stroke-width':active?2.5:1.5,opacity:active?1:.55});
+  svg.appendChild(c);
+  const t=el('text',{x:p.x,y:p.y-1,'font-size':12,fill:cssVar('--text'),'text-anchor':'middle','font-weight':600});
+  t.textContent=label;
+  svg.appendChild(t);
+  if(op){
+    const o=el('text',{x:p.x,y:p.y+12,'font-size':9,fill:color,'text-anchor':'middle'});
+    o.textContent=op;
+    svg.appendChild(o);
+  }
+}
+
+function drawMul(p, active, color){
+  const fill = active?color+'33':'var(--card)';
+  const c=el('circle',{cx:p.x,cy:p.y,r:10,fill:fill,stroke:color,'stroke-width':active?2:1.3,opacity:active?1:.5});
+  svg.appendChild(c);
+  // ⊙ 符号
+  const t=el('text',{x:p.x,y:p.y+4,'font-size':14,fill:color,'text-anchor':'middle','font-weight':700});
+  t.textContent='×';
+  svg.appendChild(t);
+}
+
+function drawAdd(p, active, color){
+  const fill = active?color+'33':'var(--card)';
+  const c=el('circle',{cx:p.x,cy:p.y,r:11,fill:fill,stroke:color,'stroke-width':active?2.5:1.3,opacity:active?1:.5});
+  svg.appendChild(c);
+  const t=el('text',{x:p.x,y:p.y+5,'font-size':16,fill:color,'text-anchor':'middle','font-weight':700});
+  t.textContent='+';
+  svg.appendChild(t);
+}
+
+function drawLine(x1,y1,x2,y2,color,width,opacity,dashed){
+  const ln=el('line',{x1,y1,x2,y2,stroke:color,'stroke-width':width,opacity,'stroke-linecap':'round','stroke-dasharray':dashed?'6 3':undefined});
+  svg.appendChild(ln);
+}
+
+function drawBranchToGate(busX, gate, active, color){
+  // 从总线 busX 到 gate
+  drawLine(busX, gate.y, gate.x-22, gate.y, color, active?2:1, active?.9:.35);
+}
+
+/* ---- 控制 ---- */
+function updateInfo(){
+  document.getElementById('stepInfo').textContent='步骤 '+step+' / 6';
+  const inf=document.getElementById('info');
+  if(step===0){
+    inf.innerHTML='<div class="step-title">准备开始</div><div class="step-desc">点击「下一步」逐个点亮 LSTM 的门与数据流。每一步显示对应的公式与信号路径。</div>';
+  }else{
+    const s=STEPS[step-1];
+    inf.innerHTML='<div class="step-title">'+s.title+'</div><div class="step-desc">'+s.desc+'</div>';
+  }
+}
+function nextStep(){if(step<6){step++;draw();updateInfo();}}
+let autoTimer=null;
+function toggleAuto(){
+  const btn=document.getElementById('btn-auto');
+  if(autoTimer){clearInterval(autoTimer);autoTimer=null;btn.textContent='⏯ 自动播放';return;}
+  btn.textContent='⏸ 暂停';
+  autoTimer=setInterval(()=>{
+    if(step>=6){clearInterval(autoTimer);autoTimer=null;btn.textContent='⏯ 自动播放';return;}
+    nextStep();
+  },1800);
+}
+function resetAll(){
+  if(autoTimer){clearInterval(autoTimer);autoTimer=null;document.getElementById('btn-auto').textContent='⏯ 自动播放';}
+  step=0;draw();updateInfo();
+}
+
+draw();
+updateInfo();
+</script>
+</body>
+</html>

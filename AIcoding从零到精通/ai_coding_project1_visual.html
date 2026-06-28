@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>项目一：个人主页 — 全流程可视化</title>
+<!-- 自包含单文件，无外部依赖，可离线运行 -->
+<style>
+:root {
+  --bg: #ffffff;
+  --text: #1a1a2e;
+  --border: #e0e0e0;
+  --card-bg: #f8f9fa;
+  --highlight: #4a90d9;
+  --highlight-bg: #e8f0fe;
+  --success: #27ae60;
+  --warning: #e67e22;
+  --danger: #e74c3c;
+  --shadow: rgba(0,0,0,0.08);
+  --node-bg: #ffffff;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1a1a2e;
+    --text: #e0e0e0;
+    --border: #333;
+    --card-bg: #252540;
+    --highlight: #6db3f2;
+    --highlight-bg: #2a2a4a;
+    --shadow: rgba(0,0,0,0.3);
+    --node-bg: #2a2a3e;
+  }
+}
+body { font-family: -apple-system, 'Segoe UI', 'Microsoft YaHei', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; line-height: 1.6; }
+.container { max-width: 900px; margin: 0 auto; }
+h1 { font-size: 1.5em; margin-bottom: 4px; }
+.subtitle { color: #888; font-size: 0.9em; margin-bottom: 24px; }
+.controls { display: flex; gap: 12px; margin: 20px 0; flex-wrap: wrap; align-items: center; }
+button { padding: 10px 20px; border: 1px solid var(--highlight); background: var(--highlight); color: #fff; border-radius: 6px; cursor: pointer; font-size: 0.95em; transition: all 0.2s; font-family: inherit; }
+button:hover { opacity: 0.85; }
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+button.reset { background: transparent; color: var(--text); border-color: var(--border); }
+.progress-indicator { font-size: 0.85em; color: #888; margin-left: 12px; }
+
+/* Timeline */
+.timeline { position: relative; padding: 20px 0; }
+.timeline::before { content: ''; position: absolute; left: 30px; top: 0; bottom: 0; width: 3px; background: var(--border); border-radius: 2px; }
+
+.timeline-node { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 24px; padding: 16px; background: var(--card-bg); border: 2px solid var(--border); border-radius: 10px; transition: all 0.4s ease; opacity: 0.5; position: relative; }
+.timeline-node.active { border-color: var(--highlight); box-shadow: 0 0 0 3px var(--highlight); opacity: 1; }
+.timeline-node.completed { border-color: var(--success); opacity: 0.85; }
+.timeline-node.stuck { border-color: var(--warning); opacity: 1; }
+
+.node-marker { width: 40px; height: 40px; border-radius: 50%; background: var(--border); display: flex; align-items: center; justify-content: center; font-weight: bold; color: #fff; font-size: 0.9em; flex-shrink: 0; z-index: 1; transition: all 0.4s; }
+.timeline-node.active .node-marker { background: var(--highlight); }
+.timeline-node.completed .node-marker { background: var(--success); }
+.timeline-node.stuck .node-marker { background: var(--warning); }
+
+.node-content { flex: 1; }
+.node-title { font-weight: bold; font-size: 1.05em; margin-bottom: 6px; }
+.node-desc { font-size: 0.9em; color: #888; margin-bottom: 8px; }
+.node-detail { font-size: 0.85em; background: var(--node-bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px; margin-top: 8px; display: none; }
+.timeline-node.active .node-detail, .timeline-node.completed .node-detail { display: block; }
+
+.node-icon { font-size: 1.3em; }
+.node-time { font-size: 0.8em; color: #888; margin-top: 4px; }
+
+/* Loop indicator */
+.loop-back { display: none; position: absolute; right: -40px; top: 50%; font-size: 0.8em; color: var(--warning); writing-mode: vertical-rl; }
+.timeline-node.stuck .loop-back { display: block; }
+
+/* Browser preview mock */
+.browser-mock { background: var(--node-bg); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-top: 10px; }
+.browser-bar { background: var(--border); padding: 6px 10px; display: flex; gap: 6px; align-items: center; }
+.browser-dot { width: 10px; height: 10px; border-radius: 50%; }
+.browser-dot.r { background: #e74c3c; }
+.browser-dot.y { background: #f39c12; }
+.browser-dot.g { background: #27ae60; }
+.browser-url { flex: 1; background: var(--bg); border-radius: 4px; padding: 2px 8px; font-size: 0.75em; color: #888; }
+.browser-body { padding: 12px; font-size: 0.85em; min-height: 40px; }
+.browser-body .mock-name { font-size: 1.2em; font-weight: bold; }
+.browser-body .mock-photo { width: 40px; height: 40px; border-radius: 50%; background: var(--border); display: inline-block; margin-right: 8px; vertical-align: middle; }
+
+.footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--border); font-size: 0.8em; color: #888; }
+.footer a { color: var(--highlight); }
+</style>
+</head>
+<body>
+<div class="container">
+<h1>📊 项目一：用AI做个人主页 — 全流程时间线</h1>
+<p class="subtitle">本可视化对应 <a href="../../AIcoding从零到精通/48-项目一用AI做个人主页.md" style="color:var(--highlight)">《48-项目一：用AI做一个个人主页》</a> 全部步骤</p>
+
+<div class="controls">
+  <button id="btnPlay" onclick="play()">▶ 逐步播放</button>
+  <button id="btnReset" class="reset" onclick="reset()">↺ 重置</button>
+  <span class="progress-indicator" id="stepIndicator">步骤 0 / 7</span>
+</div>
+
+<div class="timeline" id="timeline">
+
+  <div class="timeline-node" id="node1">
+    <div class="node-marker">1</div>
+    <div class="node-content">
+      <div class="node-title"><span class="node-icon">🖥️</span> 打开AI编程工具</div>
+      <div class="node-desc">启动Cursor或Trae，准备开始</div>
+      <div class="node-time">⏱ 约 1 分钟</div>
+      <div class="node-detail">
+        打开你安装好的AI编程工具（Cursor或Trae），新建一个空白文件夹作为项目目录。
+      </div>
+    </div>
+  </div>
+
+  <div class="timeline-node" id="node2">
+    <div class="node-marker">2</div>
+    <div class="node-content">
+      <div class="node-title"><span class="node-icon">📄</span> 新建 index.html</div>
+      <div class="node-desc">在项目文件夹中创建一个空白的HTML文件</div>
+      <div class="node-time">⏱ 约 1 分钟</div>
+      <div class="node-detail">
+        在项目文件夹中右键 → 新建文件 → 命名为 <code>index.html</code>。这是你个人主页的入口文件，浏览器会直接打开它。
+      </div>
+    </div>
+  </div>
+
+  <div class="timeline-node" id="node3">
+    <div class="node-marker">3</div>
+    <div class="node-content">
+      <div class="node-title"><span class="node-icon">✍️</span> 写Prompt给AI</div>
+      <div class="node-desc">用自然语言描述你要的个人主页</div>
+      <div class="node-time">⏱ 约 3 分钟</div>
+      <div class="node-detail">
+        <strong>你的Prompt大概长这样：</strong>
+        <div style="background:var(--highlight-bg);padding:10px;border-radius:4px;margin-top:6px;font-size:0.85em;">
+        "帮我做一个个人主页，包含：我的名字、照片、简短介绍、技能列表、联系方式。用HTML+CSS+JS，一个文件搞定，风格简洁现代。"
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="timeline-node" id="node4">
+    <div class="node-marker">4</div>
+    <div class="node-content">
+      <div class="node-title"><span class="node-icon">🤖</span> AI生成代码</div>
+      <div class="node-desc">AI根据你的Prompt生成完整HTML代码</div>
+      <div class="node-time">⏱ 约 1 分钟（AI自动完成）</div>
+      <div class="node-detail">
+        AI会在几秒到几十秒内生成完整的HTML代码。你会看到代码中包含 <code>&lt;html&gt;</code>、<code>&lt;head&gt;</code>、<code>&lt;body&gt;</code> 等标签。
+      </div>
+    </div>
+  </div>
+
+  <div class="timeline-node" id="node5">
+    <div class="node-marker">5</div>
+    <div class="node-content">
+      <div class="node-title"><span class="node-icon">🌐</span> 在浏览器打开预览</div>
+      <div class="node-desc">双击 index.html 在浏览器中查看效果</div>
+      <div class="node-time">⏱ 约 1 分钟</div>
+      <div class="node-detail">
+        <div class="browser-mock">
+          <div class="browser-bar">
+            <div class="browser-dot r"></div><div class="browser-dot y"></div><div class="browser-dot g"></div>
+            <div class="browser-url">📁 index.html</div>
+          </div>
+          <div class="browser-body">
+            <div class="mock-photo"></div>
+            <span class="mock-name">张三</span><br>
+            <span style="font-size:0.85em;color:#888">Web Developer | Designer</span>
+            <div style="margin-top:8px;font-size:0.8em;color:#888">这个人主页看起来怎样？</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="timeline-node" id="node6">
+    <div class="node-marker">6</div>
+    <div class="node-content">
+      <div class="node-title"><span class="node-icon">🔄</span> 不满意？改Prompt让AI再改</div>
+      <div class="node-desc">这是AI编程的核心循环：预览→提意见→AI改→再预览</div>
+      <div class="node-time">⏱ 约 15-20 分钟（可多轮迭代）</div>
+      <div class="node-detail">
+        <strong>典型的迭代过程：</strong>
+        <ul style="margin:6px 0;padding-left:20px;font-size:0.85em;">
+          <li>"颜色太单调了，换成蓝色调" → AI改CSS</li>
+          <li>"照片太大了，缩小一点" → AI调整尺寸</li>
+          <li>"加一个回到顶部的按钮" → AI加JS功能</li>
+          <li>"联系方式加个图标" → AI加图标</li>
+        </ul>
+        <div style="margin-top:8px;color:var(--warning);font-size:0.85em;">⚠️ 这个循环可能来回2-5轮，是正常的！</div>
+      </div>
+      <div class="loop-back">🔄 迭代循环</div>
+    </div>
+  </div>
+
+  <div class="timeline-node" id="node7">
+    <div class="node-marker">7</div>
+    <div class="node-content">
+      <div class="node-title"><span class="node-icon">✅</span> 满意！项目完成</div>
+      <div class="node-desc">你的第一个用AI做的项目完成了</div>
+      <div class="node-time">⏱ 总计约 30 分钟</div>
+      <div class="node-detail">
+        <strong>恭喜！你完成了第一个AI编程项目。</strong>你只写了一个Prompt，AI帮你写了所有代码。虽然过程中可能有反复修改，但你已经迈出了AI编程的第一步。
+        <div style="margin-top:8px;color:var(--success);font-size:0.85em;">🎉 接下来你可以：把页面部署到GitHub Pages，让所有人都能看到你的个人主页！</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="footer">
+  <p>数据来源：基于 <strong>ai_coding_detailed_outline.md</strong> | <a href="../../AIcoding从零到精通/48-项目一用AI做个人主页.md">返回教程：48-项目一：用AI做一个个人主页</a></p>
+</div>
+</div>
+
+<script>
+let currentStep = 0;
+const totalSteps = 7;
+
+function updateUI() {
+  document.querySelectorAll('.timeline-node').forEach((el, i) => {
+    el.classList.remove('active', 'completed', 'stuck');
+    if (i + 1 < currentStep) el.classList.add('completed');
+    if (i + 1 === currentStep) {
+      if (i + 1 === 6) el.classList.add('stuck'); // step 6 is the iteration loop
+      else el.classList.add('active');
+    }
+  });
+  document.getElementById('stepIndicator').textContent = `步骤 ${currentStep} / ${totalSteps}`;
+  document.getElementById('btnPlay').disabled = currentStep >= totalSteps;
+}
+
+function play() {
+  if (currentStep >= totalSteps) return;
+  currentStep++;
+  updateUI();
+}
+
+function reset() {
+  currentStep = 0;
+  document.querySelectorAll('.timeline-node').forEach(el => el.classList.remove('active', 'completed', 'stuck'));
+  document.getElementById('stepIndicator').textContent = '步骤 0 / 7';
+  document.getElementById('btnPlay').disabled = false;
+}
+
+const darkModeQuery = window.matchMedia('(prefers-color-scheme: dark)');
+darkModeQuery.addEventListener('change', () => {});
+</script>
+</body>
+</html>

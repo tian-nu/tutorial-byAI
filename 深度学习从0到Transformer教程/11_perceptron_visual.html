@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>感知机 — 最简单的神经元与决策边界</title>
+<!-- 纯 Canvas + HTML，感知机学习规则手动实现，无外部依赖，可离线运行 -->
+<style>
+:root {
+  --bg: #f5f5f5; --card: #fff; --text: #333; --sub: #666;
+  --border: #ddd; --blue: #3498db; --blue-light: #ebf5fb;
+  --green: #27ae60; --red: #e74c3c; --orange: #f39c12; --purple: #9b59b6;
+  --shadow: 0 2px 8px rgba(0,0,0,.06);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1a1a2e; --card: #16213e; --text: #e0e0e0; --sub: #aaa;
+    --border: #333; --blue: #5dade2; --blue-light: rgba(93,173,226,.1);
+    --shadow: 0 2px 8px rgba(0,0,0,.3);
+  }
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column;align-items:center;padding:20px 16px;min-height:100vh}
+h1{font-size:1.35em;text-align:center;margin-bottom:4px}
+.desc{font-size:.82em;color:var(--sub);margin-bottom:14px;text-align:center;max-width:800px;line-height:1.6}
+
+.controls{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-bottom:12px;align-items:center}
+.controls button{padding:5px 14px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);cursor:pointer;font-size:.82em;transition:.15s}
+.controls button:hover{opacity:.8}
+.controls button.primary{background:var(--blue);color:#fff;border-color:var(--blue)}
+.controls .seg{display:inline-flex}
+.controls .seg input{display:none}
+.controls .seg label{padding:5px 14px;border:1px solid var(--border);cursor:pointer;font-size:.82em;background:var(--card);color:var(--text)}
+.controls .seg input:checked + label{background:var(--blue);color:#fff;border-color:var(--blue)}
+.step-indicator{font-size:.78em;color:var(--sub);min-width:70px;text-align:center}
+
+.main{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;width:100%;max-width:880px;margin-bottom:10px}
+.panel{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px;box-shadow:var(--shadow)}
+.panel.canvas-panel{flex:1;min-width:380px}
+.panel.neuron-panel{flex:1;min-width:340px;max-width:420px}
+.panel h2{font-size:.9em;margin-bottom:6px;color:var(--blue)}
+canvas{display:block;max-width:100%}
+
+/* 神经元图 */
+.neuron{position:relative;height:230px;font-size:.78em}
+.n-input{position:absolute;left:0;display:flex;flex-direction:column;gap:38px;top:50px}
+.n-node{width:46px;height:46px;border-radius:50%;border:2px solid var(--border);background:var(--card);display:flex;align-items:center;justify-content:center;font-weight:600}
+.n-sum{position:absolute;right:90px;top:90px;width:62px;height:62px;border-radius:50%;border:2px solid var(--blue);background:var(--blue-light);display:flex;flex-direction:column;align-items:center;justify-content:center}
+.n-out{position:absolute;right:0;top:90px;width:62px;height:62px;border-radius:50%;border:2px solid var(--green);background:rgba(39,174,96,.12);display:flex;flex-direction:column;align-items:center;justify-content:center}
+.n-step{position:absolute;right:0;top:165px;font-size:.7em;color:var(--sub)}
+.n-w{position:absolute;font-size:.72em;color:var(--orange);font-family:ui-monospace,monospace}
+.n-conn{position:absolute;background:var(--sub);height:2px;transform-origin:left center;opacity:.5}
+.n-conn.active{opacity:1;background:var(--blue);height:3px}
+.calc{margin-top:6px;font-size:.76em;color:var(--sub);line-height:1.7}
+.calc code{background:var(--blue-light);padding:1px 5px;border-radius:3px;color:var(--text)}
+.truthtable{margin-top:8px;font-size:.74em;border-collapse:collapse}
+.truthtable td,.truthrable th{padding:2px 8px;border:1px solid var(--border)}
+.truthtable th{background:var(--blue-light);color:var(--text)}
+.truthtable td{color:var(--sub);text-align:center}
+.truthtable tr.hi td{background:rgba(52,152,219,.18);color:var(--text)}
+
+.info-panel{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px 16px;width:100%;max-width:880px;margin-bottom:10px;min-height:50px}
+.info-panel .step-title{font-weight:600;font-size:.85em;margin-bottom:4px;color:var(--blue)}
+.info-panel .step-desc{font-size:.78em;color:var(--sub);line-height:1.6}
+.info-panel code{font-size:.9em;background:var(--blue-light);padding:1px 5px;border-radius:3px}
+
+footer{margin-top:6px;font-size:.7em;color:var(--sub);text-align:center;line-height:1.6}
+footer a{color:var(--sub)}
+</style>
+</head>
+<body>
+<h1>感知机 — 最简单的神经元与决策边界</h1>
+<p class="desc">
+  感知机：z = w₁x₁ + w₂x₂ + b，经阶跃函数（z>0 输出 1，否则 0）得到分类。
+  左侧画 2D 数据点与决策边界 w₁x₁+w₂x₂+b=0；点击「训练一步」用感知机学习规则 w ← w + lr·(y−ŷ)·x 调整边界。
+  AND / OR 可被一条直线分开；XOR 线性不可分——感知机永远学不会。
+</p>
+
+<div class="controls">
+  <div class="seg" id="dataset">
+    <input type="radio" name="ds" id="ds-and" checked><label for="ds-and">AND</label>
+    <input type="radio" name="ds" id="ds-or"><label for="ds-or">OR</label>
+    <input type="radio" name="ds" id="ds-xor"><label for="ds-xor">XOR</label>
+  </div>
+  <button id="btn-step" class="primary" onclick="trainStep()">⏭ 训练一步</button>
+  <button id="btn-auto" onclick="toggleAuto()">⏯ 自动训练</button>
+  <button onclick="resetTrain()">↺ 重置权重</button>
+  <span class="step-indicator" id="stepInfo">轮次 0 / 误分类 0</span>
+</div>
+
+<div class="main">
+  <div class="panel canvas-panel">
+    <h2>2D 决策边界</h2>
+    <canvas id="cv" width="400" height="320"></canvas>
+  </div>
+  <div class="panel neuron-panel">
+    <h2>感知机神经元</h2>
+    <div class="neuron" id="neuron"></div>
+    <div class="calc" id="calc">点「训练一步」开始。</div>
+    <table class="truthtable" id="tt"></table>
+  </div>
+</div>
+
+<div class="info-panel" id="infoPanel">
+  <div class="step-title">准备就绪</div>
+  <div class="step-desc">选择数据集后点「训练一步」。感知机逐个检查样本：若预测 ŷ ≠ 真值 y，则沿 (y−ŷ) 方向微调权重。AND/OR 几轮内收敛；XOR 永远无法收敛（线性不可分）。</div>
+</div>
+
+<footer>
+  数据来源：基于 11-感知机最简单的神经元 教程（大纲第二篇 Ch11）<br>
+  本可视化对应 <a href="11-感知机最简单的神经元.md">深度学习从0到Transformer教程 第11章</a>
+</footer>
+
+<script>
+// 数据集
+const datasets={
+  AND:{pts:[[0,0,0],[0,1,0],[1,0,0],[1,1,1]], name:'AND'},
+  OR :{pts:[[0,0,0],[0,1,1],[1,0,1],[1,1,1]], name:'OR'},
+  XOR:{pts:[[0,0,0],[0,1,1],[1,0,1],[1,1,0]], name:'XOR'},
+};
+let curDS='AND';
+let w=[0.3,-0.4], b=0.1;   // 初始权重（非零，便于画线）
+let lr=0.5;
+let epoch=0, idx=0, miscount=0;
+let converged=false;
+let autoTimer=null;
+
+function step(z){ return z>0?1:0; }
+function predict(x1,x2){ return step(w[0]*x1+w[1]*x2+b); }
+
+function resetTrain(){
+  if(autoTimer){clearInterval(autoTimer);autoTimer=null;document.getElementById('btn-auto').textContent='⏯ 自动训练';}
+  w=[0.3,-0.4]; b=0.1; epoch=0; idx=0; miscount=0; converged=false;
+  document.getElementById('infoPanel').innerHTML='<div class="step-title">已重置</div><div class="step-desc">权重初始化为 w=['+w.map(v=>v.toFixed(2)).join(', ')+'], b='+b.toFixed(2)+'。点「训练一步」开始。</div>';
+  render();
+}
+
+function trainStep(){
+  if(converged) return;
+  const pts=datasets[curDS].pts;
+  // 一轮：遍历所有点，统计误分类并更新
+  let localMis=0, lastUpdate=null;
+  for(let k=0;k<pts.length;k++){
+    const [x1,x2,y]=pts[k];
+    const yh=predict(x1,x2);
+    if(yh!==y){
+      localMis++;
+      const err=y-yh;
+      w[0]+=lr*err*x1; w[1]+=lr*err*x2; b+=lr*err;
+      lastUpdate={x1,x2,y,yh,err};
+    }
+  }
+  epoch++;
+  miscount=localMis;
+  // 收敛判定：一轮无误分类
+  if(localMis===0){ converged=true; }
+  // XOR 永远不收敛，限制轮次
+  if(curDS==='XOR' && epoch>=30){ converged=false; }
+
+  // 信息面板
+  let title, body;
+  if(converged){
+    title='✓ 收敛：第 '+epoch+' 轮全部预测正确';
+    body='决策边界 w₁x₁+w₂x₂+b=0 已正确分开两类。'+datasets[curDS].name+' 是线性可分的。';
+  } else if(curDS==='XOR' && epoch>=30){
+    title='✗ XOR：30 轮仍未收敛';
+    body='XOR 的正类 (0,1)(1,0) 与负类 (0,0)(1,1) 在平面上呈对角分布，<b>无法用一条直线分开</b>。感知机学习规则无解——这就是为什么需要多层感知机（MLP）。';
+  } else if(lastUpdate){
+    title='第 '+epoch+' 轮：误分类 '+localMis+' 个';
+    body='对点 ('+lastUpdate.x1+','+lastUpdate.x2+')：真值 y='+lastUpdate.y+'，预测 ŷ='+lastUpdate.yh+'，误差 (y−ŷ)='+lastUpdate.err
+      +'。更新：w ← w + lr·(y−ŷ)·x = ['+w.map(v=>v.toFixed(2)).join(', ')+']，b='+b.toFixed(2)+'。';
+  } else {
+    title='第 '+epoch+' 轮：无误分类';
+    body='本轮所有点预测正确。';
+  }
+  document.getElementById('infoPanel').innerHTML='<div class="step-title">'+title+'</div><div class="step-desc">'+body+'</div>';
+  render();
+}
+
+function toggleAuto(){
+  if(autoTimer){clearInterval(autoTimer);autoTimer=null;document.getElementById('btn-auto').textContent='⏯ 自动训练';return;}
+  document.getElementById('btn-auto').textContent='⏸ 暂停';
+  autoTimer=setInterval(()=>{
+    trainStep();
+    if(converged || (curDS==='XOR'&&epoch>=30)){clearInterval(autoTimer);autoTimer=null;document.getElementById('btn-auto').textContent='⏯ 自动训练';}
+  },400);
+}
+
+['ds-and','ds-or','ds-xor'].forEach(id=>{
+  document.getElementById(id).addEventListener('change',e=>{
+    if(e.target.checked){ curDS=id.split('-')[1].toUpperCase(); resetTrain(); }
+  });
+});
+
+// ---- 绘图 ----
+const cv=document.getElementById('cv');
+const ctx=cv.getContext('2d');
+const W=cv.width,H=cv.height;
+function render(){
+  document.getElementById('stepInfo').textContent='轮次 '+epoch+' / 误分类 '+miscount;
+  drawCanvas();
+  drawNeuron();
+  drawTruthTable();
+}
+function drawCanvas(){
+  const isDark=matchMedia('(prefers-color-scheme: dark)').matches;
+  const bg=isDark?'#16213e':'#fff', grid=isDark?'#2a3556':'#eee', axis=isDark?'#557':'#888', txt=isDark?'#e0e0e0':'#333';
+  ctx.clearRect(0,0,W,H); ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
+  const pad=30, range=[-0.5,1.8];
+  const X=x=>pad+(x-range[0])/(range[1]-range[0])*(W-pad-10);
+  const Y=y=>H-pad-(y-range[0])/(range[1]-range[0])*(H-pad-10);
+  // 网格
+  ctx.strokeStyle=grid; ctx.lineWidth=1; ctx.fillStyle=txt; ctx.font='11px system-ui';
+  for(let x=0;x<=1;x++){ ctx.beginPath(); ctx.moveTo(X(x),Y(range[0])); ctx.lineTo(X(x),Y(range[1])); ctx.stroke(); }
+  for(let y=0;y<=1;y++){ ctx.beginPath(); ctx.moveTo(X(range[0]),Y(y)); ctx.lineTo(X(range[1]),Y(y)); ctx.stroke(); }
+  ctx.fillText('x₁', X(1.7), Y(0)+14); ctx.fillText('x₂', X(0)-18, Y(1.7));
+  // 轴
+  ctx.strokeStyle=axis; ctx.lineWidth=1.3;
+  ctx.beginPath(); ctx.moveTo(X(range[0]),Y(0)); ctx.lineTo(X(range[1]),Y(0)); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(X(0),Y(range[0])); ctx.lineTo(X(0),Y(range[1])); ctx.stroke();
+  // 决策边界 w1*x1 + w2*x2 + b = 0  =>  x2 = -(w1*x1+b)/w2
+  if(Math.abs(w[1])>1e-6){
+    ctx.strokeStyle='#e74c3c'; ctx.lineWidth=2.2;
+    ctx.beginPath();
+    let started=false;
+    for(let x1=range[0];x1<=range[1];x1+=0.02){
+      const x2=-(w[0]*x1+b)/w[1];
+      if(x2<range[0]||x2>range[1]) continue;
+      const Xp=X(x1), Yp=Y(x2);
+      if(!started){ ctx.moveTo(Xp,Yp); started=true; } else ctx.lineTo(Xp,Yp);
+    }
+    ctx.stroke();
+  }
+  // 数据点
+  datasets[curDS].pts.forEach(([x1,x2,y])=>{
+    ctx.fillStyle = y===1?'#27ae60':'#e74c3c';
+    ctx.beginPath(); ctx.arc(X(x1),Y(x2),9,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle=bg; ctx.lineWidth=2; ctx.stroke();
+    ctx.fillStyle='#fff'; ctx.font='bold 11px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(y, X(x1), Y(x2));
+    ctx.textAlign='start'; ctx.textBaseline='alphabetic';
+  });
+  // 状态文字
+  ctx.fillStyle=txt; ctx.font='11px system-ui';
+  let st = converged?'✓ 已收敛':(curDS==='XOR'&&epoch>=30?'✗ XOR 线性不可分':'训练中…');
+  ctx.fillText('w=['+w.map(v=>v.toFixed(2)).join(', ')+']  b='+b.toFixed(2), pad, 18);
+  ctx.fillText(st, pad, 34);
+}
+
+function drawNeuron(){
+  const el=document.getElementById('neuron');
+  el.innerHTML='';
+  // 输入节点
+  el.innerHTML+='<div class="n-input"><div class="n-node" id="in0">x₁</div><div class="n-node" id="in1">x₂</div></div>';
+  // 连线（用 SVG 画更稳）
+  const svg='<svg style="position:absolute;left:46px;top:0;width:300px;height:230px;pointer-events:none">'
+    +'<line id="ln0" x1="0" y1="73" x2="184" y2="121" stroke="currentColor" stroke-width="2" opacity=".5"/>'
+    +'<line id="ln1" x1="0" y1="157" x2="184" y2="121" stroke="currentColor" stroke-width="2" opacity=".5"/>'
+    +'<line id="ln2" x1="246" y1="121" x2="300" y2="121" stroke="currentColor" stroke-width="2" opacity=".5"/>'
+    +'</svg>';
+  el.innerHTML+=svg;
+  // 权重标签
+  el.innerHTML+='<div class="n-w" style="left:90px;top:80px">w₁='+w[0].toFixed(2)+'</div>';
+  el.innerHTML+='<div class="n-w" style="left:90px;top:150px">w₂='+w[1].toFixed(2)+'</div>';
+  el.innerHTML+='<div class="n-w" style="left:200px;top:96px">b='+b.toFixed(2)+'</div>';
+  // 求和节点
+  el.innerHTML+='<div class="n-sum"><span style="font-size:.7em;color:var(--sub)">Σ</span><span style="font-size:.7em">z</span></div>';
+  // 输出节点
+  el.innerHTML+='<div class="n-out"><span style="font-size:.7em;color:var(--sub)">step</span><span id="outval" style="font-weight:600">ŷ</span></div>';
+  el.innerHTML+='<div class="n-step">z&gt;0 → 1，否则 0</div>';
+  // 计算示例：用 (1,1) 输入展示
+  const x1=1,x2=1;
+  const z=w[0]*x1+w[1]*x2+b;
+  const yh=step(z);
+  document.getElementById('calc').innerHTML=
+    '示例输入 (x₁=1, x₂=1)：<br>'
+    +'z = w₁·1 + w₂·1 + b = '+w[0].toFixed(2)+' + '+w[1].toFixed(2)+' + '+b.toFixed(2)+' = <code>'+z.toFixed(2)+'</code><br>'
+    +'ŷ = step(z) = <code>'+yh+'</code>';
+}
+
+function drawTruthTable(){
+  const pts=datasets[curDS].pts;
+  let html='<tr><th>x₁</th><th>x₂</th><th>y</th><th>ŷ</th></tr>';
+  pts.forEach(([x1,x2,y])=>{
+    const yh=predict(x1,x2);
+    const ok = yh===y;
+    html+='<tr><td>'+x1+'</td><td>'+x2+'</td><td>'+y+'</td><td style="color:'+(ok?'var(--green)':'var(--red)')+'">'+yh+(ok?'':' ✗')+'</td></tr>';
+  });
+  document.getElementById('tt').innerHTML=html;
+}
+
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', render);
+resetTrain();
+</script>
+</body>
+</html>

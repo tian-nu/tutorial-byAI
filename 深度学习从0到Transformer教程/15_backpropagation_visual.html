@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>反向传播 — 误差从后往前传</title>
+<style>
+:root{
+  --bg:#f5f5f5;--card:#fff;--text:#333;--sub:#666;
+  --border:#ddd;--blue:#3498db;--blue-light:#ebf5fb;
+  --green:#27ae60;--green-light:#e8f6ef;
+  --red:#e74c3c;--red-light:#fdedec;
+  --orange:#f39c12;--purple:#8e44ad;
+  --shadow:0 2px 8px rgba(0,0,0,.06);
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#1a1a2e;--card:#16213e;--text:#e0e0e0;--sub:#aaa;
+    --border:#333;--blue:#5dade2;--blue-light:rgba(93,173,226,.12);
+    --green:#2ecc71;--green-light:rgba(46,204,113,.12);
+    --red:#e74c3c;--red-light:rgba(231,76,60,.12);
+    --orange:#f1c40f;--purple:#bb8fce;
+    --shadow:0 2px 8px rgba(0,0,0,.3);
+  }
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column;align-items:center;padding:20px 16px;min-height:100vh}
+h1{font-size:1.35em;text-align:center;margin-bottom:4px}
+.desc{font-size:.82em;color:var(--sub);margin-bottom:14px;text-align:center;max-width:820px;line-height:1.6}
+.controls{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-bottom:14px;align-items:center}
+.controls button{padding:6px 14px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);cursor:pointer;font-size:.82em;transition:.15s}
+.controls button:hover{opacity:.85}
+.controls button.primary{background:var(--blue);color:#fff;border-color:var(--blue)}
+.controls button.primary:hover{opacity:.9}
+.step-indicator{font-size:.78em;color:var(--sub);min-width:90px;text-align:center}
+.mode-toggle{position:fixed;top:10px;right:14px;font-size:.72em;color:var(--sub);cursor:pointer;background:var(--card);border:1px solid var(--border);border-radius:6px;padding:4px 10px}
+.viz{width:100%;max-width:900px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;box-shadow:var(--shadow);margin-bottom:10px}
+.viz svg{display:block;margin:0 auto;width:100%;height:auto;max-width:860px}
+.legend{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;font-size:.74em;color:var(--sub);margin-top:8px}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+.legend .swatch{width:14px;height:4px;border-radius:2px;display:inline-block}
+.info-panel{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px 16px;width:100%;max-width:820px;min-height:70px;transition:all .3s}
+.info-panel .step-title{font-weight:600;font-size:.85em;margin-bottom:4px;color:var(--blue)}
+.info-panel .step-desc{font-size:.78em;color:var(--sub);line-height:1.6}
+.info-panel .step-desc code{font-size:.9em;background:var(--blue-light);padding:1px 5px;border-radius:3px;color:var(--text)}
+.info-panel .step-desc b{color:var(--text)}
+footer{margin-top:14px;font-size:.7em;color:var(--sub);text-align:center;line-height:1.6}
+footer a{color:var(--sub)}
+text{font-family:system-ui,sans-serif}
+</style>
+</head>
+<body>
+<div class="mode-toggle" id="modeToggle" onclick="toggleTheme()">🌙 暗色</div>
+<h1>反向传播 — 误差从后往前传</h1>
+<p class="desc">
+  一个 3-4-2 全连接网络：输入层 3 个神经元，隐藏层 4 个，输出层 2 个。
+  前向传播得到预测 ŷ，与真实值 y 比较产生误差 E。反向传播从右向左逐层计算
+  每条权重上的梯度 ∂E/∂w，红色=正梯度，蓝色=负梯度，线宽=|梯度|大小。
+</p>
+
+<div class="controls">
+  <button id="btn-next" class="primary" onclick="nextStep()">▶ 下一步</button>
+  <button id="btn-auto" onclick="toggleAuto()">⏯ 自动播放</button>
+  <button id="btn-reset" onclick="resetAll()">↺ 重置</button>
+  <span class="step-indicator" id="stepInfo">步骤 0 / 5</span>
+</div>
+
+<div class="viz">
+  <svg id="netSvg" viewBox="0 0 860 380" xmlns="http://www.w3.org/2000/svg">
+    <!-- edges and nodes injected by JS -->
+  </svg>
+  <div class="legend">
+    <span><span class="swatch" style="background:#e74c3c"></span>正梯度（权重应增大）</span>
+    <span><span class="swatch" style="background:#3498db"></span>负梯度（权重应减小）</span>
+    <span><span class="swatch" style="background:#27ae60"></span>前向信号</span>
+    <span>线越粗 = |梯度|越大</span>
+  </div>
+</div>
+
+<div class="info-panel" id="info">
+  <div class="step-title">准备开始</div>
+  <div class="step-desc">点击「下一步」逐步观察反向传播过程。本可视化使用预设数值，便于理解梯度方向。</div>
+</div>
+
+<footer>
+  数据来源：基于 15-反向传播误差从后往前传.md 中 3-4-2 网络示例<br>
+  本可视化对应 <a href="15-反向传播误差从后往前传.md">15-反向传播误差从后往前传.md</a> 步骤 1-5
+</footer>
+
+<script>
+/* ---- 主题切换 ---- */
+let userTheme=null; // null=跟随系统
+function applyTheme(t){
+  const root=document.documentElement.style;
+  // 通过移除/添加 media 触发：使用 disabled stylesheet 技巧
+  // 简化：直接切换 body 类，CSS 已用 media query，这里仅切按钮文字
+}
+function toggleTheme(){
+  const cur=getComputedStyle(document.body).color;
+  // 简化实现：切换一个 class，让 media 失效
+  const isDark=document.body.classList.toggle('force-dark');
+  document.documentElement.style.setProperty('color-scheme', isDark?'dark':'light');
+  // 用内联 style 覆盖 :root
+  if(isDark){
+    document.documentElement.style.setProperty('--bg','#1a1a2e');
+    document.documentElement.style.setProperty('--card','#16213e');
+    document.documentElement.style.setProperty('--text','#e0e0e0');
+    document.documentElement.style.setProperty('--sub','#aaa');
+    document.documentElement.style.setProperty('--border','#333');
+    document.documentElement.style.setProperty('--blue','#5dade2');
+    document.documentElement.style.setProperty('--blue-light','rgba(93,173,226,.12)');
+    document.documentElement.style.setProperty('--green','#2ecc71');
+    document.documentElement.style.setProperty('--red','#e74c3c');
+    document.documentElement.style.setProperty('--red-light','rgba(231,76,60,.12)');
+    document.documentElement.style.setProperty('--shadow','0 2px 8px rgba(0,0,0,.3)');
+    document.getElementById('modeToggle').textContent='☀️ 亮色';
+  }else{
+    document.documentElement.style.setProperty('--bg','#f5f5f5');
+    document.documentElement.style.setProperty('--card','#fff');
+    document.documentElement.style.setProperty('--text','#333');
+    document.documentElement.style.setProperty('--sub','#666');
+    document.documentElement.style.setProperty('--border','#ddd');
+    document.documentElement.style.setProperty('--blue','#3498db');
+    document.documentElement.style.setProperty('--blue-light','#ebf5fb');
+    document.documentElement.style.setProperty('--green','#27ae60');
+    document.documentElement.style.setProperty('--red','#e74c3c');
+    document.documentElement.style.setProperty('--red-light','#fdedec');
+    document.documentElement.style.setProperty('--shadow','0 2px 8px rgba(0,0,0,.06)');
+    document.getElementById('modeToggle').textContent='🌙 暗色';
+  }
+  draw();
+}
+
+/* ---- 网络结构 ---- */
+const LAYERS=[
+  {x:90,  ys:[80,170,260],                      label:'输入层 x'},
+  {x:380, ys:[60,140,220,300],                  label:'隐藏层 h (ReLU)'},
+  {x:730, ys:[140,220],                         label:'输出层 ŷ (Sigmoid)'}
+];
+// 预设前向值
+const FWD={
+  x:[0.5,-0.3,0.8],
+  h:[0.00,0.85,0.42,0.91],   // ReLU 后
+  y:[0.73,0.18]              // sigmoid 后
+};
+// 预设梯度（已通过链式算好，数值仅用于演示方向与大小）
+const GRADS={
+  // 输出层节点上的 δ
+  dy:[0.18,-0.22],
+  // 隐藏层节点上的 δ
+  dh:[0.05,-0.12,0.07,-0.09],
+  // 每条边的 ∂E/∂w
+  edges_h_out:[
+    [0.18*0.85, 0.18*0.42, 0.18*0.91, 0.18*0.00],   // h0..h3 -> y0
+    [-0.22*0.85,-0.22*0.42,-0.22*0.91,-0.22*0.00]   // h0..h3 -> y1
+  ],
+  edges_in_h:[
+    // 对每个 h_j，4 条输入边
+    [0.05*0.5, 0.05*(-0.3), 0.05*0.8],   // -> h0
+    [-0.12*0.5,-0.12*(-0.3),-0.12*0.8],  // -> h1
+    [0.07*0.5, 0.07*(-0.3), 0.07*0.8],   // -> h2
+    [-0.09*0.5,-0.09*(-0.3),-0.09*0.8]   // -> h3
+  ]
+};
+
+const svg=document.getElementById('netSvg');
+const SVGNS='http://www.w3.org/2000/svg';
+function el(tag,attrs){
+  const e=document.createElementNS(SVGNS,tag);
+  for(const k in attrs) e.setAttribute(k,attrs[k]);
+  return e;
+}
+function cssVar(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim();}
+
+/* ---- 状态机 ---- */
+let step=0;
+const STEPS=[
+  {title:'步骤 1：前向传播（信号从左往右）',
+   desc:'输入 <b>x=[0.5, -0.3, 0.8]</b> 经过隐藏层（ReLU 激活）和输出层（Sigmoid），得到预测 <b>ŷ=[0.73, 0.18]</b>。绿色箭头表示前向信号流。',
+   phase:'forward'},
+  {title:'步骤 2：计算输出层误差',
+   desc:'损失 E = ½(ŷ-y)²。设真实值 y=[1, 0]，则误差 <b>δ_y = ŷ - y = [-0.27, 0.18]</b>。Sigmoid 的导数已在 δ 中隐含。此时输出层神经元亮起。',
+   phase:'outErr'},
+  {title:'步骤 3：计算隐藏层 → 输出层权重的梯度',
+   desc:'对每条边 w(hⱼ→yₖ)，<code>∂E/∂w = δ_yₖ · hⱼ</code>。红色=正梯度（loss 随 w 增大而增大，故 w 应减小）；蓝色=负梯度（w 应增大）。线宽正比于 |梯度|。',
+   phase:'gradHO'},
+  {title:'步骤 4：把误差传回隐藏层',
+   desc:'隐藏层 δ：<code>δ_hⱼ = (Σₖ δ_yₖ · w(hⱼ→yₖ)) · ReLU′(zⱼ)</code>。得到 <b>δ_h=[0.05, -0.12, 0.07, -0.09]</b>。隐藏层神经元现在亮起。',
+   phase:'hiddenErr'},
+  {title:'步骤 5：计算输入层 → 隐藏层权重的梯度',
+   desc:'对每条边 w(xᵢ→hⱼ)，<code>∂E/∂w = δ_hⱼ · xᵢ</code>。至此所有权重都有了梯度，可用 <code>w ← w - η · ∂E/∂w</code> 更新。反向传播完成。',
+   phase:'gradIH'}
+];
+
+function draw(){
+  svg.innerHTML='';
+  const blue=cssVar('--blue'),red=cssVar('--red'),green=cssVar('--green'),sub=cssVar('--sub'),text=cssVar('--text'),border=cssVar('--border');
+  // 先画边
+  const edgeGroups=[];
+  // 输入→隐藏
+  const ihEdges=[];
+  for(let j=0;j<LAYERS[1].ys.length;j++)
+    for(let i=0;i<LAYERS[0].ys.length;i++){
+      const g=el('g',{});
+      const ln=el('line',{x1:LAYERS[0].x+30,y1:LAYERS[0].ys[i],x2:LAYERS[1].x-30,y2:LAYERS[1].ys[j],stroke:sub,'stroke-width':1,opacity:.4});
+      g.appendChild(ln);
+      svg.appendChild(g);
+      ihEdges.push({g,ln,i,j});
+    }
+  // 隐藏→输出
+  const hoEdges=[];
+  for(let k=0;k<LAYERS[2].ys.length;k++)
+    for(let j=0;j<LAYERS[1].ys.length;j++){
+      const g=el('g',{});
+      const ln=el('line',{x1:LAYERS[1].x+30,y1:LAYERS[1].ys[j],x2:LAYERS[2].x-30,y2:LAYERS[2].ys[k],stroke:sub,'stroke-width':1,opacity:.4});
+      g.appendChild(ln);
+      svg.appendChild(g);
+      hoEdges.push({g,ln,j,k});
+    }
+
+  // 根据当前 step 应用边样式
+  const ph=STEPS[step-1]&&STEPS[step-1].phase;
+  if(ph==='forward'){
+    // 全部前向绿色
+    [...ihEdges,...hoEdges].forEach(e=>{
+      e.ln.setAttribute('stroke',green);
+      e.ln.setAttribute('opacity',.6);
+      e.ln.setAttribute('stroke-width',1.6);
+    });
+  }else if(ph==='outErr'){
+    // 输出层 δ 已算，但边未画梯度
+  }else if(ph==='gradHO'){
+    hoEdges.forEach(e=>{
+      const g=GRADS.edges_h_out[e.k][e.j];
+      const c=g>=0?red:blue;
+      const w=Math.min(6,1+Math.abs(g)*12);
+      e.ln.setAttribute('stroke',c);
+      e.ln.setAttribute('opacity',.9);
+      e.ln.setAttribute('stroke-width',w);
+      // 梯度数值
+      const mx=(LAYERS[1].x+30+LAYERS[2].x-30)/2;
+      const my=(LAYERS[1].ys[e.j]+LAYERS[2].ys[e.k])/2;
+      const t=el('text',{x:mx,y:my-4,'font-size':10,fill:c,'text-anchor':'middle'});
+      t.textContent=g.toFixed(3);
+      e.g.appendChild(t);
+      // 箭头方向反向（从右到左）
+      e.ln.setAttribute('marker-end','url(#arrL)');
+    });
+  }else if(ph==='hiddenErr'){
+    // 保留 gradHO 的样式（已展示），同时高亮隐藏层
+    hoEdges.forEach(e=>{
+      const g=GRADS.edges_h_out[e.k][e.j];
+      const c=g>=0?red:blue;
+      const w=Math.min(6,1+Math.abs(g)*12);
+      e.ln.setAttribute('stroke',c);
+      e.ln.setAttribute('opacity',.9);
+      e.ln.setAttribute('stroke-width',w);
+      const mx=(LAYERS[1].x+30+LAYERS[2].x-30)/2;
+      const my=(LAYERS[1].ys[e.j]+LAYERS[2].ys[e.k])/2;
+      const t=el('text',{x:mx,y:my-4,'font-size':10,fill:c,'text-anchor':'middle'});
+      t.textContent=g.toFixed(3);
+      e.g.appendChild(t);
+    });
+  }else if(ph==='gradIH'){
+    // 隐藏→输出 梯度保留
+    hoEdges.forEach(e=>{
+      const g=GRADS.edges_h_out[e.k][e.j];
+      const c=g>=0?red:blue;
+      const w=Math.min(6,1+Math.abs(g)*12);
+      e.ln.setAttribute('stroke',c);
+      e.ln.setAttribute('opacity',.85);
+      e.ln.setAttribute('stroke-width',w);
+      const mx=(LAYERS[1].x+30+LAYERS[2].x-30)/2;
+      const my=(LAYERS[1].ys[e.j]+LAYERS[2].ys[e.k])/2;
+      const t=el('text',{x:mx,y:my-4,'font-size':10,fill:c,'text-anchor':'middle'});
+      t.textContent=g.toFixed(3);
+      e.g.appendChild(t);
+    });
+    // 输入→隐藏 梯度
+    ihEdges.forEach(e=>{
+      const g=GRADS.edges_in_h[e.j][e.i];
+      const c=g>=0?red:blue;
+      const w=Math.min(6,1+Math.abs(g)*12);
+      e.ln.setAttribute('stroke',c);
+      e.ln.setAttribute('opacity',.9);
+      e.ln.setAttribute('stroke-width',w);
+      const mx=(LAYERS[0].x+30+LAYERS[1].x-30)/2;
+      const my=(LAYERS[0].ys[e.i]+LAYERS[1].ys[e.j])/2;
+      const t=el('text',{x:mx,y:my-4,'font-size':10,fill:c,'text-anchor':'middle'});
+      t.textContent=g.toFixed(3);
+      e.g.appendChild(t);
+    });
+  }
+
+  // 画神经元
+  const active={
+    forward:[0,1,2].map(()=>true).concat([0,1,2,3].map(()=>true)).concat([0,1].map(()=>true)),
+    outErr:[false,false,false, false,false,false,false, true,true],
+    hiddenErr:[false,false,false, true,true,true,true, true,true],
+    gradHO:[false,false,false, true,true,true,true, true,true],
+    gradIH:[true,true,true, true,true,true,true, true,true]
+  };
+  function nodeActive(layer,idx){
+    if(!ph) return false;
+    const a=active[ph];
+    // 展平索引
+    let i=idx;
+    if(layer===0) i=idx;
+    else if(layer===1) i=3+idx;
+    else i=7+idx;
+    return a[i];
+  }
+  // 输入层
+  LAYERS[0].ys.forEach((y,i)=>{
+    const act=nodeActive(0,i)||ph==='forward';
+    const c=el('circle',{cx:LAYERS[0].x,cy:y,r:24,fill:act?'var(--blue-light)':'var(--card)',stroke:act?blue:border,'stroke-width':2});
+    svg.appendChild(c);
+    const t=el('text',{x:LAYERS[0].x,y:y+4,'font-size':12,fill:text,'text-anchor':'middle'});
+    t.textContent=FWD.x[i].toFixed(2);
+    svg.appendChild(t);
+  });
+  // 隐藏层
+  LAYERS[1].ys.forEach((y,i)=>{
+    const act=nodeActive(1,i)||ph==='forward'||ph==='hiddenErr'||ph==='gradHO'||ph==='gradIH';
+    const c=el('circle',{cx:LAYERS[1].x,cy:y,r:26,fill:act?'var(--blue-light)':'var(--card)',stroke:act?blue:border,'stroke-width':2});
+    svg.appendChild(c);
+    const t=el('text',{x:LAYERS[1].x,y:y+4,'font-size':11,fill:text,'text-anchor':'middle'});
+    t.textContent=FWD.h[i].toFixed(2);
+    svg.appendChild(t);
+    // δ 标注
+    if(ph==='hiddenErr'||ph==='gradIH'){
+      const dt=el('text',{x:LAYERS[1].x+40,y:y+4,'font-size':11,fill:red,'text-anchor':'start'});
+      dt.textContent='δ='+GRADS.dh[i].toFixed(2);
+      svg.appendChild(dt);
+    }
+  });
+  // 输出层
+  LAYERS[2].ys.forEach((y,i)=>{
+    const act=nodeActive(2,i)||ph==='forward'||ph==='outErr'||ph==='hiddenErr'||ph==='gradHO'||ph==='gradIH';
+    const c=el('circle',{cx:LAYERS[2].x,cy:y,r:26,fill:act?'var(--red-light)':'var(--card)',stroke:act?red:border,'stroke-width':2});
+    svg.appendChild(c);
+    const t=el('text',{x:LAYERS[2].x,y:y+4,'font-size':11,fill:text,'text-anchor':'middle'});
+    t.textContent=FWD.y[i].toFixed(2);
+    svg.appendChild(t);
+    if(ph==='outErr'||ph==='hiddenErr'||ph==='gradHO'||ph==='gradIH'){
+      const dt=el('text',{x:LAYERS[2].x-40,y:y+4,'font-size':11,fill:red,'text-anchor':'end'});
+      dt.textContent='δ='+GRADS.dy[i].toFixed(2);
+      svg.appendChild(dt);
+    }
+  });
+
+  // 层标签
+  LAYERS.forEach((L,i)=>{
+    const t=el('text',{x:L.x,y:350,'font-size':12,fill:sub,'text-anchor':'middle','font-weight':600});
+    t.textContent=L.label;
+    svg.appendChild(t);
+  });
+
+  // 损失标注
+  if(ph){
+    const loss=0.5*((0.73-1)**2+(0.18-0)**2);
+    const t=el('text',{x:730,y:60,'font-size':11,fill:red,'text-anchor':'middle'});
+    t.textContent='E='+loss.toFixed(3);
+    svg.appendChild(t);
+  }
+}
+
+/* ---- 控制 ---- */
+function updateInfo(){
+  document.getElementById('stepInfo').textContent='步骤 '+step+' / 5';
+  const inf=document.getElementById('info');
+  if(step===0){
+    inf.innerHTML='<div class="step-title">准备开始</div><div class="step-desc">点击「下一步」逐步观察反向传播过程。本可视化使用预设数值，便于理解梯度方向。</div>';
+  }else{
+    const s=STEPS[step-1];
+    inf.innerHTML='<div class="step-title">'+s.title+'</div><div class="step-desc">'+s.desc+'</div>';
+  }
+}
+function nextStep(){
+  if(step<5){step++;draw();updateInfo();}
+}
+let autoTimer=null;
+function toggleAuto(){
+  const btn=document.getElementById('btn-auto');
+  if(autoTimer){
+    clearInterval(autoTimer);autoTimer=null;btn.textContent='⏯ 自动播放';return;
+  }
+  btn.textContent='⏸ 暂停';
+  autoTimer=setInterval(()=>{
+    if(step>=5){clearInterval(autoTimer);autoTimer=null;document.getElementById('btn-auto').textContent='⏯ 自动播放';return;}
+    nextStep();
+  },1800);
+}
+function resetAll(){
+  if(autoTimer){clearInterval(autoTimer);autoTimer=null;document.getElementById('btn-auto').textContent='⏯ 自动播放';}
+  step=0;draw();updateInfo();
+}
+
+draw();
+updateInfo();
+</script>
+</body>
+</html>

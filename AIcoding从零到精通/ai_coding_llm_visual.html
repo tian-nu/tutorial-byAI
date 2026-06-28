@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LLM工作原理 — 可视化演示</title>
+<!-- 自包含单文件，无外部依赖，可离线运行 -->
+<style>
+:root {
+  --bg: #ffffff;
+  --text: #1a1a2e;
+  --border: #e0e0e0;
+  --card-bg: #f8f9fa;
+  --highlight: #4a90d9;
+  --highlight-bg: #e8f0fe;
+  --token-bg: #fff3cd;
+  --prob-bar: #4a90d9;
+  --output-bg: #f0fff0;
+  --warning: #e67e22;
+  --success: #27ae60;
+  --shadow: rgba(0,0,0,0.08);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1a1a2e;
+    --text: #e0e0e0;
+    --border: #333;
+    --card-bg: #252540;
+    --highlight: #6db3f2;
+    --highlight-bg: #2a2a4a;
+    --token-bg: #3d3520;
+    --prob-bar: #6db3f2;
+    --output-bg: #1a2e1a;
+    --shadow: rgba(0,0,0,0.3);
+  }
+}
+body { font-family: -apple-system, 'Segoe UI', 'Microsoft YaHei', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; line-height: 1.6; }
+.container { max-width: 900px; margin: 0 auto; }
+h1 { font-size: 1.5em; margin-bottom: 4px; }
+.subtitle { color: #888; font-size: 0.9em; margin-bottom: 24px; }
+.stage { background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px; padding: 20px; margin-bottom: 16px; transition: all 0.3s ease; opacity: 0.6; }
+.stage.active { border-color: var(--highlight); box-shadow: 0 0 0 2px var(--highlight); opacity: 1; }
+.stage.completed { border-color: var(--success); opacity: 0.85; }
+.stage-title { font-weight: bold; font-size: 1.1em; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+.step-num { background: var(--highlight); color: #fff; border-radius: 50%; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; font-size: 0.85em; flex-shrink: 0; }
+.stage.completed .step-num { background: var(--success); }
+.controls { display: flex; gap: 12px; margin: 20px 0; flex-wrap: wrap; align-items: center; }
+button { padding: 10px 20px; border: 1px solid var(--highlight); background: var(--highlight); color: #fff; border-radius: 6px; cursor: pointer; font-size: 0.95em; transition: all 0.2s; font-family: inherit; }
+button:hover { opacity: 0.85; }
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+button.reset { background: transparent; color: var(--text); border-color: var(--border); }
+.tokens { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+.token { background: var(--token-bg); border: 1px solid var(--border); border-radius: 4px; padding: 4px 10px; font-family: 'Courier New', monospace; font-size: 0.9em; transition: all 0.3s; }
+.token.highlight { background: var(--highlight); color: #fff; border-color: var(--highlight); transform: scale(1.08); }
+.prob-box { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; }
+.prob-row { display: flex; align-items: center; gap: 10px; }
+.prob-label { width: 80px; font-family: 'Courier New', monospace; font-size: 0.9em; }
+.prob-bar-track { flex: 1; height: 22px; background: var(--card-bg); border: 1px solid var(--border); border-radius: 4px; overflow: hidden; position: relative; }
+.prob-bar-fill { height: 100%; background: var(--prob-bar); border-radius: 3px; transition: width 0.5s ease; display: flex; align-items: center; padding-left: 8px; font-size: 0.8em; color: #fff; min-width: 40px; }
+.prob-row.winner .prob-bar-fill { background: var(--success); }
+.output-text { background: var(--output-bg); border: 1px solid var(--border); border-radius: 6px; padding: 16px; font-family: 'Courier New', monospace; font-size: 0.95em; min-height: 40px; white-space: pre-wrap; word-break: break-all; }
+.output-text .cursor { display: inline-block; width: 2px; height: 1.1em; background: var(--highlight); animation: blink 1s step-end infinite; vertical-align: text-bottom; margin-left: 1px; }
+@keyframes blink { 50% { opacity: 0; } }
+.progress-indicator { font-size: 0.85em; color: #888; margin-left: 12px; }
+.footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--border); font-size: 0.8em; color: #888; }
+.footer a { color: var(--highlight); }
+</style>
+</head>
+<body>
+<div class="container">
+<h1>🔬 LLM工作原理：从Token到逐字生成</h1>
+<p class="subtitle">本可视化对应 <a href="../../AIcoding从零到精通/02-LLM怎么思考的.md" style="color:var(--highlight)">《02-LLM怎么"思考"的》</a> 步骤1-4</p>
+
+<div class="controls">
+  <button id="btnPlay" onclick="play()">▶ 逐步播放</button>
+  <button id="btnReset" class="reset" onclick="reset()">↺ 重置</button>
+  <span class="progress-indicator" id="stepIndicator">步骤 0 / 4</span>
+</div>
+
+<!-- 步骤1：输入文字 -->
+<div class="stage" id="stage1">
+  <div class="stage-title"><span class="step-num">1</span> 输入文字</div>
+  <div id="stage1Content">
+    <p>你向AI输入一段文字，这是AI"猜下一个字"的<strong>上文</strong>（Context）。</p>
+    <div class="output-text" id="inputText" style="background:var(--card-bg)">帮我写一个Python函数，计算1到100的和</div>
+  </div>
+</div>
+
+<!-- 步骤2：Token化 -->
+<div class="stage" id="stage2">
+  <div class="stage-title"><span class="step-num">2</span> Token化 — 把文字切成"积木块"</div>
+  <div id="stage2Content">
+    <p>AI先把你的文字切成<strong>Token（📖 术语：令牌）</strong>——每个Token是AI能理解的最小单位。约1个Token ≈ 3-4个汉字。</p>
+    <div class="tokens" id="tokenContainer">
+      <span class="token">帮我</span><span class="token">写</span><span class="token">一个</span><span class="token">Python</span><span class="token">函数</span><span class="token">，</span><span class="token">计算</span><span class="token">1</span><span class="token">到</span><span class="token">100</span><span class="token">的</span><span class="token">和</span>
+    </div>
+    <p style="font-size:0.9em;color:var(--warning)">📊 共 12 个 Token（输入Token）</p>
+  </div>
+</div>
+
+<!-- 步骤3：概率预测 -->
+<div class="stage" id="stage3">
+  <div class="stage-title"><span class="step-num">3</span> 概率预测 — 猜下一个最可能的Token</div>
+  <div id="stage3Content">
+    <p>AI根据所有上文Token，计算<strong>下一个Token的概率分布</strong>。这是AI的"核心工作"——它不做逻辑推理，只做概率计算。</p>
+    <p style="font-size:0.9em;color:#888">已知上文："帮我写一个Python函数，计算1到100的和" → 下一个Token可能是：</p>
+    <div class="prob-box" id="probContainer">
+      <div class="prob-row"><span class="prob-label">def</span><div class="prob-bar-track"><div class="prob-bar-fill" style="width:0%"></div></div></div>
+      <div class="prob-row"><span class="prob-label">\n</span><div class="prob-bar-track"><div class="prob-bar-fill" style="width:0%"></div></div></div>
+      <div class="prob-row"><span class="prob-label">以下</span><div class="prob-bar-track"><div class="prob-bar-fill" style="width:0%"></div></div></div>
+      <div class="prob-row"><span class="prob-label">根据</span><div class="prob-bar-track"><div class="prob-bar-fill" style="width:0%"></div></div></div>
+      <div class="prob-row"><span class="prob-label">...其他</span><div class="prob-bar-track"><div class="prob-bar-fill" style="width:0%"></div></div></div>
+    </div>
+    <p style="font-size:0.9em;margin-top:8px">AI选择概率最高的 <strong style="color:var(--success)">"def"</strong> 作为输出（因为Python函数定义几乎总是以"def"开头）。</p>
+  </div>
+</div>
+
+<!-- 步骤4：逐字生成 -->
+<div class="stage" id="stage4">
+  <div class="stage-title"><span class="step-num">4</span> 逐字生成 — 循环"猜下一个字"，直到完成</div>
+  <div id="stage4Content">
+    <p>AI每猜出一个Token，就把它加到上文里，再猜下一个Token……<strong>循环往复，直到生成完整代码。</strong></p>
+    <p style="font-size:0.9em;color:#888">这就是为什么AI看起来"一个字一个字往外蹦"——它确实是在一个字一个字地猜。</p>
+    <div class="output-text" id="outputText"><span class="cursor"></span></div>
+    <p style="font-size:0.9em;margin-top:8px;">
+      <span id="tokenCount" style="color:var(--highlight)">已生成：0 Token</span>
+    </p>
+  </div>
+</div>
+
+<div class="footer">
+  <p>数据来源：基于 <strong>ai_coding_outline.md v2</strong> | <a href="../../AIcoding从零到精通/02-LLM怎么思考的.md">返回教程：02-LLM怎么"思考"的</a></p>
+</div>
+</div>
+
+<script>
+let currentStep = 0;
+const totalSteps = 4;
+let outputTimer = null;
+let outputTokens = [];
+
+const fullCode = [
+  'def', ' ', 'sum_', 'one', '_to', '_hundred', '(', ')', ':', '\n',
+  '    ', 'total', ' ', '=', ' ', '0', '\n',
+  '    ', 'for', ' ', 'i', ' ', 'in', ' ', 'range', '(', '1', ',', ' ', '101', ')', ':', '\n',
+  '        ', 'total', ' ', '+=', ' ', 'i', '\n',
+  '    ', 'return', ' ', 'total', '\n'
+];
+
+function updateUI() {
+  document.querySelectorAll('.stage').forEach((el, i) => {
+    el.classList.remove('active', 'completed');
+    if (i + 1 < currentStep) el.classList.add('completed');
+    if (i + 1 === currentStep) el.classList.add('active');
+  });
+  document.getElementById('stepIndicator').textContent = `步骤 ${currentStep} / ${totalSteps}`;
+  document.getElementById('btnPlay').disabled = currentStep >= totalSteps;
+}
+
+function activateStep(n) {
+  currentStep = n;
+  switch(n) {
+    case 1:
+      // highlight input text
+      break;
+    case 2:
+      animateTokens();
+      break;
+    case 3:
+      animateProbabilities();
+      break;
+    case 4:
+      animateGeneration();
+      break;
+  }
+  updateUI();
+}
+
+function animateTokens() {
+  const tokens = document.querySelectorAll('#tokenContainer .token');
+  tokens.forEach((t, i) => {
+    setTimeout(() => t.classList.add('highlight'), i * 150);
+  });
+}
+
+function animateProbabilities() {
+  const rows = document.querySelectorAll('#probContainer .prob-row');
+  const widths = [72, 8, 10, 6, 4];
+  rows.forEach((row, i) => {
+    setTimeout(() => {
+      const bar = row.querySelector('.prob-bar-fill');
+      bar.style.width = widths[i] + '%';
+      bar.textContent = widths[i] + '%';
+      if (i === 0) {
+        row.classList.add('winner');
+        bar.textContent = '72% ✓ 选中';
+      }
+    }, i * 200);
+  });
+}
+
+function animateGeneration() {
+  const outputEl = document.getElementById('outputText');
+  const countEl = document.getElementById('tokenCount');
+  let idx = 0;
+  outputTokens = [];
+  outputEl.innerHTML = '<span class="cursor"></span>';
+  
+  outputTimer = setInterval(() => {
+    if (idx >= fullCode.length) {
+      clearInterval(outputTimer);
+      outputTimer = null;
+      outputEl.innerHTML = outputTokens.join('');
+      countEl.textContent = `已生成：${fullCode.length} Token（输出Token）`;
+      return;
+    }
+    outputTokens.push(fullCode[idx]);
+    outputEl.innerHTML = outputTokens.join('') + '<span class="cursor"></span>';
+    countEl.textContent = `已生成：${idx + 1} Token`;
+    idx++;
+  }, 120);
+}
+
+function play() {
+  if (currentStep >= totalSteps) return;
+  if (outputTimer) {
+    clearInterval(outputTimer);
+    outputTimer = null;
+  }
+  const next = currentStep + 1;
+  // Reset content of the new step before activating
+  if (next === 2) {
+    document.querySelectorAll('#tokenContainer .token').forEach(t => t.classList.remove('highlight'));
+  }
+  if (next === 3) {
+    document.querySelectorAll('#probContainer .prob-bar-fill').forEach(b => { b.style.width = '0%'; b.textContent = ''; });
+    document.querySelectorAll('#probContainer .prob-row').forEach(r => r.classList.remove('winner'));
+  }
+  if (next === 4) {
+    document.getElementById('outputText').innerHTML = '<span class="cursor"></span>';
+    document.getElementById('tokenCount').textContent = '已生成：0 Token';
+  }
+  activateStep(next);
+}
+
+function reset() {
+  if (outputTimer) {
+    clearInterval(outputTimer);
+    outputTimer = null;
+  }
+  currentStep = 0;
+  document.querySelectorAll('.stage').forEach(el => el.classList.remove('active', 'completed'));
+  document.querySelectorAll('#tokenContainer .token').forEach(t => t.classList.remove('highlight'));
+  document.querySelectorAll('#probContainer .prob-bar-fill').forEach(b => { b.style.width = '0%'; b.textContent = ''; });
+  document.querySelectorAll('#probContainer .prob-row').forEach(r => r.classList.remove('winner'));
+  document.getElementById('outputText').innerHTML = '<span class="cursor"></span>';
+  document.getElementById('tokenCount').textContent = '已生成：0 Token';
+  document.getElementById('stepIndicator').textContent = '步骤 0 / 4';
+  document.getElementById('btnPlay').disabled = false;
+  outputTokens = [];
+}
+
+// Auto-detect system color scheme
+const darkModeQuery = window.matchMedia('(prefers-color-scheme: dark)');
+darkModeQuery.addEventListener('change', () => {}); // handled by CSS
+</script>
+</body>
+</html>

@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>RNN 梯度消失与爆炸 — BPTT 沿时间反传</title>
+<style>
+:root{
+  --bg:#f5f5f5;--card:#fff;--text:#333;--sub:#666;
+  --border:#ddd;--blue:#3498db;--blue-light:#ebf5fb;
+  --green:#27ae60;--green-light:#e8f6ef;
+  --red:#e74c3c;--red-light:#fdedec;
+  --orange:#f39c12;--purple:#8e44ad;
+  --shadow:0 2px 8px rgba(0,0,0,.06);
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#1a1a2e;--card:#16213e;--text:#e0e0e0;--sub:#aaa;
+    --border:#333;--blue:#5dade2;--blue-light:rgba(93,173,226,.12);
+    --green:#2ecc71;--green-light:rgba(46,204,113,.12);
+    --red:#e74c3c;--red-light:rgba(231,76,60,.12);
+    --orange:#f1c40f;--purple:#bb8fce;
+    --shadow:0 2px 8px rgba(0,0,0,.3);
+  }
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column;align-items:center;padding:20px 16px;min-height:100vh}
+h1{font-size:1.35em;text-align:center;margin-bottom:4px}
+.desc{font-size:.82em;color:var(--sub);margin-bottom:14px;text-align:center;max-width:860px;line-height:1.6}
+.controls{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-bottom:14px;align-items:center}
+.controls button{padding:6px 14px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);cursor:pointer;font-size:.82em;transition:.15s}
+.controls button:hover{opacity:.85}
+.controls button.primary{background:var(--blue);color:#fff;border-color:var(--blue)}
+.slider-group{display:flex;align-items:center;gap:8px;font-size:.78em;color:var(--sub);background:var(--card);border:1px solid var(--border);border-radius:6px;padding:4px 12px}
+.slider-group input[type=range]{width:130px;vertical-align:middle}
+.slider-group .val{font-weight:600;color:var(--text);min-width:28px;text-align:center}
+.mode-toggle{position:fixed;top:10px;right:14px;font-size:.72em;color:var(--sub);cursor:pointer;background:var(--card);border:1px solid var(--border);border-radius:6px;padding:4px 10px}
+.viz{width:100%;max-width:920px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;box-shadow:var(--shadow);margin-bottom:10px}
+.viz svg{display:block;margin:0 auto;width:100%;height:auto;max-width:900px}
+.legend{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;font-size:.74em;color:var(--sub);margin-top:8px}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+.legend .swatch{width:14px;height:4px;border-radius:2px;display:inline-block}
+.section-title{font-size:.78em;font-weight:600;color:var(--text);margin:6px 0 2px;text-align:center}
+.info-panel{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px 16px;width:100%;max-width:860px;min-height:70px}
+.info-panel .step-title{font-weight:600;font-size:.85em;margin-bottom:4px;color:var(--blue)}
+.info-panel .step-desc{font-size:.78em;color:var(--sub);line-height:1.6}
+.info-panel .step-desc code{font-size:.9em;background:var(--blue-light);padding:1px 5px;border-radius:3px;color:var(--text)}
+.info-panel .step-desc b{color:var(--text)}
+footer{margin-top:14px;font-size:.7em;color:var(--sub);text-align:center;line-height:1.6}
+footer a{color:var(--sub)}
+text{font-family:system-ui,sans-serif}
+</style>
+</head>
+<body>
+<div class="mode-toggle" id="modeToggle" onclick="toggleTheme()">🌙 暗色</div>
+<h1>RNN 梯度消失与爆炸 — BPTT 沿时间反传</h1>
+<p class="desc">
+  上半部分：RNN 沿时间展开，BPTT 从右端损失 E 把梯度 ∂E/∂hₜ 从 t=T 反传到 t=1，每跨一步乘一次 W_hh。
+  下半部分：两条曲线展示 |W_hh|ᵗ 随序列长度 T 的变化——
+  <b style="color:#3498db">W_hh=0.5 衰减→梯度消失</b>，<b style="color:#e74c3c">W_hh=2.0 增长→梯度爆炸</b>。
+  拖动滑块改变 T，观察梯度量级。
+</p>
+
+<div class="controls">
+  <button class="primary" onclick="nextStep()">▶ 下一步</button>
+  <button id="btn-auto" onclick="toggleAuto()">⏯ 自动播放</button>
+  <button onclick="resetAll()">↺ 重置</button>
+  <div class="slider-group">
+    序列长度 T = <span class="val" id="Tval">8</span>
+    <input type="range" id="Tslider" min="2" max="15" value="8" oninput="onTchange(this.value)">
+  </div>
+  <span style="font-size:.74em;color:var(--sub)">步骤 <b id="stepInfo" style="color:var(--text)">0 / 3</b></span>
+</div>
+
+<div class="viz">
+  <div class="section-title">① RNN 沿时间展开 + BPTT 梯度流（红色，从右往左）</div>
+  <svg id="topSvg" viewBox="0 0 900 200" xmlns="http://www.w3.org/2000/svg"></svg>
+  <div class="section-title" style="margin-top:10px">② |W_hh|ᵗ 随 t 变化曲线</div>
+  <svg id="curveSvg" viewBox="0 0 900 240" xmlns="http://www.w3.org/2000/svg"></svg>
+  <div class="legend">
+    <span><span class="swatch" style="background:#e74c3c"></span>反传梯度（红色，越深=越强）</span>
+    <span><span class="swatch" style="background:#3498db"></span>W_hh=0.5（消失）</span>
+    <span><span class="swatch" style="background:#e74c3c"></span>W_hh=2.0（爆炸）</span>
+    <span>线宽 ∝ |梯度|</span>
+  </div>
+</div>
+
+<div class="info-panel" id="info">
+  <div class="step-title">准备开始</div>
+  <div class="step-desc">点击「下一步」或拖动 T 滑块观察 BPTT 梯度反传过程与衰减/爆炸现象。</div>
+</div>
+
+<footer>
+  数据来源：基于 21-RNN的致命问题梯度消失与爆炸.md<br>
+  本可视化对应 <a href="21-RNN的致命问题梯度消失与爆炸.md">21-RNN的致命问题梯度消失与爆炸.md</a>
+</footer>
+
+<script>
+/* ---- 主题切换 ---- */
+function toggleTheme(){
+  const isDark=document.body.classList.toggle('force-dark');
+  const r=document.documentElement.style;
+  if(isDark){
+    r.setProperty('--bg','#1a1a2e');r.setProperty('--card','#16213e');r.setProperty('--text','#e0e0e0');r.setProperty('--sub','#aaa');
+    r.setProperty('--border','#333');r.setProperty('--blue','#5dade2');r.setProperty('--blue-light','rgba(93,173,226,.12)');
+    r.setProperty('--green','#2ecc71');r.setProperty('--green-light','rgba(46,204,113,.12)');
+    r.setProperty('--red','#e74c3c');r.setProperty('--red-light','rgba(231,76,60,.12)');
+    r.setProperty('--orange','#f1c40f');r.setProperty('--purple','#bb8fce');
+    r.setProperty('--shadow','0 2px 8px rgba(0,0,0,.3)');
+    document.getElementById('modeToggle').textContent='☀️ 亮色';
+  }else{
+    r.setProperty('--bg','#f5f5f5');r.setProperty('--card','#fff');r.setProperty('--text','#333');r.setProperty('--sub','#666');
+    r.setProperty('--border','#ddd');r.setProperty('--blue','#3498db');r.setProperty('--blue-light','#ebf5fb');
+    r.setProperty('--green','#27ae60');r.setProperty('--green-light','#e8f6ef');
+    r.setProperty('--red','#e74c3c');r.setProperty('--red-light','#fdedec');
+    r.setProperty('--orange','#f39c12');r.setProperty('--purple','#8e44ad');
+    r.setProperty('--shadow','0 2px 8px rgba(0,0,0,.06)');
+    document.getElementById('modeToggle').textContent='🌙 暗色';
+  }
+  draw();
+}
+
+const topSvg=document.getElementById('topSvg');
+const curveSvg=document.getElementById('curveSvg');
+const SVGNS='http://www.w3.org/2000/svg';
+function el(tag,attrs){const e=document.createElementNS(SVGNS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);return e;}
+function cssVar(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim();}
+
+let T=8;
+let step=0;
+const STEPS=[
+  {title:'步骤 1：前向传播得到损失 E',
+   desc:'RNN 沿时间展开后，前向走完 T 步得到各步 ŷₜ，与真实值比较累加得到总损失 E。这一步梯度还没开始反传。'},
+  {title:'步骤 2：BPTT — 梯度从 t=T 反传到 t=1',
+   desc:'<code>∂E/∂hₜ = (∂E/∂hₜ₊₁) · W_hhᵀ · tanh′(zₜ₊₁)</code>。每往左一步，梯度都被乘以一个 W_hh。T 步连乘 ≈ W_hhᵀ。看上半部分：红色箭头从右端逐步向左传播。',
+   phase:'bptt'},
+  {title:'步骤 3：观察梯度量级随 T 的变化',
+   desc:'下半部分曲线：<b>W_hh=0.5</b> 时 |0.5|ᵗ 指数衰减→远处梯度几乎为 0（早期时间步学不到东西，<b>梯度消失</b>）；<b>W_hh=2.0</b> 时 |2.0|ᵗ 指数增长→梯度爆大、参数更新炸裂（<b>梯度爆炸</b>）。只有 |W_hh|≈1 时才能把信息传得远。',
+   phase:'curve'}
+];
+
+function onTchange(v){T=parseInt(v);document.getElementById('Tval').textContent=T;draw();}
+
+function draw(){
+  const blue=cssVar('--blue'),red=cssVar('--red'),green=cssVar('--green'),sub=cssVar('--sub'),text=cssVar('--text'),border=cssVar('--border');
+  // ===== 上半部分：RNN 展开链 =====
+  topSvg.innerHTML='';
+  const margin=60, W=900, H=200;
+  const nodeY=100, r=20;
+  const span=(W-2*margin)/(T);
+  // 节点
+  for(let t=0;t<=T;t++){
+    const x=margin+t*span;
+    const isLoss=(t===T);
+    const isStart=(t===0);
+    if(isLoss){
+      // E 节点
+      const e=el('rect',{x:x-22,y:nodeY-18,width:44,height:36,rx:8,fill:'var(--red-light)',stroke:red,'stroke-width':2});
+      topSvg.appendChild(e);
+      const et=el('text',{x:x,y:nodeY+5,'font-size':12,fill:text,'text-anchor':'middle','font-weight':600});
+      et.textContent='E';
+      topSvg.appendChild(et);
+    }else{
+      const c=el('circle',{cx:x,cy:nodeY,r,fill:isStart?'var(--card)':'var(--blue-light)',stroke:isStart?border:blue,'stroke-width':isStart?1.5:2,'stroke-dasharray':isStart?'4 3':undefined});
+      topSvg.appendChild(c);
+      const ht=el('text',{x:x,y:nodeY+4,'font-size':11,fill:text,'text-anchor':'middle','font-weight':600});
+      ht.textContent='h'+sub_(t);
+      topSvg.appendChild(ht);
+    }
+  }
+  // 前向边（蓝色虚线，淡）
+  for(let t=0;t<T;t++){
+    const x1=margin+t*span, x2=margin+(t+1)*span;
+    const ln=el('line',{x1:x1+(t===0?r:0),y1:nodeY,x2:x2-(t+1===T?22:r),y2:nodeY,stroke:sub,'stroke-width':1.2,opacity:.4});
+    topSvg.appendChild(ln);
+  }
+  // 反向梯度箭头（红色，逐步显示）
+  const ph=STEPS[step-1]&&STEPS[step-1].phase;
+  if(ph==='bptt'||ph==='curve'){
+    for(let t=T;t>=1;t--){
+      const x2=margin+t*span, x1=margin+(t-1)*span;
+      // 梯度量级（W_hh=0.5 假设）
+      const mag=Math.pow(0.5, T-t+1);
+      const width=Math.max(1, 5-mag*4);
+      const opacity=Math.max(.25, 1-mag*1.5);
+      const ln=el('line',{x1:x2-(t===T?22:r),y1:nodeY-22,x2:x1+r,y2:nodeY-22,stroke:red,'stroke-width':width,opacity,'stroke-linecap':'round'});
+      topSvg.appendChild(ln);
+      // 箭头
+      const tri=el('polygon',{points:`${x1+r},${nodeY-22} ${x1+r+7},${nodeY-26} ${x1+r+7},${nodeY-18}`,fill:red,opacity});
+      topSvg.appendChild(tri);
+      // 量级标注（每3步标一个，避免拥挤）
+      if((T-t)%3===0||t===1){
+        const lbl=el('text',{x:(x1+x2)/2,y:nodeY-30,'font-size':9,fill:red,'text-anchor':'middle'});
+        lbl.textContent='|g|='+mag.toFixed(3);
+        topSvg.appendChild(lbl);
+      }
+    }
+    const dirLbl=el('text',{x:W/2,y:30,'font-size':12,fill:red,'text-anchor':'middle','font-weight':600});
+    dirLbl.textContent='← BPTT 梯度反传（每步乘 W_hh）←';
+    topSvg.appendChild(dirLbl);
+  }else if(step>=1){
+    const dirLbl=el('text',{x:W/2,y:30,'font-size':12,fill:green,'text-anchor':'middle','font-weight':600});
+    dirLbl.textContent='→ 前向传播 →';
+    topSvg.appendChild(dirLbl);
+  }
+  // 时间步标签
+  for(let t=0;t<=T;t++){
+    const x=margin+t*span;
+    const lbl=el('text',{x:x,y:nodeY+r+22,'font-size':10,fill:sub,'text-anchor':'middle'});
+    lbl.textContent='t='+t;
+    topSvg.appendChild(lbl);
+  }
+
+  // ===== 下半部分：曲线 =====
+  curveSvg.innerHTML='';
+  const cMargin=60, cW=900, cH=240;
+  const plotX0=cMargin, plotY0=20, plotX1=cW-cMargin, plotY1=cH-40;
+  const plotW=plotX1-plotX0, plotH=plotY1-plotY0;
+  // 坐标轴
+  const ax=el('line',{x1:plotX0,y1:plotY1,x2:plotX1,y2:plotY1,stroke:border,'stroke-width':1.2});
+  curveSvg.appendChild(ax);
+  const ay=el('line',{x1:plotX0,y1:plotY0,x2:plotX0,y2:plotY1,stroke:border,'stroke-width':1.2});
+  curveSvg.appendChild(ay);
+  // y 轴用对数刻度
+  // y 范围：从 1e-5 到 1e5（log10 = -5..5）
+  const yMin=-5, yMax=5;
+  function yToPx(v){ // v 是 log10(|W_hh|^t)
+    return plotY1 - (v-yMin)/(yMax-yMin)*plotH;
+  }
+  function xToPx(t){return plotX0 + t/T * plotW;}
+  // y 轴刻度
+  for(let e=yMin;e<=yMax;e++){
+    const y=yToPx(e);
+    const ln=el('line',{x1:plotX0-4,y1:y,x2:plotX0,y2:y,stroke:sub,'stroke-width':1});
+    curveSvg.appendChild(ln);
+    const lbl=el('text',{x:plotX0-8,y:y+3,'font-size':9,fill:sub,'text-anchor':'end'});
+    lbl.textContent='1e'+e;
+    curveSvg.appendChild(lbl);
+    // 网格
+    const gl=el('line',{x1:plotX0,y1:y,x2:plotX1,y2:y,stroke:border,'stroke-width':.5,opacity:.3});
+    curveSvg.appendChild(gl);
+  }
+  // 1e0 参考线（梯度=1）
+  const ref=yToPx(0);
+  const rln=el('line',{x1:plotX0,y1:ref,x2:plotX1,y2:ref,stroke:green,'stroke-width':1.2,'stroke-dasharray':'5 4',opacity:.7});
+  curveSvg.appendChild(rln);
+  const rlbl=el('text',{x:plotX1-4,y:ref-4,'font-size':10,fill:green,'text-anchor':'end','font-weight':600});
+  rlbl.textContent='梯度=1（稳定）';
+  curveSvg.appendChild(rlbl);
+  // x 轴刻度
+  for(let t=0;t<=T;t+=Math.max(1,Math.floor(T/8))){
+    const x=xToPx(t);
+    const lbl=el('text',{x:x,y:plotY1+16,'font-size':9,fill:sub,'text-anchor':'middle'});
+    lbl.textContent=t;
+    curveSvg.appendChild(lbl);
+  }
+  const xlbl=el('text',{x:(plotX0+plotX1)/2,y:plotY1+32,'font-size':11,fill:sub,'text-anchor':'middle'});
+  xlbl.textContent='时间步 t（从输出端反传的距离）';
+  curveSvg.appendChild(xlbl);
+
+  // 两条曲线：W_hh=0.5（蓝）和 W_hh=2.0（红）
+  function drawCurve(Whh, color, label){
+    let d='';
+    for(let t=0;t<=T;t++){
+      const mag=Math.pow(Math.abs(Whh),t);
+      const logMag=Math.log10(Math.max(1e-10,mag));
+      const x=xToPx(t), y=yToPx(Math.max(yMin,Math.min(yMax,logMag)));
+      d+=(t===0?'M':'L')+x+','+y+' ';
+    }
+    const p=el('path',{d,fill:'none',stroke:color,'stroke-width':2.4});
+    curveSvg.appendChild(p);
+    // 末端标签
+    const lastLog=Math.log10(Math.max(1e-10,Math.pow(Math.abs(Whh),T)));
+    const lx=xToPx(T)+6, ly=yToPx(Math.max(yMin,Math.min(yMax,lastLog)));
+    const lbl=el('text',{x:lx,y:ly+3,'font-size':11,fill:color,'text-anchor':'start','font-weight':600});
+    lbl.textContent=label;
+    curveSvg.appendChild(lbl);
+    // 关键数值标注
+    for(let t of [1, Math.floor(T/2), T]){
+      if(t<0||t>T) continue;
+      const mag=Math.pow(Math.abs(Whh),t);
+      const logMag=Math.log10(Math.max(1e-10,mag));
+      const x=xToPx(t), y=yToPx(Math.max(yMin,Math.min(yMax,logMag)));
+      const valLbl=el('text',{x:x,y:y-7,'font-size':9,fill:color,'text-anchor':'middle'});
+      valLbl.textContent=mag<0.001?mag.toExponential(1):mag.toFixed(t===0?0:3);
+      curveSvg.appendChild(valLbl);
+    }
+  }
+  drawCurve(0.5, blue, '|0.5|ᵗ（消失）');
+  drawCurve(2.0, red,  '|2.0|ᵗ（爆炸）');
+
+  // 当前 T 的标注
+  const tx=xToPx(T);
+  const tln=el('line',{x1:tx,y1:plotY0,x2:tx,y2:plotY1,stroke:text,'stroke-width':1,'stroke-dasharray':'3 3',opacity:.5});
+  curveSvg.appendChild(tln);
+  const tlbl=el('text',{x:tx,y:plotY0-6,'font-size':10,fill:text,'text-anchor':'middle','font-weight':600});
+  tlbl.textContent='T='+T;
+  curveSvg.appendChild(tlbl);
+}
+
+function sub_(t){const m={'0':'₀','1':'₁','2':'₂','3':'₃','4':'₄','5':'₅','6':'₆','7':'₇','8':'₈','9':'₉'};return String(t).split('').map(c=>m[c]||c).join('');}
+
+/* ---- 控制 ---- */
+function updateInfo(){
+  document.getElementById('stepInfo').textContent=step+' / 3';
+  const inf=document.getElementById('info');
+  if(step===0){
+    inf.innerHTML='<div class="step-title">准备开始</div><div class="step-desc">点击「下一步」或拖动 T 滑块观察 BPTT 梯度反传过程与衰减/爆炸现象。</div>';
+  }else{
+    const s=STEPS[step-1];
+    inf.innerHTML='<div class="step-title">'+s.title+'</div><div class="step-desc">'+s.desc+'</div>';
+  }
+}
+function nextStep(){if(step<3){step++;draw();updateInfo();}}
+let autoTimer=null;
+function toggleAuto(){
+  const btn=document.getElementById('btn-auto');
+  if(autoTimer){clearInterval(autoTimer);autoTimer=null;btn.textContent='⏯ 自动播放';return;}
+  btn.textContent='⏸ 暂停';
+  autoTimer=setInterval(()=>{
+    if(step>=3){clearInterval(autoTimer);autoTimer=null;btn.textContent='⏯ 自动播放';return;}
+    nextStep();
+  },2000);
+}
+function resetAll(){
+  if(autoTimer){clearInterval(autoTimer);autoTimer=null;document.getElementById('btn-auto').textContent='⏯ 自动播放';}
+  step=0;draw();updateInfo();
+}
+
+draw();
+updateInfo();
+</script>
+</body>
+</html>

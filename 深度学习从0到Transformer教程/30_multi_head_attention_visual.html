@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Multi-Head Attention 多头并行视角</title>
+<style>
+:root {
+  --bg: #f5f5f5; --card: #fff; --text: #333; --sub: #666;
+  --border: #ddd; --blue: #3498db; --blue-light: #ebf5fb;
+  --green: #27ae60; --green-light: #eafaf1;
+  --orange: #f39c12; --orange-light: #fef5e7;
+  --purple: #9b59b6; --purple-light: #f5eef8;
+  --red: #e74c3c;
+  --shadow: 0 2px 8px rgba(0,0,0,.06);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1a1a2e; --card: #16213e; --text: #e0e0e0; --sub: #aaa;
+    --border: #333; --blue: #5dade2; --blue-light: rgba(93,173,226,.12);
+    --green: #2ecc71; --green-light: rgba(46,204,113,.12);
+    --orange: #f5b041; --orange-light: rgba(245,176,65,.12);
+    --purple: #bb8fce; --purple-light: rgba(187,143,206,.12);
+    --shadow: 0 2px 8px rgba(0,0,0,.3);
+  }
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,"PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column;align-items:center;padding:20px 16px;min-height:100vh}
+h1{font-size:1.35em;text-align:center;margin-bottom:4px}
+.desc{font-size:.82em;color:var(--sub);margin-bottom:14px;text-align:center;max-width:860px;line-height:1.6}
+.controls{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-bottom:14px;align-items:center}
+.controls button{padding:6px 16px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);cursor:pointer;font-size:.82em;transition:.15s}
+.controls button:hover{opacity:.85}
+.controls button.primary{background:var(--blue);color:#fff;border-color:var(--blue)}
+.controls button.primary:hover{opacity:.9}
+.controls button:disabled{opacity:.4;cursor:not-allowed}
+.controls .head-tabs{display:inline-flex;gap:4px;margin-left:8px}
+.controls .head-tabs button{padding:5px 12px;background:var(--card)}
+.controls .head-tabs button.active{background:var(--purple);color:#fff;border-color:var(--purple)}
+.step-indicator{font-size:.78em;color:var(--sub);min-width:90px;text-align:center}
+
+/* 架构图：X → [头1 / 头2 并行] → Concat → W_O */
+.arch{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:8px;width:100%;max-width:1080px;margin-bottom:12px}
+.box{background:var(--card);border:2px solid var(--border);border-radius:10px;padding:10px;text-align:center;transition:all .35s;opacity:.5}
+.box.active{opacity:1;transform:translateY(-2px)}
+.box.active.head1{border-color:var(--orange);box-shadow:0 0 0 3px var(--orange-light)}
+.box.active.head2{border-color:var(--purple);box-shadow:0 0 0 3px var(--purple-light)}
+.box.active.concat{border-color:var(--green);box-shadow:0 0 0 3px var(--green-light)}
+.box.active.wo{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-light)}
+.box .label{font-weight:600;font-size:.8em;margin-bottom:3px}
+.box.head1 .label{color:var(--orange)}
+.box.head2 .label{color:var(--purple)}
+.box.concat .label{color:var(--green)}
+.box.wo .label{color:var(--blue)}
+.box .formula{font-size:.68em;color:var(--sub);font-family:"Courier New",monospace;margin-bottom:4px}
+.box .shape{font-size:.62em;color:var(--sub);font-style:italic}
+.box .matrix{display:inline-block;margin-top:4px}
+.box.input{min-width:120px}
+.box.head{min-width:200px;vertical-align:top}
+.box.concat{min-width:180px}
+.box.wo{min-width:180px}
+.arrow-h{font-size:1.4em;color:var(--sub);opacity:.4;transition:opacity .35s}
+.arrow-h.active{opacity:1}
+
+/* 并行布局：两个头并排 */
+.heads-row{display:flex;gap:14px;justify-content:center;align-items:flex-start;flex-wrap:wrap}
+
+/* 矩阵 */
+table.mx{border-collapse:collapse;font-family:"Courier New",monospace;font-size:.7em;margin:0 auto}
+table.mx td{border:1px solid var(--border);padding:3px 6px;text-align:center;min-width:34px;transition:background .3s}
+table.mx td.hot{background:var(--orange-light);font-weight:600;color:var(--orange)}
+table.mx td.hot2{background:var(--purple-light);font-weight:600;color:var(--purple)}
+table.mx td.res{background:var(--green-light);font-weight:600;color:var(--green)}
+table.mx caption{caption-side:top;font-size:.85em;color:var(--sub);padding-bottom:3px;font-weight:600}
+
+/* attention 权重热度（深浅）*/
+table.heat td{font-size:.68em}
+table.heat td.lvl1{background:rgba(52,152,219,.15)}
+table.heat td.lvl2{background:rgba(52,152,219,.30)}
+table.heat td.lvl3{background:rgba(52,152,219,.45)}
+table.heat td.lvl4{background:rgba(52,152,219,.60);font-weight:600}
+table.heat.purple td.lvl1{background:rgba(155,89,182,.15)}
+table.heat.purple td.lvl2{background:rgba(155,89,182,.30)}
+table.heat.purple td.lvl3{background:rgba(155,89,182,.45)}
+table.heat.purple td.lvl4{background:rgba(155,89,182,.60);font-weight:600}
+
+/* 信息面板 */
+.info-panel{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px 16px;width:100%;max-width:860px;margin-bottom:10px;min-height:80px;transition:all .3s}
+.info-panel .step-title{font-weight:600;font-size:.85em;margin-bottom:6px;color:var(--blue)}
+.info-panel .step-desc{font-size:.78em;color:var(--sub);line-height:1.6}
+.info-panel .step-desc code{font-size:.9em;background:var(--blue-light);padding:1px 5px;border-radius:3px;color:var(--text)}
+.info-panel .calc{font-family:"Courier New",monospace;font-size:.76em;background:var(--bg);padding:8px 10px;border-radius:5px;margin-top:6px;border-left:3px solid var(--blue);white-space:pre-wrap;color:var(--text)}
+.info-panel .compare{display:flex;gap:14px;margin-top:8px;flex-wrap:wrap}
+.info-panel .compare .card{flex:1;min-width:200px;padding:8px;border-radius:6px;font-size:.74em}
+.info-panel .compare .card.h1{background:var(--orange-light);border-left:3px solid var(--orange)}
+.info-panel .compare .card.h2{background:var(--purple-light);border-left:3px solid var(--purple)}
+
+footer{margin-top:16px;font-size:.7em;color:var(--sub);text-align:center;line-height:1.6}
+footer a{color:var(--sub)}
+</style>
+</head>
+<body>
+<h1>Multi-Head Attention 多头并行视角</h1>
+<p class="desc">
+  d_model=4 拆成 2 个头（每头 d_k=2），3 个词的 X 同时进两个头，各算各的 Self-Attention，
+  再 Concat 拼回 (3,4) 过 W_O。点击「下一步」逐步播放，或点击「头1/头2/对比」切换视角。
+  对应教程《30-Multi-Head Attention 多角度关注》。
+</p>
+
+<div class="controls">
+  <button id="btn-next" class="primary" onclick="nextStep()">▶ 下一步</button>
+  <button id="btn-auto" onclick="toggleAuto()">⏯ 自动播放</button>
+  <button id="btn-reset" onclick="resetAll()">↺ 重置</button>
+  <span class="step-indicator" id="stepInfo">0 / 6</span>
+  <span class="head-tabs">
+    <button id="tab-both" class="active" onclick="setView('both')">两头并排</button>
+    <button id="tab-h1" onclick="setView('h1')">仅头1</button>
+    <button id="tab-h2" onclick="setView('h2')">仅头2</button>
+  </span>
+</div>
+
+<!-- 架构图 -->
+<div class="arch" id="arch">
+  <div class="box input" id="b-input">
+    <div class="label">输入 X</div>
+    <div class="formula">X (3, 4)</div>
+    <div class="matrix" id="mx-input"></div>
+  </div>
+  <div class="arrow-h" id="ar1">→</div>
+  <div class="heads-row">
+    <div class="box head head1" id="b-h1">
+      <div class="label">头 1（前 2 维）</div>
+      <div class="formula">X₁ = X[:, :2]</div>
+      <div class="shape">X₁ (3,2) · α₁ · V₁ → out₁</div>
+      <div class="matrix" id="mx-h1"></div>
+    </div>
+    <div class="box head head2" id="b-h2">
+      <div class="label">头 2（后 2 维）</div>
+      <div class="formula">X₂ = X[:, 2:]</div>
+      <div class="shape">X₂ (3,2) · α₂ · V₂ → out₂</div>
+      <div class="matrix" id="mx-h2"></div>
+    </div>
+  </div>
+  <div class="arrow-h" id="ar2">→</div>
+  <div class="box concat" id="b-concat">
+    <div class="label">Concat</div>
+    <div class="formula">[out₁ ‖ out₂]</div>
+    <div class="shape">(3, 4)</div>
+    <div class="matrix" id="mx-concat"></div>
+  </div>
+  <div class="arrow-h" id="ar3">→</div>
+  <div class="box wo" id="b-wo">
+    <div class="label">× W_O（=I₄）</div>
+    <div class="formula">最终输出</div>
+    <div class="shape">(3, 4)</div>
+    <div class="matrix" id="mx-wo"></div>
+  </div>
+</div>
+
+<div class="info-panel" id="info">
+  <div class="step-title">点击「下一步」开始逐步计算</div>
+  <div class="step-desc">配置：<code>d_model=4, h=2, d_k=2, T=3</code>。简化 <code>W_Q=W_K=W_V=I, W_O=I₄</code>。两头的输入是 X 沿特征维切两半：头1拿前2维，头2拿后2维。</div>
+</div>
+
+<footer>
+  数据来源：30-Multi-Head-Attention多角度关注.md（2头数值小例子）｜
+  本可视化对应 <a href="30-Multi-Head-Attention多角度关注.md">Ch30 · Multi-Head Attention 多角度关注</a>
+</footer>
+
+<script>
+// === 数据（来自教程，3位小数）===
+const X = [[1.0,0.5,0.3,0.7],[0.2,0.8,0.4,0.6],[0.9,0.1,0.5,0.5]];
+const X1 = X.map(r=>r.slice(0,2));  // 头1输入
+const X2 = X.map(r=>r.slice(2,4));  // 头2输入
+const alpha1 = [[0.410,0.259,0.331],[0.351,0.372,0.276],[0.396,0.243,0.361]];
+const alpha2 = [[0.343,0.333,0.324],[0.338,0.333,0.329],[0.333,0.333,0.333]];
+const out1 = [[0.760,0.445],[0.673,0.502],[0.770,0.428]];
+const out2 = [[0.398,0.602],[0.399,0.602],[0.400,0.600]];
+const concat = [[0.760,0.445,0.398,0.602],[0.673,0.502,0.399,0.602],[0.770,0.428,0.400,0.600]];
+
+// === 视图状态 ===
+let view = 'both'; // both / h1 / h2
+let cur = -1;
+let autoTimer = null;
+
+// === 渲染矩阵 ===
+function mHTML(mat, hotClass){
+  let h = '<table class="mx">';
+  for(let i=0;i<mat.length;i++){
+    h += '<tr>';
+    for(let j=0;j<mat[i].length;j++){
+      h += `<td${hotClass?' class="'+hotClass+'"':''}>${mat[i][j]}</td>`;
+    }
+    h += '</tr>';
+  }
+  return h + '</table>';
+}
+// 热度图：根据数值大小标记 level
+function heatHTML(mat, isPurple){
+  let h = '<table class="mx heat' + (isPurple?' purple':'') + '">';
+  for(let i=0;i<mat.length;i++){
+    h += '<tr>';
+    for(let j=0;j<mat[i].length;j++){
+      const v = mat[i][j];
+      let lvl = 0;
+      if(v>=0.38) lvl=4;
+      else if(v>=0.35) lvl=3;
+      else if(v>=0.33) lvl=2;
+      else lvl=1;
+      h += `<td class="lvl${lvl}">${v.toFixed(3)}</td>`;
+    }
+    h += '</tr>';
+  }
+  return h + '</table>';
+}
+
+// === 步骤定义 ===
+const steps = [
+  {title:"第 0 步：输入 X (3, 4)", desc:"3 个词，每个 4 维嵌入。d_model=4，h=2 头，所以每头 d_k=4/2=2。多头的第一步是<strong>沿特征维切</strong>，不是切 batch 也不是切时间。",
+   boxes:['b-input'], arrows:[],
+   fill:{'mx-input':()=>mHTML(X,null)},
+   calc:"X = [[1.0, 0.5, 0.3, 0.7],   # 词1\n     [0.2, 0.8, 0.4, 0.6],   # 词2\n     [0.9, 0.1, 0.5, 0.5]]   # 词3\n形状 (3, 4)\nh=2, d_k = d_model/h = 4/2 = 2"},
+  {title:"第 1 步：拆分给两个头", desc:"头 1 拿前 2 维：<code>X₁ = X[:, :2]</code>。头 2 拿后 2 维：<code>X₂ = X[:, 2:]</code>。<strong>两个头看的是同一份 X 的不同子空间</strong>——不是看不同数据，而是同一份数据的不同视角。", tip:null,
+   boxes:['b-input','b-h1','b-h2'], arrows:['ar1'],
+   fill:{'mx-h1':()=>mHTML(X1,'hot'),'mx-h2':()=>mHTML(X2,'hot2')},
+   calc:"头1: X₁ = X[:, :2] = [[1.0,0.5],[0.2,0.8],[0.9,0.1]]  (3,2)\n头2: X₂ = X[:, 2:] = [[0.3,0.7],[0.4,0.6],[0.5,0.5]]  (3,2)\n\n简化：W_Q=W_K=W_V=I，所以 Q_i=K_i=V_i=X_i"},
+  {title:"第 2 步：每个头独立算 QK^T/√d_k", desc:"两个头<strong>并行</strong>算各自的点积矩阵，互不通信。注意头 1 的得分差异大（1.25 vs 0.60），头 2 的得分几乎都接近 0.5（因为 X₂ 三行太相似）。", tip:null,
+   boxes:['b-h1','b-h2'], arrows:[],
+   fill:{'mx-h1':()=>mHTML([[0.884,0.424,0.672],[0.424,0.481,0.184],[0.672,0.184,0.580]],'hot'),
+         'mx-h2':()=>mHTML([[0.410,0.382,0.354],[0.382,0.368,0.354],[0.354,0.354,0.354]],'hot2')},
+   calc:"头1 QK^T/√2:\n[[0.884, 0.424, 0.672],   ← 差异大\n [0.424, 0.481, 0.184],\n [0.672, 0.184, 0.580]]\n\n头2 QK^T/√2:\n[[0.410, 0.382, 0.354],   ← 几乎一样\n [0.382, 0.368, 0.354],\n [0.354, 0.354, 0.354]]"},
+  {title:"第 3 步：每行 softmax 得注意力权重", desc:"每行 softmax（和为1）。颜色越深权重越大。看头 1 第 1 行：[0.410, 0.259, 0.331]，自己最大；头 2 第 1 行：[0.343, 0.333, 0.324]——几乎均匀分布，因为 X₂ 三行太像了。", tip:null,
+   boxes:['b-h1','b-h2'], arrows:[],
+   fill:{'mx-h1':()=>heatHTML(alpha1,false),
+         'mx-h2':()=>heatHTML(alpha2,true)},
+   calc:"头1 α₁（差异明显，自己权重最大）:\n[[0.410, 0.259, 0.331],\n [0.351, 0.372, 0.276],\n [0.396, 0.243, 0.361]]\n\n头2 α₂（几乎均匀，学不到模式）:\n[[0.343, 0.333, 0.324],\n [0.338, 0.333, 0.329],\n [0.333, 0.333, 0.333]]"},
+  {title:"第 4 步：α·V 得各头输出", desc:"头 1 输出 out₁（数值波动 0.673~0.770，因为 α₁ 有偏向）；头 2 输出 out₂（数值几乎一样 0.398~0.400，因为 α₂ 几乎均匀，退化成三行平均）。<strong>不同头关注不同子空间</strong>——这就是 Multi-Head 的核心价值。", tip:null,
+   boxes:['b-h1','b-h2'], arrows:[],
+   fill:{'mx-h1':()=>mHTML(out1,'hot'),
+         'mx-h2':()=>mHTML(out2,'hot2')},
+   calc:"out₁ = α₁ · X₁:\n[[0.760, 0.445],\n [0.673, 0.502],\n [0.770, 0.428]]   ← 波动大\n\nout₂ = α₂ · X₂:\n[[0.398, 0.602],\n [0.399, 0.602],\n [0.400, 0.600]]   ← 几乎相同\n\n关键观察：头1学到了「位置1和3强相关」，\n头2几乎学不到模式（输入太相似）。",
+   compare:true},
+  {title:"第 5 步：Concat 拼接 → × W_O", desc:"沿特征维把 out₁ 和 out₂ 拼起来，形状从 (3,2)+(3,2) 变回 (3,4)。再过一层线性变换 W_O 让头之间信息混合。本例 W_O=I₄，所以最终输出 = concat。", tip:"❌ d_model 不能被 n_heads 整除 → assert 直接报错。d_k = d_model/h 必须是整数。",
+   boxes:['b-concat','b-wo'], arrows:['ar2','ar3'],
+   fill:{'mx-concat':()=>mHTML(concat,'res'),
+         'mx-wo':()=>mHTML(concat,'res')},
+   calc:"concat = [out₁ ‖ out₂]  (沿特征维拼接):\n[[0.760, 0.445, | 0.398, 0.602],\n [0.673, 0.502, | 0.399, 0.602],\n [0.770, 0.428, | 0.400, 0.600]]\n   ↑头1↑        ↑头2↑\n\n最终输出 = concat · W_O = concat · I₄ = concat\n形状 (3, 4) = (T, d_model) ✅"}
+];
+
+function renderStep(){
+  // 高亮 box
+  ['b-input','b-h1','b-h2','b-concat','b-wo'].forEach(id=>{
+    document.getElementById(id).classList.remove('active');
+  });
+  if(cur>=0){
+    steps[cur].boxes.forEach(id=>document.getElementById(id).classList.add('active'));
+  }
+  ['ar1','ar2','ar3'].forEach(id=>{
+    document.getElementById(id).classList.remove('active');
+  });
+  if(cur>=0){
+    steps[cur].arrows.forEach(id=>document.getElementById(id).classList.add('active'));
+  }
+  // 填充矩阵
+  if(cur>=0){
+    const fill = steps[cur].fill || {};
+    Object.keys(fill).forEach(id=>{
+      document.getElementById(id).innerHTML = fill[id]();
+    });
+  } else {
+    ['mx-input','mx-h1','mx-h2','mx-concat','mx-wo'].forEach(id=>{
+      document.getElementById(id).innerHTML = '';
+    });
+  }
+  // 视图过滤
+  applyView();
+  // 信息面板
+  const info = document.getElementById('info');
+  if(cur<0){
+    info.innerHTML = '<div class="step-title">点击「下一步」开始逐步计算</div>'+
+      '<div class="step-desc">配置：<code>d_model=4, h=2, d_k=2, T=3</code>。简化 <code>W_Q=W_K=W_V=I, W_O=I₄</code>。两头的输入是 X 沿特征维切两半：头1拿前2维，头2拿后2维。</div>';
+  } else {
+    let html = `<div class="step-title">${steps[cur].title}</div>`;
+    html += `<div class="step-desc">${steps[cur].desc}</div>`;
+    if(steps[cur].calc){
+      html += `<div class="calc">${steps[cur].calc}</div>`;
+    }
+    if(steps[cur].compare){
+      html += `<div class="compare">`+
+        `<div class="card h1"><strong>头1（前2维子空间）</strong><br>X₁ 三行差异大 → α₁ 有明显偏向 → out₁ 数值波动 0.673~0.770。头1 学到了「位置1和3强相关」的模式。</div>`+
+        `<div class="card h2"><strong>头2（后2维子空间）</strong><br>X₂ 三行太相似 → α₂ 几乎均匀 → out₂ 退化成三行平均（0.398~0.400）。头2 在这个输入上学不到模式。</div>`+
+        `</div>`;
+    }
+    info.innerHTML = html;
+  }
+  document.getElementById('stepInfo').textContent = (cur+1) + ' / ' + steps.length;
+  document.getElementById('btn-next').disabled = (cur >= steps.length-1);
+}
+
+function applyView(){
+  const h1 = document.getElementById('b-h1');
+  const h2 = document.getElementById('b-h2');
+  if(view==='both'){
+    h1.style.display=''; h2.style.display='';
+  } else if(view==='h1'){
+    h1.style.display=''; h2.style.display='none';
+  } else {
+    h1.style.display='none'; h2.style.display='';
+  }
+  // tab 高亮
+  ['both','h1','h2'].forEach(v=>{
+    document.getElementById('tab-'+v).classList.toggle('active', view===v);
+  });
+}
+
+function setView(v){ view=v; applyView(); }
+
+function nextStep(){
+  if(cur < steps.length-1){ cur++; renderStep(); }
+  else if(autoTimer){ toggleAuto(); }
+}
+
+function toggleAuto(){
+  if(autoTimer){
+    clearInterval(autoTimer); autoTimer=null;
+    document.getElementById('btn-auto').textContent='⏯ 自动播放';
+  } else {
+    if(cur >= steps.length-1) resetAll();
+    autoTimer = setInterval(()=>{
+      if(cur >= steps.length-1){
+        clearInterval(autoTimer); autoTimer=null;
+        document.getElementById('btn-auto').textContent='⏯ 自动播放';
+      } else nextStep();
+    }, 2400);
+    document.getElementById('btn-auto').textContent='⏸ 暂停';
+  }
+}
+
+function resetAll(){
+  if(autoTimer){ clearInterval(autoTimer); autoTimer=null; document.getElementById('btn-auto').textContent='⏯ 自动播放'; }
+  cur = -1;
+  renderStep();
+}
+
+resetAll();
+</script>
+</body>
+</html>

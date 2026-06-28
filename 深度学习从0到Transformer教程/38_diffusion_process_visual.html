@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Diffusion 去噪生成全过程 — 加噪与去噪</title>
+<style>
+:root {
+  --bg: #f5f5f5; --card: #fff; --text: #333; --sub: #666;
+  --border: #ddd; --blue: #3498db; --blue-light: #ebf5fb;
+  --green: #27ae60; --green-light: #eafaf1;
+  --orange: #f39c12; --orange-light: #fef5e7;
+  --purple: #9b59b6; --purple-light: #f5eef8;
+  --red: #e74c3c; --teal: #1abc9c; --pink: #e84393;
+  --shadow: 0 2px 8px rgba(0,0,0,.06);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1a1a2e; --card: #16213e; --text: #e0e0e0; --sub: #aaa;
+    --border: #333; --blue: #5dade2; --blue-light: rgba(93,173,226,.12);
+    --green: #2ecc71; --green-light: rgba(46,204,113,.12);
+    --orange: #f5b041; --orange-light: rgba(245,176,65,.12);
+    --purple: #bb8fce; --purple-light: rgba(187,143,206,.12);
+    --teal: #48c9b0; --pink: #f36;
+    --shadow: 0 2px 8px rgba(0,0,0,.3);
+  }
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,"PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column;align-items:center;padding:20px 16px;min-height:100vh}
+h1{font-size:1.35em;text-align:center;margin-bottom:4px}
+.desc{font-size:.82em;color:var(--sub);margin-bottom:14px;text-align:center;max-width:940px;line-height:1.6}
+
+.controls{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-bottom:14px;align-items:center}
+.controls button{padding:6px 16px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);cursor:pointer;font-size:.82em;transition:.15s}
+.controls button:hover{opacity:.85}
+.controls button.primary{background:var(--blue);color:#fff;border-color:var(--blue)}
+.controls button:disabled{opacity:.4;cursor:not-allowed}
+.controls .grp{display:inline-flex;align-items:center;gap:6px;background:var(--card);padding:6px 12px;border:1px solid var(--border);border-radius:6px;font-size:.78em}
+.controls label{color:var(--sub)}
+.controls input[type=range]{width:220px;cursor:pointer}
+.controls .step-val{font-weight:600;color:var(--blue);min-width:60px;text-align:center}
+.step-indicator{font-size:.78em;color:var(--sub);min-width:90px;text-align:center}
+
+/* 方向标签 */
+.dir-labels{display:flex;justify-content:space-between;width:100%;max-width:940px;margin-bottom:4px;font-size:.78em;padding:0 20px}
+.dir-labels .forward{color:var(--orange);font-weight:600}
+.dir-labels .reverse{color:var(--purple);font-weight:600}
+
+/* 时间轴：x_0 → x_T → x_0 */
+.timeline{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;max-width:940px;margin-bottom:14px;flex-wrap:wrap}
+.tstep{background:var(--card);border:2px solid var(--border);border-radius:10px;padding:8px 6px;min-width:108px;text-align:center;transition:all .35s;opacity:.5;position:relative}
+.tstep.active{opacity:1;transform:translateY(-3px)}
+.tstep.fwd.active{border-color:var(--orange);box-shadow:0 0 0 3px var(--orange-light)}
+.tstep.rev.active{border-color:var(--purple);box-shadow:0 0 0 3px var(--purple-light)}
+.tstep .name{font-weight:600;font-size:.76em;margin-bottom:2px}
+.tstep .vec{font-family:"Courier New",monospace;font-size:.68em;color:var(--sub);margin-bottom:4px}
+.tstep .noise-lvl{font-size:.6em;color:var(--sub);font-style:italic}
+.tstep .canvas-mini{display:block;margin:0 auto}
+.tarr{font-size:1.3em;color:var(--sub);opacity:.4;transition:all .3s}
+.tarr.fwd.active{opacity:1;color:var(--orange)}
+.tarr.rev.active{opacity:1;color:var(--purple)}
+
+/* 公式与信息面板 */
+.info-panel{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px 16px;width:100%;max-width:940px;margin-bottom:10px;min-height:90px;transition:all .3s}
+.info-panel .step-title{font-weight:600;font-size:.85em;margin-bottom:6px;color:var(--blue)}
+.info-panel .step-desc{font-size:.78em;color:var(--sub);line-height:1.6}
+.info-panel .step-desc code{font-size:.9em;background:var(--blue-light);padding:1px 5px;border-radius:3px;color:var(--text)}
+.info-panel .calc{font-family:"Courier New",monospace;font-size:.76em;background:var(--bg);padding:8px 10px;border-radius:5px;margin-top:6px;border-left:3px solid var(--blue);white-space:pre-wrap;color:var(--text);line-height:1.5}
+.info-panel .tip{margin-top:6px;font-size:.74em;padding:4px 8px;border-radius:4px}
+.info-panel .tip.warn{color:var(--orange);background:var(--orange-light)}
+.info-panel .tip.good{color:var(--green);background:var(--green-light)}
+
+/* 三大流派对比表 */
+.compare{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px 16px;width:100%;max-width:940px;margin-bottom:10px}
+.compare h3{font-size:.88em;color:var(--blue);margin-bottom:8px}
+.compare table{width:100%;border-collapse:collapse;font-size:.74em}
+.compare th,.compare td{border:1px solid var(--border);padding:6px 8px;text-align:left}
+.compare th{background:var(--bg);font-weight:600;color:var(--text)}
+.compare td{color:var(--sub);line-height:1.5}
+.compare td strong{color:var(--text)}
+
+footer{margin-top:14px;font-size:.7em;color:var(--sub);text-align:center;line-height:1.6}
+footer a{color:var(--sub)}
+</style>
+</head>
+<body>
+<h1>Diffusion 去噪生成全过程</h1>
+<p class="desc">
+  上排（橙）：前向加噪 q(x_t|x_{t-1}) = √(1-β_t)·x_{t-1} + √β_t·ε，从清晰图 x₀ 一步步撒噪声到纯噪声 x_T。
+  下排（紫）：反向去噪 p_θ(x_{t-1}|x_t)，从纯噪声一步步擦回生成图。
+  用教程里的 3 步加噪数值小例子（x₀=[1.0,0.5], β=[0.1,0.2,0.3]）。对应《38-生成模型简介》。
+</p>
+
+<div class="controls">
+  <button id="btn-next" class="primary" onclick="nextStep()">▶ 下一步</button>
+  <button id="btn-auto" onclick="toggleAuto()">⏯ 自动播放</button>
+  <button id="btn-reset" onclick="resetAll()">↺ 重置</button>
+  <span class="step-indicator" id="stepInfo">0 / 8</span>
+  <div class="grp">
+    <label>手动选 t：</label>
+    <input type="range" id="tSlider" min="-1" max="6" value="-1" oninput="manualSlide()">
+    <span class="step-val" id="tLabel">未开始</span>
+  </div>
+</div>
+
+<div class="dir-labels">
+  <span class="forward">➡ 前向加噪（不可学习，制造训练数据）</span>
+  <span class="reverse">⬅ 反向去噪（要学习，用于生成）</span>
+</div>
+
+<div class="timeline" id="timeline">
+  <div class="tstep fwd" id="t0">
+    <div class="name">x₀ 清晰图</div>
+    <div class="vec">[1.0, 0.5]</div>
+    <canvas class="canvas-mini" id="c0" width="56" height="56"></canvas>
+    <div class="noise-lvl">噪声 0%</div>
+  </div>
+  <div class="tarr fwd" id="ar1">→</div>
+  <div class="tstep fwd" id="t1">
+    <div class="name">x₁ 加噪 1</div>
+    <div class="vec">[0.981, 0.412]</div>
+    <canvas class="canvas-mini" id="c1" width="56" height="56"></canvas>
+    <div class="noise-lvl">β₁=0.1</div>
+  </div>
+  <div class="tarr fwd" id="ar2">→</div>
+  <div class="tstep fwd" id="t2">
+    <div class="name">x₂ 加噪 2</div>
+    <div class="vec">[1.011, 0.413]</div>
+    <canvas class="canvas-mini" id="c2" width="56" height="56"></canvas>
+    <div class="noise-lvl">β₂=0.2</div>
+  </div>
+  <div class="tarr fwd" id="ar3">→</div>
+  <div class="tstep fwd" id="t3">
+    <div class="name">x_T 纯噪声</div>
+    <div class="vec">[0.736, 0.620]</div>
+    <canvas class="canvas-mini" id="c3" width="56" height="56"></canvas>
+    <div class="noise-lvl">β₃=0.3</div>
+  </div>
+  <div class="tarr rev" id="ar4">←</div>
+  <div class="tstep rev" id="t4">
+    <div class="name">x₂' 去噪 1</div>
+    <div class="vec">[1.011, 0.413]</div>
+    <canvas class="canvas-mini" id="c4" width="56" height="56"></canvas>
+    <div class="noise-lvl">预测 ε₃</div>
+  </div>
+  <div class="tarr rev" id="ar5">←</div>
+  <div class="tstep rev" id="t5">
+    <div class="name">x₁' 去噪 2</div>
+    <div class="vec">[0.981, 0.412]</div>
+    <canvas class="canvas-mini" id="c5" width="56" height="56"></canvas>
+    <div class="noise-lvl">预测 ε₂</div>
+  </div>
+  <div class="tarr rev" id="ar6">←</div>
+  <div class="tstep rev" id="t6">
+    <div class="name">x₀' 生成图</div>
+    <div class="vec">[1.0, 0.5]</div>
+    <canvas class="canvas-mini" id="c6" width="56" height="56"></canvas>
+    <div class="noise-lvl">预测 ε₁</div>
+  </div>
+</div>
+
+<div class="info-panel" id="info">
+  <div class="step-title">点击「下一步」观察加噪 → 去噪全过程</div>
+  <div class="step-desc">本可视化用教程的 3 步数值小例子：<code>x₀=[1.0,0.5]</code>，<code>β=[0.1,0.2,0.3]</code>，每步采一个具体的 ε（教程里「假装」采到的值）。<strong>前向加噪不可学习</strong>（只是制造训练数据），<strong>反向去噪才是要学的</strong>。</div>
+</div>
+
+<div class="compare">
+  <h3>三大生成模型流派对比</h3>
+  <table>
+    <tr><th>流派</th><th>核心比喻</th><th>一句话思路</th><th>优势</th><th>劣势</th></tr>
+    <tr><td><strong>VAE</strong></td><td>压缩再还原</td><td>编码到潜在码 z，加 KL 让 z~N(0,I)，再解码</td><td>训练稳定、可插值</td><td>生成图偏模糊</td></tr>
+    <tr><td><strong>GAN</strong></td><td>造假者 vs 警察</td><td>生成器造图骗判别器，对抗到以假乱真</td><td>生成图锐利</td><td>训练难、易模式崩溃</td></tr>
+    <tr><td><strong>Diffusion</strong></td><td>慢慢擦掉再画回来</td><td>前向逐步加噪到纯噪声，反向逐步去噪</td><td>质量高、训练稳定</td><td>生成慢（多步迭代）</td></tr>
+  </table>
+</div>
+
+<footer>
+  数据来源：38-生成模型简介VAE-GAN-Diffusion.md（3 步加噪数值小例子）｜
+  本可视化对应 <a href="38-生成模型简介VAE-GAN-Diffusion.md">Ch38 · 生成模型简介 — VAE/GAN/Diffusion</a>
+</footer>
+
+<script>
+// === 数据（来自教程的 3 步加噪数值小例子）===
+const states = [
+  {name:'x₀',   vec:[1.000, 0.500], noise:0,   phase:'fwd'},  // 清晰图
+  {name:'x₁',   vec:[0.981, 0.412], noise:0.1, phase:'fwd'},
+  {name:'x₂',   vec:[1.011, 0.413], noise:0.3, phase:'fwd'},
+  {name:'x_T',  vec:[0.736, 0.620], noise:0.6, phase:'fwd'},  // 纯噪声
+  {name:"x₂'",  vec:[1.011, 0.413], noise:0.3, phase:'rev'},
+  {name:"x₁'",  vec:[0.981, 0.412], noise:0.1, phase:'rev'},
+  {name:"x₀'",  vec:[1.000, 0.500], noise:0,   phase:'rev'}   // 生成图
+];
+const tstepIds = ['t0','t1','t2','t3','t4','t5','t6'];
+const tarrIds = ['ar1','ar2','ar3','ar4','ar5','ar6'];
+const canvasIds = ['c0','c1','c2','c3','c4','c5','c6'];
+
+// 教程里采到的 ε（用于说明）
+const epsilons = [
+  null,
+  [0.1, -0.2],   // ε_1
+  [0.3, 0.1],    // ε_2
+  [-0.2, 0.5],   // ε_3
+  [-0.2, 0.5],   // 反向预测 = ε_3
+  [0.3, 0.1],    // 反向预测 = ε_2
+  [0.1, -0.2]    // 反向预测 = ε_1
+];
+
+// === 步骤定义（cur 对应 states 索引）===
+const steps = [
+  {t:0, title:"第 0 步：清晰图 x₀（起点）", desc:"原始样本 <code>x₀ = [1.0, 0.5]</code>。把它想象成一张 2 像素的「图」。前向加噪从这里开始。", tip:null,
+   calc:"x₀ = [1.0, 0.5]   # 原始清晰样本\nβ = [0.1, 0.2, 0.3]   # 噪声调度\n前向公式: x_t = √(1-β_t)·x_{t-1} + √β_t·ε\n         其中 ε ~ N(0, I) 每步重新采"},
+  {t:1, title:"第 1 步：前向加噪 x₀ → x₁", desc:"<code>β₁=0.1</code>，<code>√(1-0.1)≈0.949</code>，<code>√0.1≈0.316</code>。采到噪声 <code>ε₁=[0.1,-0.2]</code>（每步重新采一个新的 ε）。", tip:null,
+   calc:"x₁ = √(1-0.1)·x₀ + √0.1·ε₁\n   = 0.949·[1.0, 0.5] + 0.316·[0.1, -0.2]\n第1维: 0.949×1.0 + 0.316×0.1 = 0.949 + 0.032 = 0.981\n第2维: 0.949×0.5 + 0.316×(-0.2) = 0.475 - 0.063 = 0.412\n\nx₁ = [0.981, 0.412]"},
+  {t:2, title:"第 2 步：前向加噪 x₁ → x₂", desc:"<code>β₂=0.2</code>。注意每步都<strong>重新采一个新 ε</strong>——这是易错点。ε₂=[0.3, 0.1] 和 ε₁ 完全不同。", tip:"❌ 以为每步用同一个 ε → 错。每步都重新采样 ε ~ N(0,I)。前向加噪时每步一个新噪声，反向去噪时网络预测的也是「这一步的」噪声。",
+   calc:"x₂ = √(1-0.2)·x₁ + √0.2·ε₂\n   = 0.894·[0.981, 0.412] + 0.447·[0.3, 0.1]\n第1维: 0.894×0.981 + 0.447×0.3 = 0.877 + 0.134 = 1.011\n第2维: 0.894×0.412 + 0.447×0.1 = 0.368 + 0.045 = 0.413\n\nx₂ = [1.011, 0.413]"},
+  {t:3, title:"第 3 步：前向加噪 x₂ → x_T（纯噪声）", desc:"<code>β₃=0.3</code>，<code>ε₃=[-0.2,0.5]</code>。3 步后得到 x_T。如果继续加噪几十上百步，x_T 就几乎是纯噪声——前向过程的终点。", tip:null,
+   calc:"x_T = √(1-0.3)·x₂ + √0.3·ε₃\n    = 0.837·[1.011, 0.413] + 0.548·[-0.2, 0.5]\n第1维: 0.837×1.011 + 0.548×(-0.2) = 0.846 - 0.110 = 0.736\n第2维: 0.837×0.413 + 0.548×0.5 = 0.346 + 0.274 = 0.620\n\nx_T = [0.736, 0.620]   # 原始信号被稀释\n观察: 从 [1.0, 0.5] 到 [0.736, 0.620]，\n      噪声占比越来越大"},
+  {t:4, title:"第 4 步：反向去噪 x_T → x₂'（学习开始）", desc:"<strong>反向过程是网络要学的</strong>。给定带噪图 x_t，预测「这一步加的噪声 ε_t」，再把它减掉。训练时只学这个去噪网络 p_θ(x_{t-1}|x_t)。", tip:"❌ 以为 Diffusion 直接生成图 → 错。Diffusion 学的是<strong>去噪过程</strong>。前向加噪不可学习，只是制造训练数据（给网络看带噪图，让它预测噪声 ε）。",
+   calc:"反向: p_θ(x_{t-1} | x_t)\n网络预测: ε̂_θ(x_t, t) ≈ ε_t\n\nx₂' ≈ x_T - (去噪网络预测的 ε₃)\n     = [0.736, 0.620] - (预测的 ε₃)\n     ≈ [1.011, 0.413]   # 恢复到 x₂ 附近\n\n训练目标: 让 ε̂_θ 尽量接近真实 ε_t\n           (MSE loss)"},
+  {t:5, title:"第 5 步：反向去噪 x₂' → x₁'", desc:"继续去噪。每一步都用学好的网络预测当前步的噪声并减掉。这里演示「理想情况」下还原回 x₁ 附近。", tip:null,
+   calc:"x₁' ≈ x₂' - (预测的 ε₂)\n     ≈ [0.981, 0.412]   # 恢复到 x₁ 附近\n\n注意: 实际去噪网络不可能完美预测 ε，\n      所以生成图 x₀' 会和原图 x₀ 略有差异\n      —— 这正是「生成新样本」的来源"},
+  {t:6, title:"✅ 完成：反向去噪 x₁' → x₀'（生成图）", desc:"最后一步去噪，得到生成图 x₀'。在真实 Diffusion 模型里，T 可能是 1000 步，每步都做去噪，最终从纯噪声「画」出一张训练集里没有的新图。", tip:"Diffusion 超越 GAN 成为 SOTA 的原因：训练目标稳定（只学去噪，无对抗博弈）、样本多样性好（每步多种去噪可能）。代价是慢——要迭代多步。",
+   calc:"x₀' ≈ [1.0, 0.5]   # 生成图（与原图接近但不完全相同）\n\n完整流程:\n  前向: x₀ → x₁ → x₂ → x_T  (不可学习，制造训练数据)\n  反向: x_T → x₂' → x₁' → x₀'  (网络学习去噪，用于生成)\n\n生成时: 从纯噪声 x_T 开始反复去噪 → 新图"}
+];
+
+// === 渲染 mini canvas（用颜色深浅表示向量值的「图」）===
+function drawMini(canvasId, vec, phase){
+  const c = document.getElementById(canvasId);
+  const ctx = c.getContext('2d');
+  const W = c.width, H = c.height;
+  ctx.clearRect(0,0,W,H);
+  // 2 像素并排显示
+  const pw = W/2;
+  for(let i=0;i<2;i++){
+    // 把值映射到灰度：值在 0~1 之间 → 灰度
+    // 加噪过程值会漂移，做归一化
+    let v = vec[i];
+    // 映射：-0.5~1.5 → 0~1
+    let t = (v + 0.5) / 2.0;
+    t = Math.max(0, Math.min(1, t));
+    // 清晰图用蓝色调，噪声用橙紫色调
+    let r, g, b;
+    if(phase==='fwd'){
+      // 前向：从蓝（清晰）渐变到橙（噪声）
+      r = Math.round(52 + (245-52)*t);
+      g = Math.round(152 + (176-152)*t);
+      b = Math.round(219 + (65-219)*t);
+    } else {
+      // 反向：从紫（噪声）渐变到绿（清晰）
+      r = Math.round(155 + (39-155)*t);
+      g = Math.round(89 + (174-89)*t);
+      b = Math.round(182 + (96-182)*t);
+    }
+    // 加点噪声纹理
+    ctx.fillStyle = `rgb(${r},${g},${b})`;
+    ctx.fillRect(i*pw, 0, pw, H);
+    // 加随机的「噪声颗粒」
+    const grain = (Math.abs(v) * 30) % 8;
+    for(let k=0;k<grain;k++){
+      const gx = i*pw + Math.random()*pw;
+      const gy = Math.random()*H;
+      ctx.fillStyle = 'rgba(255,255,255,0.25)';
+      ctx.fillRect(gx, gy, 1.5, 1.5);
+    }
+  }
+  // 边框
+  ctx.strokeStyle = phase==='fwd' ? 'var(--orange)' : 'var(--purple)';
+  ctx.strokeStyle = '#999';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(0.5, 0.5, W-1, H-1);
+}
+
+// === 状态机 ===
+let cur = -1;
+let autoTimer = null;
+
+function renderStep(){
+  // 重置所有 tstep
+  tstepIds.forEach(id=>document.getElementById(id).classList.remove('active'));
+  tarrIds.forEach(id=>document.getElementById(id).classList.remove('active'));
+
+  if(cur>=0){
+    // 高亮当前 tstep
+    document.getElementById(tstepIds[cur]).classList.add('active');
+    // 高亮前一步到当前步的箭头
+    if(cur>=1){
+      document.getElementById(tarrIds[cur-1]).classList.add('active');
+    }
+  }
+
+  // 渲染所有 mini canvas（cur 之前的已加噪，之后的是「目标」状态）
+  for(let i=0;i<7;i++){
+    drawMini(canvasIds[i], states[i].vec, states[i].phase);
+  }
+
+  // 信息面板
+  const info = document.getElementById('info');
+  if(cur<0){
+    info.innerHTML = '<div class="step-title">点击「下一步」观察加噪 → 去噪全过程</div>'+
+      '<div class="step-desc">本可视化用教程的 3 步数值小例子：<code>x₀=[1.0,0.5]</code>，<code>β=[0.1,0.2,0.3]</code>，每步采一个具体的 ε（教程里「假装」采到的值）。<strong>前向加噪不可学习</strong>（只是制造训练数据），<strong>反向去噪才是要学的</strong>。</div>';
+  } else {
+    const s = steps[cur];
+    let html = `<div class="step-title">${s.title}</div>`;
+    html += `<div class="step-desc">${s.desc}</div>`;
+    if(s.calc){
+      html += `<div class="calc">${s.calc}</div>`;
+    }
+    if(s.tip){
+      const cls = s.tip.startsWith('❌') ? 'warn' : 'good';
+      html += `<div class="tip ${cls}">${s.tip}</div>`;
+    }
+    info.innerHTML = html;
+  }
+  document.getElementById('stepInfo').textContent = (cur+1) + ' / ' + steps.length;
+  document.getElementById('btn-next').disabled = (cur >= steps.length-1);
+  // 滑块同步
+  document.getElementById('tSlider').value = cur;
+  document.getElementById('tLabel').textContent = cur<0 ? '未开始' : states[cur].name;
+}
+
+function nextStep(){
+  if(cur < steps.length-1){ cur++; renderStep(); }
+  else if(autoTimer){ toggleAuto(); }
+}
+
+function toggleAuto(){
+  if(autoTimer){
+    clearInterval(autoTimer); autoTimer=null;
+    document.getElementById('btn-auto').textContent='⏯ 自动播放';
+  } else {
+    if(cur >= steps.length-1) resetAll();
+    autoTimer = setInterval(()=>{
+      if(cur >= steps.length-1){
+        clearInterval(autoTimer); autoTimer=null;
+        document.getElementById('btn-auto').textContent='⏯ 自动播放';
+      } else nextStep();
+    }, 2400);
+    document.getElementById('btn-auto').textContent='⏸ 暂停';
+  }
+}
+
+function manualSlide(){
+  const v = parseInt(document.getElementById('tSlider').value);
+  if(v !== cur){
+    cur = v;
+    if(autoTimer){ clearInterval(autoTimer); autoTimer=null; document.getElementById('btn-auto').textContent='⏯ 自动播放'; }
+    renderStep();
+  }
+}
+
+function resetAll(){
+  if(autoTimer){ clearInterval(autoTimer); autoTimer=null; document.getElementById('btn-auto').textContent='⏯ 自动播放'; }
+  cur = -1; renderStep();
+}
+
+resetAll();
+</script>
+</body>
+</html>

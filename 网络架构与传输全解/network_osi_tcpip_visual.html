@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>OSI七层 / TCP-IP四层 对照与封装解封装</title>
+<style>
+:root{--bg:#f5f5f5;--card:#fff;--text:#333;--sub:#666;--border:#ccc;--l7:#e74c3c;--l6:#e67e22;--l5:#f1c40f;--l4:#2ecc71;--l3:#3498db;--l2:#9b59b6;--l1:#1abc9c;--app:#e74c3c;--trans:#2ecc71;--net:#3498db;--link:#9b59b6}
+@media(prefers-color-scheme:dark){:root{--bg:#1a1a2e;--card:#16213e;--text:#e0e0e0;--sub:#aaa;--border:#444}}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column;align-items:center;padding:20px;min-height:100vh}
+h1{font-size:1.4em;margin-bottom:4px;text-align:center}
+.desc{font-size:.85em;color:var(--sub);margin-bottom:16px;text-align:center;max-width:720px}
+.controls{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-bottom:14px}
+.controls button{padding:6px 16px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);cursor:pointer;font-size:.85em;transition:.15s}
+.controls button:hover{opacity:.8}
+.controls button.active{background:#3498db;color:#fff;border-color:#3498db}
+.main{display:flex;gap:24px;flex-wrap:wrap;justify-content:center;width:100%;max-width:900px}
+.col{flex:1;min-width:200px;max-width:360px}
+.col h3{text-align:center;font-size:.95em;margin-bottom:8px}
+.layer{cursor:pointer;position:relative;margin:2px 0;padding:10px 12px;border-radius:6px;color:#fff;font-size:.8em;text-align:center;transition:transform .15s,box-shadow .15s;user-select:none}
+.layer:hover{transform:scale(1.03);box-shadow:0 2px 10px rgba(0,0,0,.25)}
+.layer .name{font-weight:bold;font-size:.9em}
+.layer .info{font-size:.72em;opacity:.85;margin-top:3px;display:none}
+.layer.show .info{display:block}
+.osi-l7{background:var(--l7)} .osi-l6{background:var(--l6)} .osi-l5{background:var(--l5)}
+.osi-l4{background:var(--l4)} .osi-l3{background:var(--l3)} .osi-l2{background:var(--l2)} .osi-l1{background:var(--l1)}
+.tcp-app{background:var(--app);padding:30px 12px} .tcp-trans{background:var(--trans)} .tcp-net{background:var(--net)} .tcp-link{background:var(--link);padding:20px 12px}
+.legend{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;font-size:.72em;margin-top:10px;color:var(--sub)}
+.encap{width:100%;max-width:720px;margin-top:20px}
+.encap h3{text-align:center;margin-bottom:8px;font-size:.95em}
+.encap-area{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:14px;min-height:240px;position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px}
+.packet{display:flex;align-items:center;gap:2px;font-size:.75em;transition:all .4s}
+.packet .h{color:#fff;padding:4px 8px;border-radius:3px;white-space:nowrap}
+.packet .d{background:#555;color:#fff;padding:4px 8px;border-radius:3px;white-space:nowrap}
+.h-mac{background:#9b59b6} .h-ip{background:#3498db} .h-tcp{background:#2ecc71}
+.arrow{font-size:1.1em}
+.stage-label{font-size:.78em;color:var(--sub);margin-top:6px}
+footer{margin-top:20px;font-size:.7em;color:var(--sub);text-align:center;line-height:1.6}
+footer a{color:var(--sub)}
+</style>
+</head>
+<body>
+<h1>OSI 七层模型 与 TCP/IP 四层模型 对照</h1>
+<p class="desc">左侧 OSI 七层，右侧 TCP/IP 四层。点击每层查看职责、数据单元（PDU）和代表协议。下方封装/解封装动画演示数据逐层加头与剥头过程。</p>
+<div class="controls">
+  <button id="btn-play" onclick="play(0)" class="active">▶ 播放封装</button>
+  <button id="btn-decap" onclick="play(1)">◀ 播放解封装</button>
+  <button onclick="resetAll()">↺ 重置</button>
+</div>
+<div class="main">
+  <div class="col">
+    <h3>OSI 七层模型</h3>
+    <div class="layer osi-l7" data-layer="7" onclick="toggle(this)" id="osi7"><span class="name">7. 应用层 Application</span><span class="info">PDU: 数据 Data | 代表协议: HTTP、FTP、SMTP、DNS<br>职责: 为用户直接提供网络服务</span></div>
+    <div class="layer osi-l6" data-layer="6" onclick="toggle(this)" id="osi6"><span class="name">6. 表示层 Presentation</span><span class="info">PDU: 数据 Data | 代表功能: 加密(TLS/SSL)、压缩(gzip)、编码转换<br>职责: 数据格式转换、加密解密、压缩解压</span></div>
+    <div class="layer osi-l5" data-layer="5" onclick="toggle(this)" id="osi5"><span class="name">5. 会话层 Session</span><span class="info">PDU: 数据 Data | 代表功能: 会话建立/维持/终止<br>职责: 建立、管理和终止会话</span></div>
+    <div class="layer osi-l4" data-layer="4" onclick="toggle(this)" id="osi4"><span class="name">4. 传输层 Transport</span><span class="info">PDU: 段 Segment | 代表协议: TCP、UDP<br>职责: 端到端可靠/不可靠传输、端口号</span></div>
+    <div class="layer osi-l3" data-layer="3" onclick="toggle(this)" id="osi3"><span class="name">3. 网络层 Network</span><span class="info">PDU: 包 Packet | 代表协议: IP、ICMP、ARP<br>职责: 跨网络寻址和路由</span></div>
+    <div class="layer osi-l2" data-layer="2" onclick="toggle(this)" id="osi2"><span class="name">2. 数据链路层 Data Link</span><span class="info">PDU: 帧 Frame | 代表: MAC地址、交换机、ARP<br>职责: 局域网内帧的可靠传输</span></div>
+    <div class="layer osi-l1" data-layer="1" onclick="toggle(this)" id="osi1"><span class="name">1. 物理层 Physical</span><span class="info">PDU: 比特 Bit | 代表: 双绞线、光纤、无线电<br>职责: 在物理介质上传输比特流</span></div>
+  </div>
+  <div class="col">
+    <h3>TCP/IP 四层模型</h3>
+    <div class="layer tcp-app" onclick="toggle(this)" id="tcpApp"><span class="name">应用层 Application</span><span class="info">合并 OSI 会话+表示+应用层<br>核心: HTTP、HTTPS、DNS、FTP、SMTP</span></div>
+    <div class="layer tcp-trans" onclick="toggle(this)" id="tcpTrans"><span class="name">传输层 Transport</span><span class="info">TCP（可靠、保送到） / UDP（快速、不保）<br>核心词: 可靠/不可靠</span></div>
+    <div class="layer tcp-net" onclick="toggle(this)" id="tcpNet"><span class="name">网际层 Internet</span><span class="info">核心: IP（IPv4/IPv6）、ICMP（ping）、ARP（IP→MAC翻译）<br>核心词: 寻址路由</span></div>
+    <div class="layer tcp-link" onclick="toggle(this)" id="tcpLink"><span class="name">网络接口层 Network Access</span><span class="info">合并 OSI 物理+数据链路层<br>核心: 以太网、WiFi、MAC地址、交换机<br>核心词: 局域网传输</span></div>
+  </div>
+</div>
+<div class="legend">提示: 点击任意层展开详情 | 颜色分组: 🔴应用层系 🟢传输层系 🔵网际层/网络层系 🟣网络接口层/链路+物理层系</div>
+
+<div class="encap">
+  <h3>封装 / 解封装 过程演示</h3>
+  <div class="encap-area" id="encapArea">
+    <div class="packet" id="pkData"><span class="d">数据 (Data)</span></div>
+  </div>
+  <div class="stage-label" id="stageLabel">初始：应用层原始数据</div>
+</div>
+
+<footer>
+  数据来源：基于 network_architecture_detailed_outline.md v2<br>
+  本可视化对应 <a href="#">网络架构与传输全解</a> 步骤03-04（OSI七层模型 / TCP-IP四层模型）
+</footer>
+
+<script>
+let encapSteps=[
+  {label:'初始：应用层原始数据',html:'<div class="packet"><span class="d">数据 (Data)</span></div>'},
+  {label:'传输层：加 TCP 头 → 段（Segment）',html:'<div class="packet"><span class="h h-tcp">TCP头</span><span class="d">数据</span></div>'},
+  {label:'网络层：加 IP 头 → 包（Packet）',html:'<div class="packet"><span class="h h-ip">IP头</span><span class="h h-tcp">TCP头</span><span class="d">数据</span></div>'},
+  {label:'链路层：加 MAC 头 + FCS 尾 → 帧（Frame）',html:'<div class="packet"><span class="h h-mac">MAC头</span><span class="h h-ip">IP头</span><span class="h h-tcp">TCP头</span><span class="d">数据</span><span class="h h-mac">FCS尾</span></div>'},
+  {label:'物理层：转成比特流 → 101001110...',html:'<div style="font-size:.85em;color:var(--sub)">⚡ 101001110... (比特流传输中)</div>'},
+];
+let decapSteps=[
+  {label:'物理层：收到信号 → 转成比特',html:'<div style=\"font-size:.85em;color:var(--sub)\">⚡ 101001110... → 比特</div>'},
+  {label:'链路层：剥离 MAC 头 + 校验 FCS → 包',html:'<div class="packet"><span class="h h-ip">IP头</span><span class="h h-tcp">TCP头</span><span class="d">数据</span></div>'},
+  {label:'网络层：剥离 IP 头 → 段',html:'<div class="packet"><span class="h h-tcp">TCP头</span><span class="d">数据</span></div>'},
+  {label:'传输层：剥离 TCP 头 → 数据',html:'<div class="packet"><span class="d">数据 (Data)</span></div>'},
+  {label:'应用层：拿到原始数据',html:'<div class="packet"><span class="d" style="background:#2ecc71">✅ 原始数据</span></div>'},
+];
+let curMode=-1,curStep=0,timer=null;
+function toggle(el){el.classList.toggle('show')}
+function play(mode){
+  clearInterval(timer);
+  curMode=mode;curStep=0;
+  document.getElementById('btn-play').classList.toggle('active',mode===0);
+  document.getElementById('btn-decap').classList.toggle('active',mode===1);
+  let steps=mode===0?encapSteps:decapSteps;
+  showStep(steps,0);
+  timer=setInterval(()=>{
+    curStep++;
+    if(curStep>=steps.length){clearInterval(timer);return}
+    showStep(steps,curStep);
+  },1500);
+}
+function showStep(steps,i){
+  document.getElementById('encapArea').innerHTML=steps[i].html;
+  document.getElementById('stageLabel').textContent=steps[i].label;
+  if(curMode===0) highlightEncap(i);
+  else highlightDecap(i);
+}
+function highlightEncap(i){
+  ['osi7','osi6','osi5','osi4','osi3','osi2','osi1'].forEach((id,j)=>{
+    let el=document.getElementById(id);
+    if((i===1&&j===3)||(i===2&&j===2)||(i===3&&j===1)||(i===4&&j===0)||(i===0&&j>=4)) el.style.opacity=1;
+    else el.style.opacity=i===0?0.7:(j>=3?1:0.4);
+  });
+  if(i===0)['osi7','osi6','osi5','osi4','osi3','osi2','osi1'].forEach(id=>document.getElementById(id).style.opacity=1);
+}
+function highlightDecap(i){
+  ['osi1','osi2','osi3','osi4','osi5','osi6','osi7'].forEach((id,j)=>{
+    let el=document.getElementById(id);
+    el.style.opacity=(i===0||(i===1&&j===0)||(i===2&&j===1)||(i===3&&j===2)||(i===4&&j===3)||(i===5&&j>=4))?1:0.4;
+  });
+}
+function resetAll(){
+  clearInterval(timer);curMode=-1;curStep=0;
+  document.getElementById('btn-play').classList.remove('active');
+  document.getElementById('btn-decap').classList.remove('active');
+  document.getElementById('encapArea').innerHTML='<div class="packet"><span class="d">数据 (Data)</span></div>';
+  document.getElementById('stageLabel').textContent='初始：应用层原始数据';
+  ['osi1','osi2','osi3','osi4','osi5','osi6','osi7'].forEach(id=>document.getElementById(id).style.opacity=1);
+}
+</script>
+</body>
+</html>

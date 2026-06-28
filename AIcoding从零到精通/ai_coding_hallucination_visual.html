@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI幻觉产生机制 — 可视化演示</title>
+<!-- 自包含单文件，无外部依赖，可离线运行 -->
+<style>
+:root {
+  --bg: #ffffff; --text: #1a1a2e; --border: #e0e0e0; --card-bg: #f8f9fa;
+  --highlight: #e74c3c; --highlight-bg: #fde8e8; --prob-bar: #e74c3c;
+  --output-bg: #f0fff0; --warning: #e67e22; --success: #27ae60;
+  --shadow: rgba(0,0,0,0.08); --node-bg: #fff; --arrow-color: #bbb;
+  --correct-bg: #e8f8e8; --wrong-bg: #fde8e8;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1a1a2e; --text: #e0e0e0; --border: #333; --card-bg: #252540;
+    --highlight: #e74c3c; --highlight-bg: #3d2020; --prob-bar: #e74c3c;
+    --output-bg: #1a2e1a; --warning: #e67e22; --success: #27ae60;
+    --shadow: rgba(0,0,0,0.3); --node-bg: #2a2a40; --arrow-color: #555;
+    --correct-bg: #1a2e1a; --wrong-bg: #3d2020;
+  }
+}
+body { font-family: -apple-system, 'Segoe UI', 'Microsoft YaHei', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; line-height: 1.6; }
+.container { max-width: 900px; margin: 0 auto; }
+h1 { font-size: 1.5em; margin-bottom: 4px; }
+.subtitle { color: #888; font-size: 0.9em; margin-bottom: 24px; }
+.flow { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px; margin: 24px 0; }
+.node { background: var(--node-bg); border: 2px solid var(--border); border-radius: 10px; padding: 14px 18px; text-align: center; font-size: 0.9em; min-width: 100px; transition: all 0.4s ease; }
+.node.active { border-color: var(--highlight); box-shadow: 0 0 0 3px var(--highlight-bg); transform: scale(1.05); }
+.node.danger { border-color: var(--highlight); background: var(--wrong-bg); }
+.node.safe { border-color: var(--success); background: var(--correct-bg); }
+.arrow { font-size: 1.5em; color: var(--arrow-color); }
+.controls { display: flex; gap: 12px; margin: 20px 0; flex-wrap: wrap; align-items: center; }
+button { padding: 10px 20px; border: 1px solid var(--highlight); background: var(--highlight); color: #fff; border-radius: 6px; cursor: pointer; font-size: 0.95em; font-family: inherit; transition: all 0.2s; }
+button:hover { opacity: 0.85; }
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+button.reset { background: transparent; color: var(--text); border-color: var(--border); }
+.detail-box { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin: 16px 0; display: none; }
+.detail-box.show { display: block; }
+.code-block { background: #1e1e2e; color: #e0e0e0; border-radius: 6px; padding: 12px 16px; font-family: 'Courier New', monospace; font-size: 0.85em; overflow-x: auto; white-space: pre; margin: 10px 0; }
+.code-block .err { color: #e74c3c; text-decoration: underline wavy; }
+.code-block .ok { color: #27ae60; }
+.detail-title { font-weight: bold; margin-bottom: 8px; font-size: 1.05em; }
+.progress-indicator { font-size: 0.85em; color: #888; margin-left: 12px; }
+.footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--border); font-size: 0.8em; color: #888; }
+.footer a { color: var(--highlight); }
+</style>
+</head>
+<body>
+<div class="container">
+<h1>⚠️ AI幻觉产生机制</h1>
+<p class="subtitle">本可视化对应 <a href="../../AIcoding从零到精通/03-幻觉的原理与应对.md" style="color:var(--highlight)">《03-为什么AI会"胡说八道"》</a> 步骤1-2</p>
+
+<div class="controls">
+  <button id="btnPlay" onclick="play()">▶ 逐步播放</button>
+  <button id="btnReset" class="reset" onclick="reset()">↺ 重置</button>
+  <span class="progress-indicator" id="stepIndicator">步骤 0 / 4</span>
+</div>
+
+<!-- 流程图 -->
+<div class="flow">
+  <div class="node" id="node1">📝<br>用户提问</div>
+  <span class="arrow">→</span>
+  <div class="node" id="node2">🔍<br>AI检索<br>训练数据</div>
+  <span class="arrow">→</span>
+  <div class="node" id="node3">🎲<br>概率推断<br>（数据缺失）</div>
+  <span class="arrow">→</span>
+  <div class="node" id="node4">❌<br>幻觉输出</div>
+</div>
+
+<!-- 步骤详情 -->
+<div class="detail-box" id="detail1">
+  <div class="detail-title">📝 步骤1：用户提问</div>
+  <p>你问AI："Python的requests库怎么用get_json()方法读取API返回的JSON？"</p>
+  <p style="color:var(--warning)">⚠️ 问题本身包含了一个陷阱——<code>get_json()</code> 这个方法根本不存在！但AI不会质疑你，它只会尝试回答。</p>
+</div>
+
+<div class="detail-box" id="detail2">
+  <div class="detail-title">🔍 步骤2：AI检索训练数据</div>
+  <p>AI在训练数据中搜索相关知识。它读过很多代码，见过很多 <code>get_xxx()</code> 模式的函数名。</p>
+  <p>但它没有找到 <code>requests.get_json()</code> 的准确定义——因为这个方法<strong>不存在</strong>。</p>
+  <p style="color:var(--warning)">⚠️ 关键问题：训练数据不完整，缺少关于这个问题的准确信息。</p>
+</div>
+
+<div class="detail-box" id="detail3">
+  <div class="detail-title">🎲 步骤3：概率推断填补空白</div>
+  <p>AI不会说"我不知道"——它必须输出点什么。既然没有准确数据，它就<strong>从相似的模式中拼凑</strong>。</p>
+  <p>AI的推理逻辑（它自己也不知道）：</p>
+  <ul>
+    <li>很多库都有 <code>get_json()</code> 方法 → 高概率</li>
+    <li><code>requests</code> 是HTTP库，肯定有JSON相关方法 → 高概率</li>
+    <li>所以 <code>requests.get_json()</code> 应该存在 → <strong>猜错了！</strong></li>
+  </ul>
+  <p style="color:var(--highlight)">⚠️ 这就是概率推断的边界：AI"猜"了一个不存在的API，因为它见过太多类似的模式。</p>
+</div>
+
+<div class="detail-box" id="detail4">
+  <div class="detail-title">❌ 步骤4：幻觉输出 — 一本正经地胡说八道</div>
+  <p>AI输出了一段看起来非常专业的代码，但核心方法是错的：</p>
+  <div class="code-block"><span class="err"># ⚠️ 幻觉！requests 没有 get_json() 方法</span>
+import requests
+response = requests.get("https://api.example.com/data")
+data = response.get_json()  <span class="err"># ← 这行会报错！</span>
+print(data)
+
+<span class="ok"># ✅ 正确做法：用 .json() 方法</span>
+data = response.json()  <span class="ok"># ← 这才是对的</span></div>
+  <p><strong>AI不是故意骗你，它只是不知道自己在胡说。</strong>它把概率最高的答案输出给你，但这个答案是错的。</p>
+</div>
+
+<div class="footer">
+  <p>数据来源：基于 <strong>ai_coding_outline.md v2</strong> | <a href="../../AIcoding从零到精通/03-幻觉的原理与应对.md">返回教程：03-为什么AI会"胡说八道"</a></p>
+</div>
+</div>
+
+<script>
+let currentStep = 0;
+const totalSteps = 4;
+
+function updateUI() {
+  document.querySelectorAll('.node').forEach((el, i) => {
+    el.classList.remove('active', 'danger', 'safe');
+    if (i + 1 < currentStep) el.classList.add('safe');
+    if (i + 1 === currentStep) el.classList.add('active');
+    if (i + 1 === currentStep && i === 3) el.classList.add('danger');
+  });
+  document.querySelectorAll('.detail-box').forEach((el, i) => {
+    el.classList.toggle('show', i + 1 === currentStep);
+  });
+  document.getElementById('stepIndicator').textContent = `步骤 ${currentStep} / ${totalSteps}`;
+  document.getElementById('btnPlay').disabled = currentStep >= totalSteps;
+}
+
+function play() {
+  if (currentStep >= totalSteps) return;
+  currentStep++;
+  updateUI();
+}
+
+function reset() {
+  currentStep = 0;
+  document.querySelectorAll('.node').forEach(el => el.classList.remove('active', 'danger', 'safe'));
+  document.querySelectorAll('.detail-box').forEach(el => el.classList.remove('show'));
+  document.getElementById('stepIndicator').textContent = '步骤 0 / 4';
+  document.getElementById('btnPlay').disabled = false;
+}
+</script>
+</body>
+</html>

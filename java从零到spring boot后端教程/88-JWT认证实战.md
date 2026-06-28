@@ -316,6 +316,8 @@ public class UserService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("用户不存在"));
 
+        // ⚠️ 本示例未实现 RT 黑名单，生产环境需将旧 RT 的 jti 存入 Redis 直到原过期时间，
+        //    否则旧 RT 在过期前仍可重复刷新，存在被重放风险。
         String newToken = jwtUtil.generateToken(user.getId(), user.getUsername(), user.getRole());
         String newRefreshToken = jwtUtil.generateRefreshToken(user.getId());
 

@@ -339,4 +339,4 @@ kafka-topics --bootstrap-server localhost:9092 --delete --topic order-events
 > 🚀 下一章：Kafka的进阶话题——分区策略怎么选？acks=all到底有多可靠？消费者Rebalance是什么？高水位HW和LEO是怎么回事？这些是Kafka面试的核心考点。
 
 ---
-[← 上一章：87-RabbitMQ进阶.md](87-RabbitMQ进阶/) | [下一章：89-Kafka进阶.md →](89-Kafka进阶/)
+[← 上一章：87-RabbitMQ进阶.md](../87-RabbitMQ进阶/) | [下一章：89-Kafka进阶.md →](../89-Kafka进阶/)

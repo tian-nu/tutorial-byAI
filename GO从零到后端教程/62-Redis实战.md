@@ -348,4 +348,4 @@ func PollDelayedTasks() {
 > 🚀 下一章：第63章 · Go操作Redis。Redis的命令和原理你都懂了，现在回到Go代码里——用go-redis库把这些命令变成Go的函数调用。连接Redis、操作五种数据类型、Pipeline、事务、分布式锁的Go实现……全部给你代码。
 
 ---
-[← 上一章：61-Redis进阶](61-Redis进阶/) | [下一章：63-Go操作Redis →](63-Go操作Redis/)
+[← 上一章：61-Redis进阶](../61-Redis进阶/) | [下一章：63-Go操作Redis →](../63-Go操作Redis/)

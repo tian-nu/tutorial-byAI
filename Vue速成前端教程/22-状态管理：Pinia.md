@@ -254,6 +254,8 @@ function handleLogout() {
 npm install pinia-plugin-persistedstate
 ```
 
+> ⚠️ **版本要求**：下方 `pick` 选项需要 `pinia-plugin-persistedstate` **v4 或更高版本**。若你装的是 v3 或更早版本，需改用 `paths` 选项：`persist: { paths: ['token', 'userInfo'] }`。可用 `npm ls pinia-plugin-persistedstate` 查看当前版本。
+
 **注册插件**，修改 `src/main.js`：
 
 ```js

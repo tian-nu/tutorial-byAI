@@ -177,8 +177,8 @@ def auth_token(client):
     )
     # 登录获取 token
     response = client.post(
-        "/login",
-        json={"username": "testuser", "password": "test123456"},
+        "/users/login",
+        params={"username": "testuser", "password": "test123456"},
     )
     data = response.json()
     return data["access_token"]
@@ -315,8 +315,8 @@ def test_login_success(client):
 
     # 登录
     response = client.post(
-        "/login",
-        json={"username": "charlie", "password": "charlie123"},
+        "/users/login",
+        params={"username": "charlie", "password": "charlie123"},
     )
 
     # 断言：状态码 200
@@ -338,8 +338,8 @@ def test_login_wrong_password(client):
 
     # 用错误密码登录
     response = client.post(
-        "/login",
-        json={"username": "dave", "password": "wrong_password"},
+        "/users/login",
+        params={"username": "dave", "password": "wrong_password"},
     )
 
     # 断言：返回 401
@@ -452,7 +452,7 @@ def test_update_post_cross_owner(client):
     # alice 注册并创建文章
     client.post("/users", json={"username": "alice", "password": "alice123"})
     alice_login = client.post(
-        "/login", json={"username": "alice", "password": "alice123"}
+        "/users/login", params={"username": "alice", "password": "alice123"}
     )
     alice_token = alice_login.json()["access_token"]
 
@@ -466,7 +466,7 @@ def test_update_post_cross_owner(client):
     # bob 注册并登录
     client.post("/users", json={"username": "bob", "password": "bob123456"})
     bob_login = client.post(
-        "/login", json={"username": "bob", "password": "bob123456"}
+        "/users/login", params={"username": "bob", "password": "bob123456"}
     )
     bob_token = bob_login.json()["access_token"]
 
@@ -575,7 +575,7 @@ def test_pagination(client):
     # 先注册并登录
     client.post("/users", json={"username": "pager", "password": "pager123"})
     login_resp = client.post(
-        "/login", json={"username": "pager", "password": "pager123"}
+        "/users/login", params={"username": "pager", "password": "pager123"}
     )
     token = login_resp.json()["access_token"]
 
@@ -625,7 +625,7 @@ def test_search(client):
     # 注册并登录
     client.post("/users", json={"username": "searcher", "password": "search123"})
     login_resp = client.post(
-        "/login", json={"username": "searcher", "password": "search123"}
+        "/users/login", params={"username": "searcher", "password": "search123"}
     )
     token = login_resp.json()["access_token"]
 
@@ -879,8 +879,8 @@ def auth_token(client):
         json={"username": "testuser", "password": "test123456"},
     )
     response = client.post(
-        "/login",
-        json={"username": "testuser", "password": "test123456"},
+        "/users/login",
+        params={"username": "testuser", "password": "test123456"},
     )
     data = response.json()
     return data["access_token"]
@@ -928,8 +928,8 @@ def test_register_duplicate_user(client):
 def test_login_success(client):
     client.post("/users", json={"username": "charlie", "password": "charlie123"})
     response = client.post(
-        "/login",
-        json={"username": "charlie", "password": "charlie123"},
+        "/users/login",
+        params={"username": "charlie", "password": "charlie123"},
     )
     assert response.status_code == 200
     data = response.json()
@@ -940,8 +940,8 @@ def test_login_success(client):
 def test_login_wrong_password(client):
     client.post("/users", json={"username": "dave", "password": "dave123456"})
     response = client.post(
-        "/login",
-        json={"username": "dave", "password": "wrong_password"},
+        "/users/login",
+        params={"username": "dave", "password": "wrong_password"},
     )
     assert response.status_code == 401
 
@@ -1001,7 +1001,7 @@ def test_update_post_cross_owner(client):
     # alice 注册并创建文章
     client.post("/users", json={"username": "alice", "password": "alice123"})
     alice_login = client.post(
-        "/login", json={"username": "alice", "password": "alice123"}
+        "/users/login", params={"username": "alice", "password": "alice123"}
     )
     alice_token = alice_login.json()["access_token"]
 
@@ -1015,7 +1015,7 @@ def test_update_post_cross_owner(client):
     # bob 注册并登录
     client.post("/users", json={"username": "bob", "password": "bob123456"})
     bob_login = client.post(
-        "/login", json={"username": "bob", "password": "bob123456"}
+        "/users/login", params={"username": "bob", "password": "bob123456"}
     )
     bob_token = bob_login.json()["access_token"]
 
@@ -1085,7 +1085,7 @@ def test_get_comments(auth_token, client):
 def test_pagination(client):
     client.post("/users", json={"username": "pager", "password": "pager123"})
     login_resp = client.post(
-        "/login", json={"username": "pager", "password": "pager123"}
+        "/users/login", params={"username": "pager", "password": "pager123"}
     )
     token = login_resp.json()["access_token"]
 
@@ -1116,7 +1116,7 @@ def test_pagination(client):
 def test_search(client):
     client.post("/users", json={"username": "searcher", "password": "search123"})
     login_resp = client.post(
-        "/login", json={"username": "searcher", "password": "search123"}
+        "/users/login", params={"username": "searcher", "password": "search123"}
     )
     token = login_resp.json()["access_token"]
 

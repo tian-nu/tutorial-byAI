@@ -4,7 +4,7 @@
 
 ---
 
-> ⚠️ 本章是Spring系列的第一章。如果你还没有看过前一章 [70a-RESTful API设计规范](./70a-RESTful%20API设计规范/)，强烈建议先去看——它讲了HTTP方法和URL设计的通用原则，这些是Spring MVC的基石。
+> ⚠️ 本章是Spring系列的第一章。如果你还没有看过前一章 [70a-RESTful API设计规范](../70a-RESTful%20API设计规范/)，强烈建议先去看——它讲了HTTP方法和URL设计的通用原则，这些是Spring MVC的基石。
 
 ---
 

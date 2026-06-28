@@ -451,4 +451,4 @@ ZREVRANGE rank:daily 0 2 WITHSCORES
 > 🚀 下一章：第61章 · Redis进阶。五种基本数据类型你已经会了，但Redis远不止这些。它支持发布订阅（像聊天室一样广播消息）、事务（MULTI/EXEC）、Lua脚本（原子执行多条命令），还有RDB和AOF两种持久化方案让内存数据不丢——以及内存满了怎么办的淘汰策略。进阶内容让你的Redis能力提升一个层次。
 
 ---
-[← 上一章：59-Go操作MySQL](59-Go操作MySQL/) | [下一章：61-Redis进阶 →](61-Redis进阶/)
+[← 上一章：59-Go操作MySQL](../59-Go操作MySQL/) | [下一章：61-Redis进阶 →](../61-Redis进阶/)

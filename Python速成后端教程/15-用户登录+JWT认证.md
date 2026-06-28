@@ -230,6 +230,11 @@ from jose import JWTError, jwt  # 此术语需进附录：JWTError
 
 # === JWT 配置 ===
 SECRET_KEY = "your-secret-key-change-in-production"  # 此术语需进附录：SECRET_KEY
+# 生产环境应使用 python-dotenv 从 .env 文件加载：
+#   pip install python-dotenv
+#   from dotenv import load_dotenv; load_dotenv()
+#   SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret")
+# 并在 .gitignore 中加入 .env
 ALGORITHM = "HS256"  # 签名算法
 ACCESS_TOKEN_EXPIRE_MINUTES = 30  # token 默认 30 分钟过期
 

@@ -536,4 +536,4 @@ docker-compose build               # 只构建不启动
 > 🚀 下一章：第103章 · CI/CD持续集成部署。Docker让部署变得可靠，但每次改代码都要手动 `docker build`、`docker push`、`docker run` 还是太慢了。如果能做到：代码推到GitHub → 自动构建 → 自动测试 → 自动部署到服务器，你只需要 `git push` 一下就行——这就是CI/CD。
 
 ---
-[← 上一章：101-Git版本控制.md](101-Git版本控制/) | [下一章：103-CI-CD持续集成部署.md →](103-CI-CD持续集成部署/)
+[← 上一章：101-Git版本控制.md](../101-Git版本控制/) | [下一章：103-CI-CD持续集成部署.md →](../103-CI-CD持续集成部署/)

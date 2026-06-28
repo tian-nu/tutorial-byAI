@@ -423,9 +423,9 @@ docker run --mount "type=bind,source=C:/Users/jack/code,target=/app" myimage
 
 ```bash
 # MySQL 镜像的 /var/lib/mysql 本来有初始数据
-# 挂一个空 volume 上去后，原有文件被"遮盖"了
-docker run -v empty-vol:/var/lib/mysql mysql:8.0
-# MySQL 启动失败！因为 /var/lib/mysql 变成空的
+# 用 bind mount 挂一个空目录上去后，原有文件被"遮盖"了
+docker run -v /tmp/empty-dir:/var/lib/mysql mysql:8.0
+# bind mount 不会触发自动复制，/var/lib/mysql 直接被空目录覆盖
 ```
 
 ❌ 原因：Volume 的挂载逻辑是**替换**，不是**合并**。你把一个空卷挂到一个本来有文件的目录上，那些原有文件就被"遮住"了。
@@ -521,10 +521,11 @@ docker exec mysql-v3 mysql -uroot -pyour_root_password_here -e \
 ```bash
 # ❌ 如果 /tmp/empty-dir 是空的
 docker run -v /tmp/empty-dir:/var/lib/mysql mysql:8.0
-# MySQL 启动失败：/var/lib/mysql 里没有初始数据
+# MySQL 不会启动失败，而是触发首次初始化（重新建系统表）
+# 真正会导致启动失败的是：bind mount 目录属主不是 mysql 用户，权限不符
 ```
 
-bind mount 不会把容器内原有数据复制到宿主机目录。而 named volume 在第一次挂载且卷为空时**会复制**。这就是为什么生产环境数据库必须用 named volume。
+bind mount 不会把容器内原有数据复制到宿主机目录。MySQL 官方镜像检测到空目录会执行初始化流程，所以**不是启动失败**，而是**数据被重置**——如果你以为挂载会保留镜像里的初始数据，那就掉坑了。而 named volume 在第一次挂载且卷为空时**会复制**镜像内的初始数据。这就是为什么生产环境数据库必须用 named volume。
 
 ### 3. 用 `docker rm` 忘加 `-v`，匿名 volume 堆积
 

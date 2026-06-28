@@ -379,7 +379,7 @@ ZADD delay_queue 1700000000 "task1"   # 1700000000 = 某个时间戳
 ZADD delay_queue 1700000100 "task2"
 ZADD delay_queue 1700000200 "task3"
 
--- 获取当前时间之前到期的任务
+# 获取当前时间之前到期的任务
 ZRANGEBYSCORE delay_queue 0 1700000050
 # 返回 task1（时间戳 < 1700000050）
 ```

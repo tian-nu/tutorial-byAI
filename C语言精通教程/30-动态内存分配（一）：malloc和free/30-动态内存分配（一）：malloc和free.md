@@ -256,7 +256,7 @@ free(p);      // 错误！Double Free
 ```c
 void cause_leak() {
     int *p = malloc(1024 * 1024);  // 申请 1MB
-    p = malloc(2048 * 2048);       // 又申请 2MB，原来的 1MB 丢了！
+    p = malloc(2048 * 1024);       // 又申请 2MB，原来的 1MB 丢了！
     free(p);                       // 只释放了 2MB，1MB 泄漏了
 }
 ```

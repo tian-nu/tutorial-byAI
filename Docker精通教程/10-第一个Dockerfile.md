@@ -189,7 +189,7 @@ docker build -t myapp:v1 .
 mkdir docker-test && cd docker-test
 
 # 创建一个巨大的无意义文件
-dd if=/dev/zero of=huge_file bs=1M count=500 2>/dev/null || fsutil file createnew huge_file 1000000
+dd if=/dev/zero of=huge_file bs=1M count=500 2>/dev/null || fsutil file createnew huge_file 524288000
 # （上面两条命令选一条能用的，目的只是造一个大文件）
 
 # 创建一个 Dockerfile

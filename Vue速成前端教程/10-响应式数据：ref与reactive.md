@@ -241,7 +241,7 @@ const fullName = computed({
     lastName.value = parts[1]
   }
 })
-// fullName.value = '张三丰' → firstName = '张三丰', lastName = ''
+// fullName.value = '张 三丰' → firstName = '张', lastName = '三丰'
 ```
 
 ---

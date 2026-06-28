@@ -4,7 +4,7 @@
 - 能默画四次挥手时序图，标注每一步的状态转换
 - 理解为什么是四次而不是三次
 - 能解释 TIME_WAIT 存在的两个原因（面试高频）
-- 知道 MSL 的定义和典型值（60 秒），理解 2MSL 等待
+- 知道 MSL 的定义与 Linux 典型值（30 秒，2MSL=60 秒），理解 2MSL 等待
 - 知道 CLOSE_WAIT 过多如何排查
 
 ---
@@ -117,9 +117,9 @@ B 收到这个 ACK 后，**立即进入 CLOSED 状态**，连接彻底关闭。
 
 这是面试官最爱问的问题之一。先定义 MSL：
 
-> **MSL（Maximum Segment Lifetime）**：一个 TCP 报文在网络中能存活的最长时间。RFC 793 建议 120 秒，但 Linux 实际实现通常设为 **60 秒**（`net.ipv4.tcp_fin_timeout` 相关）。**2MSL 就是 120 秒（Linux 中实际为 60 秒，因为 MSL=30 秒在 Linux 中是一种常见配置）**。
-
-> ⚠️ 注意：不同操作系统对 MSL 的定义不同。Linux 内核中 MSL 实际为 30 秒（定义在 `include/net/tcp.h` 中的 `TCP_TIMEWAIT_LEN` 为 60 秒 = 2MSL），所以 `TIME_WAIT` 在 Linux 上默认持续 **60 秒**。下文用"60 秒"指代 Linux 上的 2MSL。
+> **MSL（Maximum Segment Lifetime）**：一个 TCP 报文在网络中能存活的最长时间。RFC 793 建议 MSL = 120 秒（故 2MSL = 240 秒）。Linux 内核将 MSL 实现为 30 秒（定义在 `include/net/tcp.h` 的 `TCP_TIMEWAIT_LEN = 60 秒 = 2MSL`），所以 Linux 上 TIME_WAIT 默认持续 60 秒。
+>
+> ⚠️ **易混淆点**：`net.ipv4.tcp_fin_timeout` 控制的是 **FIN_WAIT_2** 状态的超时（默认 60 秒），**不是** TIME_WAIT 时长。TIME_WAIT 时长由内核宏 `TCP_TIMEWAIT_LEN` 固定为 60 秒，**不可通过 sysctl 调整**。下文用"60 秒"指代 Linux 上的 2MSL。
 
 主动关闭方进入 TIME_WAIT 并等 2MSL（Linux 上 60 秒），有两个原因：
 

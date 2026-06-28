@@ -128,7 +128,7 @@ Serial GC:    数百毫秒 ~ 数秒
 Parallel GC:  数十毫秒 ~ 数百毫秒
 CMS GC:       数十毫秒（但可能失败）
 G1 GC:        数毫秒 ~ 数十毫秒
-ZGC:          < 1ms（大部分情况 < 0.1ms）
+ZGC:          < 1ms（大部分情况在 1ms 以内）
 ```
 
 ---

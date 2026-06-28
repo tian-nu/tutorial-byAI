@@ -286,7 +286,8 @@ beforeAll(() => {
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT NOT NULL UNIQUE,
-            password TEXT NOT NULL,
+            email TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL,
             created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
 
@@ -325,10 +326,10 @@ beforeEach(() => {
     const now = new Date().toISOString();
 
     // 插入两个测试用户
-    db.prepare('INSERT INTO users (id, username, password, created_at) VALUES (?, ?, ?, ?)')
-        .run(1, 'alice', '$2a$10$test_hash_for_alice', now);
-    db.prepare('INSERT INTO users (id, username, password, created_at) VALUES (?, ?, ?, ?)')
-        .run(2, 'bob', '$2a$10$test_hash_for_bob', now);
+    db.prepare('INSERT INTO users (id, username, email, password_hash, created_at) VALUES (?, ?, ?, ?, ?)')
+        .run(1, 'alice', 'alice@example.com', '$2a$10$test_hash_for_alice', now);
+    db.prepare('INSERT INTO users (id, username, email, password_hash, created_at) VALUES (?, ?, ?, ?, ?)')
+        .run(2, 'bob', 'bob@example.com', '$2a$10$test_hash_for_bob', now);
 
     // 插入两篇测试文章（分别属于 alice 和 bob）
     db.prepare('INSERT INTO articles (id, title, content, author_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
@@ -413,7 +414,7 @@ describe('用户认证接口', () => {
         it('注册新用户应返回 201', async () => {
             const res = await request(app)
                 .post('/api/auth/register')
-                .send({ username: 'newuser', password: 'password123' });
+                .send({ username: 'newuser', email: 'newuser@example.com', password: 'password123' });
 
             expect(res.status).toBe(201);
             expect(res.body.success).toBe(true);
@@ -421,18 +422,18 @@ describe('用户认证接口', () => {
             expect(res.body.data.username).toBe('newuser');
         });
 
-        it('注册重复用户名应返回 400', async () => {
+        it('注册重复用户名应返回 409', async () => {
             // 先注册一个用户
             await request(app)
                 .post('/api/auth/register')
-                .send({ username: 'alice', password: 'password123' });
+                .send({ username: 'alice', email: 'alice@example.com', password: 'password123' });
 
             // 再次注册同名用户——应失败
             const res = await request(app)
                 .post('/api/auth/register')
-                .send({ username: 'alice', password: 'password123' });
+                .send({ username: 'alice', email: 'alice@example.com', password: 'password123' });
 
-            expect(res.status).toBe(400);
+            expect(res.status).toBe(409);
             expect(res.body.success).toBe(false);
         });
 
@@ -451,14 +452,14 @@ describe('用户认证接口', () => {
         beforeEach(async () => {
             const db = getDb();
             const hashedPassword = bcrypt.hashSync('testpassword', 10);
-            db.prepare('INSERT OR REPLACE INTO users (id, username, password, created_at) VALUES (?, ?, ?, ?)')
-                .run(99, 'testuser', hashedPassword, new Date().toISOString());
+            db.prepare('INSERT OR REPLACE INTO users (id, username, email, password_hash, created_at) VALUES (?, ?, ?, ?, ?)')
+                .run(99, 'testuser', 'testuser@example.com', hashedPassword, new Date().toISOString());
         });
 
         it('登录成功应返回 token', async () => {
             const res = await request(app)
                 .post('/api/auth/login')
-                .send({ username: 'testuser', password: 'testpassword' });
+                .send({ email: 'testuser@example.com', password: 'testpassword' });
 
             expect(res.status).toBe(200);
             expect(res.body.success).toBe(true);
@@ -473,7 +474,7 @@ describe('用户认证接口', () => {
         it('密码错误应返回 401', async () => {
             const res = await request(app)
                 .post('/api/auth/login')
-                .send({ username: 'testuser', password: 'wrongpassword' });
+                .send({ email: 'testuser@example.com', password: 'wrongpassword' });
 
             expect(res.status).toBe(401);
             expect(res.body.success).toBe(false);
@@ -482,7 +483,7 @@ describe('用户认证接口', () => {
         it('登录不存在的用户应返回 401', async () => {
             const res = await request(app)
                 .post('/api/auth/login')
-                .send({ username: 'nonexistent', password: 'password123' });
+                .send({ email: 'nonexistent@example.com', password: 'password123' });
 
             expect(res.status).toBe(401);
             expect(res.body.success).toBe(false);
@@ -523,7 +524,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret_here';
 // 辅助函数：生成有效的 JWT token
 function generateToken(userId, username) {
     const jwt = require('jsonwebtoken');
-    return jwt.sign({ id: userId, username: username }, JWT_SECRET, { expiresIn: '1h' });
+    return jwt.sign({ userId: userId, username: username }, JWT_SECRET, { expiresIn: '1h' });
 }
 
 describe('文章 CRUD 接口', () => {
@@ -812,7 +813,7 @@ npm test
   用户认证接口
     POST /api/auth/register — 注册
       √ 注册新用户应返回 201 (xx ms)
-      √ 注册重复用户名应返回 400 (xx ms)
+      √ 注册重复用户名应返回 409 (xx ms)
       √ 注册缺少密码应返回 400 (xx ms)
     POST /api/auth/login — 登录
       √ 登录成功应返回 token (xx ms)
@@ -954,7 +955,8 @@ beforeAll(() => {
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT NOT NULL UNIQUE,
-            password TEXT NOT NULL,
+            email TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL,
             created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
 
@@ -989,10 +991,10 @@ beforeEach(() => {
 
     const now = new Date().toISOString();
 
-    db.prepare('INSERT INTO users (id, username, password, created_at) VALUES (?, ?, ?, ?)')
-        .run(1, 'alice', '$2a$10$test_hash_for_alice', now);
-    db.prepare('INSERT INTO users (id, username, password, created_at) VALUES (?, ?, ?, ?)')
-        .run(2, 'bob', '$2a$10$test_hash_for_bob', now);
+    db.prepare('INSERT INTO users (id, username, email, password_hash, created_at) VALUES (?, ?, ?, ?, ?)')
+        .run(1, 'alice', 'alice@example.com', '$2a$10$test_hash_for_alice', now);
+    db.prepare('INSERT INTO users (id, username, email, password_hash, created_at) VALUES (?, ?, ?, ?, ?)')
+        .run(2, 'bob', 'bob@example.com', '$2a$10$test_hash_for_bob', now);
 
     db.prepare('INSERT INTO articles (id, title, content, author_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
         .run(1, 'Alice 的第一篇文章', '这是 Alice 的内容', 1, now, now);
@@ -1032,7 +1034,7 @@ describe('用户认证接口', () => {
         it('注册新用户应返回 201', async () => {
             const res = await request(app)
                 .post('/api/auth/register')
-                .send({ username: 'newuser', password: 'password123' });
+                .send({ username: 'newuser', email: 'newuser@example.com', password: 'password123' });
 
             expect(res.status).toBe(201);
             expect(res.body.success).toBe(true);
@@ -1040,16 +1042,16 @@ describe('用户认证接口', () => {
             expect(res.body.data.username).toBe('newuser');
         });
 
-        it('注册重复用户名应返回 400', async () => {
+        it('注册重复用户名应返回 409', async () => {
             await request(app)
                 .post('/api/auth/register')
-                .send({ username: 'alice', password: 'password123' });
+                .send({ username: 'alice', email: 'alice@example.com', password: 'password123' });
 
             const res = await request(app)
                 .post('/api/auth/register')
-                .send({ username: 'alice', password: 'password123' });
+                .send({ username: 'alice', email: 'alice@example.com', password: 'password123' });
 
-            expect(res.status).toBe(400);
+            expect(res.status).toBe(409);
             expect(res.body.success).toBe(false);
         });
 
@@ -1067,14 +1069,14 @@ describe('用户认证接口', () => {
         beforeEach(async () => {
             const db = getDb();
             const hashedPassword = bcrypt.hashSync('testpassword', 10);
-            db.prepare('INSERT OR REPLACE INTO users (id, username, password, created_at) VALUES (?, ?, ?, ?)')
-                .run(99, 'testuser', hashedPassword, new Date().toISOString());
+            db.prepare('INSERT OR REPLACE INTO users (id, username, email, password_hash, created_at) VALUES (?, ?, ?, ?, ?)')
+                .run(99, 'testuser', 'testuser@example.com', hashedPassword, new Date().toISOString());
         });
 
         it('登录成功应返回 token', async () => {
             const res = await request(app)
                 .post('/api/auth/login')
-                .send({ username: 'testuser', password: 'testpassword' });
+                .send({ email: 'testuser@example.com', password: 'testpassword' });
 
             expect(res.status).toBe(200);
             expect(res.body.success).toBe(true);
@@ -1088,7 +1090,7 @@ describe('用户认证接口', () => {
         it('密码错误应返回 401', async () => {
             const res = await request(app)
                 .post('/api/auth/login')
-                .send({ username: 'testuser', password: 'wrongpassword' });
+                .send({ email: 'testuser@example.com', password: 'wrongpassword' });
 
             expect(res.status).toBe(401);
             expect(res.body.success).toBe(false);
@@ -1097,7 +1099,7 @@ describe('用户认证接口', () => {
         it('登录不存在的用户应返回 401', async () => {
             const res = await request(app)
                 .post('/api/auth/login')
-                .send({ username: 'nonexistent', password: 'password123' });
+                .send({ email: 'nonexistent@example.com', password: 'password123' });
 
             expect(res.status).toBe(401);
             expect(res.body.success).toBe(false);
@@ -1118,7 +1120,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret_here';
 
 function generateToken(userId, username) {
     const jwt = require('jsonwebtoken');
-    return jwt.sign({ id: userId, username: username }, JWT_SECRET, { expiresIn: '1h' });
+    return jwt.sign({ userId: userId, username: username }, JWT_SECRET, { expiresIn: '1h' });
 }
 
 describe('文章 CRUD 接口', () => {

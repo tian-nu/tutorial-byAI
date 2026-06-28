@@ -453,4 +453,4 @@ hey -n 10000 -c 100 -m POST -H "Content-Type: application/json" -d '{"name":"tes
 > 🚀 恭喜你完成了第四篇——Web框架与API开发的全部12章！从RESTful设计规范到Gin框架全家桶，再到CORS、安全加固和压测，你现在已经有能力独立开发生产级的Go Web服务了。第五篇将带你进入"用户认证与鉴权"的世界——JWT、OAuth2.0、SSO单点登录、CAS……敬请期待！
 
 ---
-[← 上一章：75-API文档Swagger](75-API文档Swagger/) | [下一章：77-认证基础 →](77-认证基础/)
+[← 上一章：75-API文档Swagger](../75-API文档Swagger/) | [下一章：77-认证基础 →](../77-认证基础/)
